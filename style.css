@@ -1,0 +1,125 @@
+body {
+    font-family: sans-serif;
+    line-height: 1.6;
+    padding: 20px;
+    background-color: #f4f4f4;
+    color: #333;
+}
+
+h1, h2 {
+    color: #005f40; /* Dark green */
+}
+
+#game-status, #instructions, #timing-info, #shot-result {
+    background-color: #fff;
+    border: 1px solid #ddd;
+    padding: 15px;
+    margin-bottom: 15px;
+    border-radius: 5px;
+}
+
+#status-text, #swing-speed-text, #backswing-duration,
+#rotation-start-offset, #arms-start-offset, #wrists-start-offset {
+    font-weight: bold;
+    color: #007bff; /* Blue */
+}
+
+#result-text {
+    font-size: 1.1em;
+    font-weight: bold;
+    color: #28a745; /* Green */
+}
+
+#instructions p {
+    margin: 5px 0;
+}
+
+/* --- Timing Bars --- */
+#timing-bars {
+    background-color: #fff;
+    border: 1px solid #ddd;
+    padding: 15px;
+    margin-bottom: 15px;
+    border-radius: 5px;
+}
+
+.timing-bar-container {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.bar-label {
+    width: 90px; /* Adjust as needed */
+    font-size: 0.9em;
+    text-align: right;
+    margin-right: 10px;
+    color: #555;
+}
+
+.timing-bar {
+    flex-grow: 1;
+    height: 20px;
+    background-color: #e9ecef;
+    border: 1px solid #ced4da;
+    border-radius: 3px;
+    position: relative; /* Needed for absolute positioning of children */
+    overflow: hidden; /* Hide overflow */
+}
+
+.progress {
+    height: 100%;
+    width: 0%; /* Starts at 0 */
+    background-color: #28a745; /* Green progress */
+    transition: width 0.05s linear; /* Smooth transition for progress */
+    position: absolute;
+    left: 0;
+    top: 0;
+}
+
+.ideal-window {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    background-color: rgba(0, 123, 255, 0.3); /* Semi-transparent blue */
+    border-left: 1px dashed #007bff;
+    border-right: 1px dashed #007bff;
+    z-index: 1; /* Above progress */
+    /* Left and width will be set by JS */
+}
+
+.marker {
+    position: absolute;
+    top: -2px; /* Slightly above bar */
+    bottom: -2px; /* Slightly below bar */
+    width: 3px;
+    background-color: #dc3545; /* Red marker */
+    z-index: 2; /* Above ideal window */
+    display: none; /* Hidden initially */
+    /* Left will be set by JS */
+}
+
+/* Specific style for the ideal backswing marker */
+#ideal-backswing-marker {
+    background-color: transparent; /* No background fill */
+    border-left: 2px solid #ffc107; /* Yellow line for ideal point */
+    border-right: none;
+    width: 2px; /* Just a line */
+    /* Left position will be set by JS */
+}
+
+/* --- Visuals Container --- */
+#visuals-container {
+    margin-top: 20px;
+    background-color: #ddd; /* Placeholder background */
+    border: 1px solid #bbb;
+    border-radius: 5px;
+    /* Define dimensions or let canvas handle it */
+}
+
+#golf-canvas {
+    display: block; /* Remove extra space below canvas */
+    width: 100%;   /* Make canvas responsive */
+    height: 400px; /* Example fixed height */
+    background-color: #aaddcc; /* Placeholder canvas background */
+}

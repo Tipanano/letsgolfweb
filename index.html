@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Let's Golf!</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <h1>Let's Golf!</h1>
+
+    <!-- 1. Game Status (Club/Speed Select) -->
+    <div id="game-status">
+        <p>Status: <span id="status-text">Ready</span></p>
+        <div>
+            <label for="swing-speed-slider">Swing Speed (%): </label>
+            <input type="range" id="swing-speed-slider" name="swing-speed" min="30" max="100" value="100">
+            <span id="swing-speed-value">100</span>%
+        </div>
+        <div>
+            <label for="club-select">Club: </label>
+            <select name="club" id="club-select">
+                <!-- Options will be populated by JS -->
+            </select>
+        </div>
+     </div>
+
+    <!-- 2. Instructions -->
+    <div id="instructions">
+        <p>Press and hold 'w' key to start backswing.</p>
+        <p>Press 's' during backswing for early rotation (optional).</p>
+        <p>Press 'h' during backswing OR after releasing 'w' to initiate hip rotation (REQUIRED before downswing keys).</p>
+        <p>Release 'w' key to finish backswing (will pause at top if 'h' not pressed yet).</p>
+        <p>After 'h' is pressed and 'w' is released, press 'a' (arms), 's' (rotation if not pressed earlier), 'd' (wrists) to sequence the downswing.</p>
+    </div>
+
+    <!-- 3. Timing Bars -->
+    <div id="timing-bars">
+        <h2>Backswing Length</h2>
+        <div class="timing-bar-container">
+            <span class="bar-label">Length:</span>
+            <div class="timing-bar backswing-bar">
+                <div class="ideal-window" id="ideal-backswing-marker"></div>
+                <div class="progress" id="progress-backswing"></div>
+            </div>
+        </div>
+
+        <h2>Downswing Timing</h2>
+        <div class="timing-bar-container">
+            <span class="bar-label">Arms (a):</span>
+            <div class="timing-bar">
+                <div class="ideal-window" id="window-a"></div>
+                <div class="progress" id="progress-a"></div>
+                <div class="marker" id="marker-a"></div>
+            </div>
+        </div>
+        <div class="timing-bar-container">
+             <span class="bar-label">Rotation (s):</span>
+            <div class="timing-bar">
+                <div class="ideal-window" id="window-s"></div>
+                <div class="progress" id="progress-s"></div>
+                 <div class="marker" id="marker-s"></div>
+           </div>
+        </div>
+        <div class="timing-bar-container">
+            <span class="bar-label">Wrists (d):</span>
+            <div class="timing-bar">
+                <div class="ideal-window" id="window-d"></div>
+                <div class="progress" id="progress-d"></div>
+                 <div class="marker" id="marker-d"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. Visuals Canvas -->
+    <div id="visuals-container">
+        <canvas id="golf-canvas"></canvas>
+    </div>
+
+    <!-- 5. Shot Result -->
+    <div id="shot-result">
+        <h2>Shot Result</h2>
+        <p><strong>Overall:</strong> <span id="result-text">Hit the ball!</span></p>
+        <p>Clubhead Speed: <span id="chs-text">N/A</span> mph</p>
+        <p>Ball Speed: <span id="ball-speed-text">N/A</span> mph</p>
+        <p>Attack Angle: <span id="attack-angle-text">N/A</span> deg</p>
+        <p>Back Spin: <span id="back-spin-text">N/A</span> rpm</p>
+        <p>Side Spin: <span id="side-spin-text">N/A</span> rpm</p>
+        <p>Peak Height: <span id="peak-height-text">N/A</span> yd</p>
+        <p>Carry Distance: <span id="carry-distance-text">N/A</span> yd</p>
+        <p>Rollout Distance: <span id="result-rollout">N/A</span> yd</p> <!-- Added -->
+        <p><strong>Total Distance:</strong> <span id="result-total-distance">N/A</span> yd</p> <!-- Added -->
+        <button id="next-shot-button" style="display: none;">Next Shot (n)</button>
+    </div>
+
+    <!-- 6. Timing Info (Debug) -->
+    <div id="timing-info">
+        <h2>Timing Info (Debug)</h2>
+        <p>Backswing Duration: <span id="backswing-duration">N/A</span> ms</p>
+        <p>Rotation Start Offset: <span id="rotation-start-offset">N/A</span> ms</p>
+        <p>Hip Initiation Offset: <span id="hip-initiation-offset">N/A</span> ms</p> <!-- Added -->
+        <p>Arms Start Offset: <span id="arms-start-offset">N/A</span> ms</p>
+        <p>Wrists Start Offset: <span id="wrists-start-offset">N/A</span> ms</p>
+    </div>
+
+    <script type="module" src="src/main.js"></script>
+</body>
+</html>
