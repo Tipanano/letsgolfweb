@@ -1,5 +1,7 @@
 import { clubs } from './clubs.js';
 import * as ui from './ui.js';
+// Import specific UI functions needed for ball position
+import { adjustBallPosition, getBallPositionIndex, getBallPositionLevels, setBallPosition, markHipInitiationOnBackswingBar } from './ui.js';
 import * as visuals from './visuals.js'; // Import visuals
 
 // --- Constants ---
@@ -44,6 +46,15 @@ export function setSwingSpeed(percentage) {
 export function setSelectedClub(clubKey) {
     selectedClub = clubs[clubKey];
     console.log(`Logic Club set to: ${selectedClub.name}`);
+
+    // Set the default ball position for the selected club
+    if (selectedClub && selectedClub.defaultBallPositionIndex !== undefined) {
+        setBallPosition(selectedClub.defaultBallPositionIndex);
+    } else {
+        // Fallback if property is missing (optional, could default to center)
+        console.warn(`Club ${clubKey} missing defaultBallPositionIndex. Setting to center.`);
+        setBallPosition(Math.floor(getBallPositionLevels() / 2)); // Default to center index
+    }
 }
 
 function resetSwingState() {
@@ -71,8 +82,21 @@ function resetSwingState() {
 
 // --- Input Handling Callbacks (to be called by main.js) ---
 export function handleKeyDown(event) {
-    // Explicitly log state just before checking 'w'
+    // Explicitly log state just before checking keys
     console.log(`handleKeyDown Check: Key='${event.key}', State='${gameState}'`);
+
+    // Adjust Ball Position with Arrow Keys (only when ready)
+    if (gameState === 'ready') {
+        if (event.key === 'ArrowUp') {
+            event.preventDefault(); // Prevent page scrolling
+            adjustBallPosition(1); // Move ball forward (higher index)
+            return; // Don't process other keys if adjusting position
+        } else if (event.key === 'ArrowDown') {
+            event.preventDefault(); // Prevent page scrolling
+            adjustBallPosition(-1); // Move ball backward (lower index)
+            return; // Don't process other keys if adjusting position
+        }
+    }
 
     // Start Backswing with 'w' key
     if (event.key === 'w' && gameState === 'ready') {
@@ -101,17 +125,18 @@ export function handleKeyDown(event) {
         console.log("'a' pressed during backswing (early rotation)");
     }
 
-    // Capture 'h' press (Hip Initiation)
-    if (event.key === 'h' && (gameState === 'backswing' || gameState === 'backswingPausedAtTop') && !hipInitiationTime) {
+    // Capture 'j' press (Hip Initiation) - NEW KEY
+    if (event.key === 'j' && (gameState === 'backswing' || gameState === 'backswingPausedAtTop') && !hipInitiationTime) {
         hipInitiationTime = performance.now();
-        console.log(`'h' pressed at ${hipInitiationTime.toFixed(0)}ms. State: ${gameState}`);
+        console.log(`'j' (Hips) pressed at ${hipInitiationTime.toFixed(0)}ms. State: ${gameState}`); // UPDATED LOG
         ui.updateStatus("Hips Initiated..."); // Update status
+        markHipInitiationOnBackswingBar(); // Call UI function to change bar color
 
-        // If paused at top, pressing 'h' starts the downswing phase immediately
+        // If paused at top, pressing 'j' starts the downswing phase immediately
         if (gameState === 'backswingPausedAtTop') {
             gameState = 'downswingWaiting';
-            ui.updateStatus('Downswing: Press a, s, d...');
-            console.log("Transitioning from Paused to DownswingWaiting due to 'h' press.");
+            ui.updateStatus('Downswing: Press a, d, i...'); // UPDATED PROMPT
+            console.log("Transitioning from Paused to DownswingWaiting due to 'j' press."); // UPDATED LOG
             // Start downswing timing bar animation
             downswingPhaseStartTime = performance.now(); // Start timing from 'h' press
             if (downswingAnimationFrameId) cancelAnimationFrame(downswingAnimationFrameId);
@@ -127,20 +152,20 @@ export function handleKeyDown(event) {
         // Offset relative to hip initiation time might be more relevant now? Or stick to backswingEnd? Let's stick to backswingEnd for now.
         const offset = timeNow - backswingEndTime; // Offset relative to backswing end
 
-        // Check keys in the new sequence: a (rotation), j (arms), d (wrists)
-        if (event.key === 'j' && !armsStartTime) { // 'j' now controls Arms
+        // Check keys in the new sequence: a (rotation), d (arms), i (wrists)
+        if (event.key === 'd' && !armsStartTime) { // 'd' still controls Arms
             armsStartTime = timeNow;
-            ui.showKeyPressMarker('j', offset, swingSpeed); // Pass 'j' to UI
+            ui.showKeyPressMarker('d', offset, swingSpeed); // Pass 'd' to UI for Arms marker
             ui.updateDebugTimingInfo(getDebugTimingData());
-            console.log(`'j' (Arms) pressed at offset: ${offset.toFixed(0)} ms`);
-        } else if (event.key === 'd' && !wristsStartTime) { // 'd' still controls Wrists
+            console.log(`'d' (Arms) pressed at offset: ${offset.toFixed(0)} ms`);
+        } else if (event.key === 'i' && !wristsStartTime) { // 'i' now controls Wrists - NEW KEY
             wristsStartTime = timeNow;
-            ui.showKeyPressMarker('d', offset, swingSpeed);
+            ui.showKeyPressMarker('i', offset, swingSpeed); // Pass 'i' to UI for Wrists marker
              ui.updateDebugTimingInfo(getDebugTimingData());
-           console.log(`'d' (Wrists) pressed at offset: ${offset.toFixed(0)} ms`);
-        } else if (event.key === 'a' && !rotationStartTime && !rotationInitiationTime) { // 'a' now controls Rotation
+           console.log(`'i' (Wrists) pressed at offset: ${offset.toFixed(0)} ms`); // UPDATED LOG
+        } else if (event.key === 'a' && !rotationStartTime && !rotationInitiationTime) { // 'a' still controls Rotation
             rotationStartTime = timeNow;
-            ui.showKeyPressMarker('a', offset, swingSpeed); // Pass 'a' to UI
+            ui.showKeyPressMarker('a', offset, swingSpeed); // Pass 'a' to UI for Rotation marker
              ui.updateDebugTimingInfo(getDebugTimingData());
             console.log(`'a' (Rotation) pressed post-backswing at offset: ${offset.toFixed(0)} ms`);
         }
@@ -246,16 +271,16 @@ function calculateShot() {
     let resultMessage = "";
     let strikeQuality = "Center";
 
-    // Ideal offsets remain associated with the ACTION, but triggered by NEW KEYS
+    // Ideal offsets remain associated with the ACTION, but triggered by NEW KEYS (a=Rotation, d=Arms, i=Wrists)
     const idealTransitionOffset = -50 / swingSpeed; // Transition (early rotation 'a' or regular 'a')
     const idealRotationOffset = 50 / swingSpeed;    // Rotation ('a' key)
-    const idealArmsOffset = 100 / swingSpeed;       // Arms ('j' key)
-    const idealWristsOffset = 200 / swingSpeed;     // Wrists ('d' key)
+    const idealArmsOffset = 100 / swingSpeed;       // Arms ('d' key)
+    const idealWristsOffset = 200 / swingSpeed;     // Wrists ('i' key) - NEW KEY
 
     // Assign large penalty time if input is missing, instead of Infinity
     const MAX_PENALTY_TIME_MS = 5000;
-    const effectiveArmsStartTime = armsStartTime !== null ? armsStartTime : backswingEndTime + MAX_PENALTY_TIME_MS; // Triggered by 'j'
-    const effectiveWristsStartTime = wristsStartTime !== null ? wristsStartTime : backswingEndTime + MAX_PENALTY_TIME_MS; // Triggered by 'd'
+    const effectiveArmsStartTime = armsStartTime !== null ? armsStartTime : backswingEndTime + MAX_PENALTY_TIME_MS; // Triggered by 'd'
+    const effectiveWristsStartTime = wristsStartTime !== null ? wristsStartTime : backswingEndTime + MAX_PENALTY_TIME_MS; // Triggered by 'i' - NEW KEY
     // Use rotationStartTime ('a' press) if available, otherwise use rotationInitiationTime ('a' press early) if available, otherwise penalty
     const effectiveRotationStartTime = rotationStartTime !== null ? rotationStartTime : (rotationInitiationTime !== null ? rotationInitiationTime : backswingEndTime + MAX_PENALTY_TIME_MS); // Triggered by 'a'
     // Transition time is based on when rotation was initiated ('a' key, early or regular)
@@ -265,55 +290,71 @@ function calculateShot() {
     // Calculate deviations using the correct ideal offsets for each action's effective time
     const transitionDev = (effectiveTransitionTime - backswingEndTime) - idealTransitionOffset; // Based on 'a' timing
     const rotationDev = (effectiveRotationStartTime - backswingEndTime) - idealRotationOffset; // Based on 'a' timing
-    const armsDev = (effectiveArmsStartTime - backswingEndTime) - idealArmsOffset;             // Based on 'j' timing
-    const wristsDev = (effectiveWristsStartTime - backswingEndTime) - idealWristsOffset;       // Based on 'd' timing
+    const armsDev = (effectiveArmsStartTime - backswingEndTime) - idealArmsOffset;             // Based on 'd' timing
+    const wristsDev = (effectiveWristsStartTime - backswingEndTime) - idealWristsOffset;       // Based on 'i' timing - NEW KEY
 
-    console.log(`Deviations - Rotation('a'): ${rotationDev.toFixed(0)}, Arms('j'): ${armsDev.toFixed(0)}, Wrists('d'): ${wristsDev.toFixed(0)}`); // Updated log
+    console.log(`Deviations - Rotation('a'): ${rotationDev.toFixed(0)}, Arms('d'): ${armsDev.toFixed(0)}, Wrists('i'): ${wristsDev.toFixed(0)}`); // Updated log
 
-    // --- Calculate Potential CHS based on new basePotentialSpeed ---
-    const backswingLengthFactor = 1 - Math.min(0.5, Math.abs(backswingDuration - IDEAL_BACKSWING_DURATION_MS) / IDEAL_BACKSWING_DURATION_MS);
+    // --- Calculate Potential CHS based on backswing length relative to ideal mark ---
+    // Ideal duration scaled by swing speed determines the timing for the ideal mark
+    const scaledIdealBackswingDuration = IDEAL_BACKSWING_DURATION_MS / swingSpeed;
+    // Power factor: How close was the actual duration to the scaled ideal duration? Clamp between 0.1 and 1.0.
+    const powerFactor = Math.max(0.1, Math.min(1.0, backswingDuration / scaledIdealBackswingDuration));
+
     const baseSpeed = selectedClub.basePotentialSpeed || 90; // Get base speed, fallback to 90
     console.log(`Club: ${selectedClub.name}, Base Potential Speed: ${baseSpeed} mph`);
-    console.log(`Backswing Duration: ${backswingDuration.toFixed(0)}ms, Ideal: ${IDEAL_BACKSWING_DURATION_MS}ms, Length Factor: ${backswingLengthFactor.toFixed(2)}`);
+    // Log the new power factor calculation details
+    console.log(`Backswing Duration: ${backswingDuration.toFixed(0)}ms, Scaled Ideal Duration (Mark): ${scaledIdealBackswingDuration.toFixed(0)}ms, Power Factor: ${powerFactor.toFixed(2)}`);
 
-    // Calculate potential CHS based on base speed, length factor, and swing speed slider
-    let potentialCHS = baseSpeed * backswingLengthFactor * swingSpeed;
+    // Calculate potential CHS based on base speed, power factor, and swing speed slider
+    // Note: swingSpeed influences the powerFactor calculation AND multiplies the result.
+    let potentialCHS = baseSpeed * powerFactor * swingSpeed;
 
     // Apply a minimum speed clamp (e.g., 60% of base potential, also scaled by slider)
-    const minPotentialCHS = baseSpeed * 0.6 * swingSpeed;
-    potentialCHS = Math.max(minPotentialCHS, potentialCHS);
-    console.log(`Potential CHS (after length factor, speed slider, min clamp): ${potentialCHS.toFixed(1)} mph`);
+    const minPotentialCHS = baseSpeed * 0.6 * swingSpeed; // Minimum potential based on slider
+    potentialCHS = Math.max(minPotentialCHS, potentialCHS); // Ensure powerFactor doesn't drop below minimum
+    console.log(`Potential CHS (after power factor, speed slider, min clamp): ${potentialCHS.toFixed(1)} mph`);
 
     // --- Apply Penalties ---
-    // Sequence Penalty
-    const sequencePenaltyFactor = Math.max(0.6, 1 - (Math.abs(armsDev) + Math.abs(rotationDev) + Math.abs(wristsDev)) / (1500 / swingSpeed));
-    clubHeadSpeed = potentialCHS * sequencePenaltyFactor;
-
-    let overswingPenalty = 0;
-    if (backswingDuration > BACKSWING_BAR_MAX_DURATION_MS) {
-        overswingPenalty = Math.min(0.3, (backswingDuration - BACKSWING_BAR_MAX_DURATION_MS) / 1000);
-        clubHeadSpeed *= (1 - overswingPenalty);
-        console.log(`Overswing Penalty Applied: ${(overswingPenalty * 100).toFixed(1)}%`);
-    }
+    // Sequence Penalty (Timing deviations of downswing keys)
+    const sequencePenaltyFactor = Math.max(0.6, 1 - (Math.abs(armsDev) + Math.abs(rotationDev) + Math.abs(wristsDev)) / (1500 / swingSpeed)); // Denominator might need review
     console.log(`Sequence Penalty Factor: ${sequencePenaltyFactor.toFixed(2)}`);
-    clubHeadSpeed = potentialCHS * sequencePenaltyFactor;
 
-    // Overswing Penalty (Declaration removed from here, kept below)
-    // let overswingPenalty = 0; // REMOVED redundant declaration
-    if (backswingDuration > BACKSWING_BAR_MAX_DURATION_MS) {
-        // Calculate penalty
-        const overswingPenalty = Math.min(0.3, (backswingDuration - BACKSWING_BAR_MAX_DURATION_MS) / 1000); // Keep calculation
-        clubHeadSpeed *= (1 - overswingPenalty);
-        console.log(`Overswing Penalty Applied: ${(overswingPenalty * 100).toFixed(1)}%`);
+    // Overswing Penalty (Holding backswing past the max bar duration)
+    let overswingPenalty = 0;
+    const scaledMaxBackswingDuration = BACKSWING_BAR_MAX_DURATION_MS / swingSpeed; // Max duration scaled by speed
+    if (backswingDuration > scaledMaxBackswingDuration) { // Check against scaled max duration
+        // Penalty based on how much *over* the scaled max duration
+        overswingPenalty = Math.min(0.3, (backswingDuration - scaledMaxBackswingDuration) / 1000); // Penalty amount (consider scaling this by swingSpeed too?)
+        console.log(`Overswing Penalty Applied: ${(overswingPenalty * 100).toFixed(1)}% (Duration ${backswingDuration.toFixed(0)} > Scaled Max ${scaledMaxBackswingDuration.toFixed(0)})`);
     }
+
+    // Apply penalties to potential CHS
+    clubHeadSpeed = potentialCHS * sequencePenaltyFactor * (1 - overswingPenalty);
+
     console.log(`Final CHS (after penalties): ${clubHeadSpeed.toFixed(1)} mph`);
 
 
     // --- Calculate other initial shot parameters ---
+    // Get ball position setting from UI
+    const ballPositionIndex = getBallPositionIndex(); // 0 (Back) to levels-1 (Forward)
+    const ballPositionLevels = getBallPositionLevels(); // e.g., 5
+    const centerIndex = Math.floor(ballPositionLevels / 2); // e.g., 2 for 5 levels
+
+    // Calculate ball position factor: -1 (Back) to +1 (Forward), 0 for Center
+    const ballPositionFactor = (centerIndex - ballPositionIndex) / centerIndex; // e.g., (2-0)/2=1, (2-1)/2=0.5, (2-2)/2=0, (2-3)/2=-0.5, (2-4)/2=-1
+    console.log(`Ball Position: Index=${ballPositionIndex}, Factor=${ballPositionFactor.toFixed(2)} (-1=Fwd, 0=Ctr, +1=Back)`);
+
+    // Attack Angle Calculation
     const baseAoA = selectedClub.baseAoA;
-    const aoaAdjustment = Math.max(-5, Math.min(5, -armsDev / (20 / swingSpeed))); // Still based on armsDev ('j' key timing)
-    attackAngle = baseAoA + aoaAdjustment;
-    console.log(`Club Base AoA: ${baseAoA}, ArmsDev: ${armsDev.toFixed(0)}, AoA Adjust: ${aoaAdjustment.toFixed(1)}, Final AoA: ${attackAngle.toFixed(1)}`);
+    // Base adjustment still comes from arms timing ('d' key)
+    const armsTimingAoAAdjust = Math.max(-5, Math.min(5, -armsDev / (20 / swingSpeed)));
+    // Additional adjustment based on ball position (more forward = more positive AoA)
+    // Let's say max adjustment is +/- 3 degrees based on position? (Tunable)
+    const ballPositionAoAAdjust = ballPositionFactor * -3.0; // Factor is -1 (Fwd) to +1 (Back), so multiply by -3 to get +3 (Fwd) to -3 (Back)
+    attackAngle = baseAoA + armsTimingAoAAdjust + ballPositionAoAAdjust;
+    console.log(`Club Base AoA: ${baseAoA}, ArmsDev: ${armsDev.toFixed(0)}, Arms AoA Adj: ${armsTimingAoAAdjust.toFixed(1)}, Ball Pos AoA Adj: ${ballPositionAoAAdjust.toFixed(1)}, Final AoA: ${attackAngle.toFixed(1)}`);
+
 
     let smashFactor = selectedClub.baseSmash;
     const aoaThreshold = selectedClub.name === 'Driver' ? 8 : 6;
@@ -401,23 +442,35 @@ function calculateShot() {
     console.log(`Simulated Time of Flight: ${simulationResult.timeOfFlight.toFixed(2)}s`);
     console.log(`Simulated Carry: ${carryDistance.toFixed(1)} yd, Peak Height: ${peakHeight.toFixed(1)} yd`);
 
-    // --- Calculate Rollout (based on simulated carry and landing conditions) ---
-    // We might want to use landing angle/speed from simulation later, but keep simple for now
-    let baseRollFactor = 0.15; // Base 15% roll (Increased again)
+    // --- Calculate Rollout (Revised Logic for Spin Effect) ---
+    let baseRollFactor = 0.06; // Lower base roll factor (6%)
     if (strikeQuality === "Thin") {
-        baseRollFactor += 0.15; // Thin shots roll more
+        baseRollFactor += 0.08; // Thin shots roll a bit more
     } else if (strikeQuality === "Fat") {
-        baseRollFactor -= 0.08; // Fat shots roll less
+        baseRollFactor -= 0.04; // Fat shots roll less
     }
-    // Lower spin = more roll (More sensitive formula and wider range)
-    const spinRollFactor = Math.max(0.6, Math.min(2.0, 1 - (backSpin - 5000) / 4000));
-    // Landing angle factor removed for simplicity and to emphasize spin's role
+    baseRollFactor = Math.max(0.01, baseRollFactor); // Ensure base roll doesn't go below 1%
 
-    rolloutDistance = carryDistance * baseRollFactor * spinRollFactor; // Removed landingAngleFactor
-    rolloutDistance = Math.max(0, Math.min(carryDistance * 0.75, rolloutDistance)); // Clamp rollout (Increased to 75% of carry)
-    totalDistance = carryDistance + rolloutDistance;
+    // New spin factor: Target zero roll around 7500rpm, allow negative for higher spin. More sensitive.
+    const targetSpinForZeroRoll = 7500; // Increased target slightly
+    const spinSensitivity = 3500; // Increased sensitivity (smaller number = more sensitive)
+    // Factor increases below target, decreases (potentially negative) above target
+    const spinRollFactor = 1 - (backSpin - targetSpinForZeroRoll) / spinSensitivity;
 
-    console.log(`Rollout Factors: Base=${baseRollFactor.toFixed(2)}, Spin=${spinRollFactor.toFixed(2)}`); // Removed Angle factor log
+    console.log(`Rollout Factors: Base=${baseRollFactor.toFixed(2)}, SpinFactor=${spinRollFactor.toFixed(2)} (BackSpin: ${backSpin.toFixed(0)})`);
+
+    // Calculate initial rollout based on carry, base factor, and spin factor
+    rolloutDistance = carryDistance * baseRollFactor * spinRollFactor;
+
+    // Clamp rollout: Allow negative (spin back), but limit max positive roll.
+    const maxPositiveRollFactor = 0.25; // Max positive roll is 25% of carry
+    const minNegativeRollFactor = -0.08; // Max spin back is 8% of carry (increased slightly)
+
+    rolloutDistance = Math.max(carryDistance * minNegativeRollFactor, rolloutDistance); // Apply min (negative) clamp
+    rolloutDistance = Math.min(carryDistance * maxPositiveRollFactor, rolloutDistance); // Apply max (positive) clamp
+
+    totalDistance = carryDistance + rolloutDistance; // Total distance correctly accounts for negative rollout
+
     console.log(`Calculated Rollout: ${rolloutDistance.toFixed(1)} yd, Total Distance: ${totalDistance.toFixed(1)} yd`);
 
 

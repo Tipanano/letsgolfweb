@@ -25,13 +25,25 @@
         </div>
      </div>
 
+    <!-- NEW Ball Position Section -->
+    <div id="ball-position-control">
+        <h2>Ball Position</h2>
+        <p>Use Up/Down arrows to adjust (when Ready)</p>
+        <div class="stance-visual">
+            <div class="foot" id="left-foot"></div>
+            <div class="ball-marker" id="ball-marker"></div>
+            <div class="foot" id="right-foot"></div>
+        </div>
+        <p>Position: <span id="ball-position-text">Center</span></p>
+    </div>
+
     <!-- 2. Instructions -->
     <div id="instructions">
         <p>Press and hold 'w' key to start backswing.</p>
         <p>Press 'a' during backswing for early rotation (optional).</p>
-        <p>Press 'h' during backswing OR after releasing 'w' to initiate hip rotation (REQUIRED before downswing keys).</p>
-        <p>Release 'w' key to finish backswing (will pause at top if 'h' not pressed yet).</p>
-        <p>After 'h' is pressed and 'w' is released, press 'a' (rotation), 'j' (arms), 'd' (wrists) to sequence the downswing.</p>
+        <p>Press 'j' during backswing OR after releasing 'w' to initiate hip rotation (REQUIRED before downswing keys).</p> <!-- UPDATED KEY -->
+        <p>Release 'w' key to finish backswing (will pause at top if 'j' not pressed yet).</p> <!-- UPDATED KEY -->
+        <p>After 'j' is pressed and 'w' is released, press 'a' (rotation), 'd' (arms), 'i' (wrists) to sequence the downswing.</p> <!-- UPDATED KEYS -->
     </div>
 
     <!-- 3. Timing Bars -->
@@ -46,9 +58,9 @@
         </div>
 
         <h2>Downswing Timing</h2>
-        <!-- Remapped: a=Rotation, j=Arms, d=Wrists -->
+        <!-- Remapped: a=Rotation, d=Arms, i=Wrists -->
         <div class="timing-bar-container">
-            <span class="bar-label">Rotation (a):</span> <!-- Changed Label -->
+            <span class="bar-label">Rotation (a):</span> <!-- Label stays 'a' -->
             <div class="timing-bar">
                 <div class="ideal-window" id="window-a"></div> <!-- ID stays 'a' for Rotation -->
                 <div class="progress" id="progress-a"></div> <!-- ID stays 'a' for Rotation -->
@@ -56,19 +68,19 @@
             </div>
         </div>
         <div class="timing-bar-container">
-             <span class="bar-label">Arms (j):</span> <!-- Changed Label -->
+             <span class="bar-label">Arms (d):</span> <!-- Label stays 'd' -->
             <div class="timing-bar">
-                <div class="ideal-window" id="window-j"></div> <!-- Changed ID from s to j -->
-                <div class="progress" id="progress-j"></div> <!-- Changed ID from s to j -->
-                 <div class="marker" id="marker-j"></div>     <!-- Changed ID from s to j -->
+                <div class="ideal-window" id="window-j"></div> <!-- ID stays 'j' for Arms -->
+                <div class="progress" id="progress-j"></div> <!-- ID stays 'j' for Arms -->
+                 <div class="marker" id="marker-j"></div>     <!-- ID stays 'j' for Arms -->
            </div>
         </div>
         <div class="timing-bar-container">
-            <span class="bar-label">Wrists (d):</span> <!-- Label stays 'd' -->
+            <span class="bar-label">Wrists (i):</span> <!-- UPDATED KEY -->
             <div class="timing-bar">
-                <div class="ideal-window" id="window-d"></div>
-                <div class="progress" id="progress-d"></div>
-                 <div class="marker" id="marker-d"></div>
+                <div class="ideal-window" id="window-d"></div> <!-- ID stays 'd' for Wrists -->
+                <div class="progress" id="progress-d"></div> <!-- ID stays 'd' for Wrists -->
+                 <div class="marker" id="marker-d"></div>     <!-- ID stays 'd' for Wrists -->
             </div>
         </div>
     </div>

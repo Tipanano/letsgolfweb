@@ -10,7 +10,7 @@ h1, h2 {
     color: #005f40; /* Dark green */
 }
 
-#game-status, #instructions, #timing-info, #shot-result {
+#game-status, #instructions, #timing-info, #shot-result, #ball-position-control { /* Added #ball-position-control */
     background-color: #fff;
     border: 1px solid #ddd;
     padding: 15px;
@@ -19,7 +19,8 @@ h1, h2 {
 }
 
 #status-text, #swing-speed-text, #backswing-duration,
-#rotation-start-offset, #arms-start-offset, #wrists-start-offset {
+#rotation-start-offset, #arms-start-offset, #wrists-start-offset,
+#ball-position-text { /* Added #ball-position-text */
     font-weight: bold;
     color: #007bff; /* Blue */
 }
@@ -122,4 +123,48 @@ h1, h2 {
     width: 100%;   /* Make canvas responsive */
     height: 400px; /* Example fixed height */
     background-color: #aaddcc; /* Placeholder canvas background */
+}
+
+/* --- Ball Position Control --- */
+.stance-visual {
+    display: flex;
+    flex-direction: column; /* Stack items vertically */
+    align-items: center;    /* Center items horizontally */
+    justify-content: space-between; /* Push feet to top/bottom */
+    background-color: #e9ecef;
+    padding: 10px;
+    border-radius: 4px;
+    margin-top: 10px;
+    height: 150px; /* Make it taller */
+    position: relative; /* For positioning the ball marker */
+    width: 50px;  /* Make it narrower */
+    margin-left: auto; /* Center the container */
+    margin-right: auto;
+}
+
+.foot {
+    width: 30px;
+    height: 30px;
+    background-color: #6c757d; /* Gray */
+    border: 1px solid #495057;
+    border-radius: 3px;
+    /* Removed auto margins */
+}
+
+/* #left-foot is now the top foot (front foot) */
+/* #right-foot is now the bottom foot (back foot) */
+
+.ball-marker {
+    width: 15px;
+    height: 15px;
+    background-color: #fff; /* White ball */
+    border: 1px solid #333;
+    border-radius: 50%; /* Make it round */
+    position: absolute; /* Position relative to stance-visual */
+    left: 50%; /* Center horizontally */
+    transform: translateX(-50%); /* Adjust horizontal centering */
+    top: 50%; /* Start centered vertically */
+    margin-top: -7.5px; /* Adjust vertical centering (half height) */
+    transition: top 0.1s ease-in-out; /* Smooth vertical movement */
+    z-index: 1;
 }
