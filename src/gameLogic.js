@@ -309,7 +309,7 @@ function calculateShot() {
     console.log(`Final CHS (after penalties): ${clubHeadSpeed.toFixed(1)} mph`);
 
 
-    // --- Calculate other shot parameters ---
+    // --- Calculate other initial shot parameters ---
     const baseAoA = selectedClub.baseAoA;
     const aoaAdjustment = Math.max(-5, Math.min(5, -armsDev / (20 / swingSpeed))); // Still based on armsDev ('j' key timing)
     attackAngle = baseAoA + aoaAdjustment;
@@ -338,91 +338,86 @@ function calculateShot() {
     const faceToPath = faceAngleDev - pathDev;
     sideSpin = faceToPath * 200;
     sideSpin = Math.max(-4000, Math.min(4000, sideSpin));
-    console.log(`Face Angle Dev: ${faceAngleDev.toFixed(1)}, Path Dev: ${pathDev.toFixed(1)}, Face-to-Path: ${faceToPath.toFixed(1)}`);
-    console.log(`Back Spin: ${backSpin.toFixed(0)}, Side Spin: ${sideSpin.toFixed(0)}`);
 
+    // Reduce backspin significantly if side spin is high (hook/slice)
+    const sideSpinThreshold = 2000;
+    if (Math.abs(sideSpin) > sideSpinThreshold) {
+        const reductionFactor = 0.3; // Reduce backspin by 70% (very aggressive)
+        const originalBackSpin = backSpin;
+        backSpin *= reductionFactor;
+        backSpin = Math.max(500, backSpin); // Ensure it doesn't go below minimum clamp
+        console.log(`High side spin detected (${sideSpin.toFixed(0)}). Reducing back spin from ${originalBackSpin.toFixed(0)} to ${backSpin.toFixed(0)}.`);
+    }
+
+    console.log(`Face Angle Dev: ${faceAngleDev.toFixed(1)}, Path Dev: ${pathDev.toFixed(1)}, Face-to-Path: ${faceToPath.toFixed(1)}`);
+    console.log(`Final Back Spin: ${backSpin.toFixed(0)}, Side Spin: ${sideSpin.toFixed(0)}`);
+
+
+    // --- Prepare for Simulation ---
     const staticLoft = selectedClub.loft;
-    const dynamicLoftFactor = 0.5; // Reduced from 0.8 to lower launch angle influence
-    launchAngle = staticLoft + attackAngle * dynamicLoftFactor;
+    const dynamicLoftFactor = 0.5; // Keep this for launch angle calculation
+    launchAngle = staticLoft + attackAngle * dynamicLoftFactor; // Calculate launch angle
     const minLaunch = selectedClub.name === 'Driver' ? 5 : (selectedClub.loft / 3);
     const maxLaunch = selectedClub.name === 'Driver' ? 25 : (selectedClub.loft * 1.2);
     launchAngle = Math.max(minLaunch, Math.min(maxLaunch, launchAngle));
-    console.log(`Club Loft: ${staticLoft}, Estimated Launch Angle: ${launchAngle.toFixed(1)} deg`);
+    // const maxLaunch = selectedClub.name === 'Driver' ? 25 : (selectedClub.loft * 1.2); // REMOVED Duplicate
+    // launchAngle = Math.max(minLaunch, Math.min(maxLaunch, launchAngle)); // REMOVED Duplicate
+    // console.log(`Club Loft: ${staticLoft}, Estimated Launch Angle: ${launchAngle.toFixed(1)} deg`); // REMOVED Duplicate
 
-    const gravity = 9.81; // m/s^2
+    // --- Calculate Initial Vectors for Simulation ---
     const ballSpeedMPS = ballSpeed * 0.44704; // Convert mph to m/s
     const launchAngleRad = launchAngle * Math.PI / 180;
-    const vy0 = ballSpeedMPS * Math.sin(launchAngleRad); // Initial vertical velocity
-    const vx0 = ballSpeedMPS * Math.cos(launchAngleRad); // Initial horizontal velocity (in launch direction)
 
-    // Calculate time of flight based on vertical motion (vy = vy0 - g*t)
-    // Time to peak height (when vy = 0) is t_peak = vy0 / gravity
-    // Total time of flight (ignoring air resistance) is 2 * t_peak
-    let timeOfFlight = (2 * vy0) / gravity;
-    const rawTimeOfFlight = timeOfFlight; // Store raw ToF for physics
+    // Initial velocity components
+    const initialVelY = ballSpeedMPS * Math.sin(launchAngleRad);
+    const initialVelHorizontalMag = ballSpeedMPS * Math.cos(launchAngleRad);
 
-    // Clamp visual animation duration for sensibility (e.g., 0.5s to 5s)
-    const visualTimeOfFlight = Math.max(0.5, Math.min(5.0, timeOfFlight));
+    // Determine initial X/Z velocity based on side spin (simple model: side spin affects initial direction)
+    // We need a relationship between sideSpin RPM and initial side angle/velocity.
+    // Let's try a simple linear relationship for side angle first (needs tuning).
+    // Max side spin ~4000rpm. Max angle ~5 deg? => angle = sideSpin / 800
+    const sideAngleDeg = sideSpin / 800; // Degrees off target line
+    const sideAngleRad = sideAngleDeg * Math.PI / 180;
 
-    // --- Apply Basic Drag ---
-    // Simple drag factor reducing distance based on raw time of flight
-    // Reduced coefficient significantly from 0.08 to 0.02, increased min effect
-    const dragFactor = Math.max(0.7, 1 - (rawTimeOfFlight * 0.02));
-    console.log(`Drag Factor (based on raw ToF ${rawTimeOfFlight.toFixed(2)}s): ${dragFactor.toFixed(3)}`);
+    const initialVelX = initialVelHorizontalMag * Math.sin(sideAngleRad);
+    const initialVelZ = initialVelHorizontalMag * Math.cos(sideAngleRad);
 
-    const carryMeters = vx0 * rawTimeOfFlight * dragFactor; // Apply drag factor to distance based on raw ToF
-    let carryDistance_preSpinFactors = carryMeters * 1.09361; // Convert meters to yards
+    const initialVelocity = { x: initialVelX, y: initialVelY, z: initialVelZ };
+    const initialPosition = { x: 0, y: 0.1, z: 0 }; // Start slightly above ground
 
-    // --- Apply Absolute Spin Penalty ---
-    // Reduce carry based on *total* spin magnitude and launch angle
-    const totalSpinMagnitude = Math.sqrt(backSpin * backSpin + sideSpin * sideSpin);
-    console.log(`Total Spin Magnitude: ${totalSpinMagnitude.toFixed(0)}rpm`);
-    // Tunable constants: spin divisor (40k), launch divisor (30), min factor (0.7)
-    const absoluteSpinPenalty = Math.max(0.7, 1 - (totalSpinMagnitude / 40000) * (launchAngle / 30));
-    console.log(`Absolute Spin Penalty Factor (Total Spin): ${absoluteSpinPenalty.toFixed(3)}`);
-    carryDistance = carryDistance_preSpinFactors * absoluteSpinPenalty; // Apply absolute penalty first
+    // Define Spin Vector (RPM) - This is a simplification!
+    // Assumes backspin is around world X, sidespin around world Y.
+    // Positive side spin (slice) means spin around positive Y axis? (Needs verification/tuning)
+    const spinVectorRPM = { x: backSpin, y: sideSpin, z: 0 };
 
-    const peakHeightMeters = (vy0 * vy0) / (2 * gravity); // Peak height calculation remains similar
-    peakHeight = peakHeightMeters * 1.09361;
+    // --- Run Simulation ---
+    const simulationResult = simulateFlightStepByStep(initialPosition, initialVelocity, spinVectorRPM);
 
-    // --- Apply Deviation-from-Optimal Spin Factor ---
-    // Use club-specific optimalSpin for factors
-    const optimalSpin = selectedClub.optimalSpin || 7000; // Fallback to 7000 (7i)
-    const spinDeviation = backSpin - optimalSpin;
-    console.log(`Spin Deviation from Optimal (${optimalSpin}rpm): ${spinDeviation.toFixed(0)}rpm`);
+    // --- Extract Results from Simulation ---
+    carryDistance = simulationResult.carryDistance;
+    peakHeight = simulationResult.peakHeight;
+    const visualTimeOfFlight = Math.max(0.5, Math.min(5.0, simulationResult.timeOfFlight)); // Clamp visual time
 
-    // Calculate factors based on deviation from club's optimal spin
-    // Adjust denominator based on typical spin range/sensitivity per club type (needs tuning)
-    const carrySpinDenominator = optimalSpin < 4000 ? 15000 : 12000; // Lower denominator for low-spin clubs?
-    const heightSpinDenominator = optimalSpin < 4000 ? 20000 : 18000;
+    console.log(`Simulated Time of Flight: ${simulationResult.timeOfFlight.toFixed(2)}s`);
+    console.log(`Simulated Carry: ${carryDistance.toFixed(1)} yd, Peak Height: ${peakHeight.toFixed(1)} yd`);
 
-    const spinCarryFactor = Math.max(0.6, Math.min(1.15, 1 - spinDeviation / carrySpinDenominator));
-    const spinHeightFactor = Math.max(0.8, Math.min(1.25, 1 + spinDeviation / heightSpinDenominator));
-    carryDistance *= spinCarryFactor; // Apply spin factor AFTER drag
-    peakHeight *= spinHeightFactor;
-    // Keep only min distance clamp
-    carryDistance = Math.max(10, carryDistance);
-    peakHeight = Math.max(5, Math.min(60, peakHeight)); // Keep height clamps
-    console.log(`Time of Flight (simple): ${rawTimeOfFlight.toFixed(2)}s`); // Log raw time
-    console.log(`Carry: ${carryDistance.toFixed(1)} yd, Peak Height: ${peakHeight.toFixed(1)} yd (Spin factors C:${spinCarryFactor.toFixed(2)} H:${spinHeightFactor.toFixed(2)})`);
-
-    // --- Calculate Rollout ---
-    let baseRollFactor = 0.1; // Base 10% roll
+    // --- Calculate Rollout (based on simulated carry and landing conditions) ---
+    // We might want to use landing angle/speed from simulation later, but keep simple for now
+    let baseRollFactor = 0.15; // Base 15% roll (Increased again)
     if (strikeQuality === "Thin") {
         baseRollFactor += 0.15; // Thin shots roll more
     } else if (strikeQuality === "Fat") {
         baseRollFactor -= 0.08; // Fat shots roll less
     }
-    // Lower spin = more roll
-    const spinRollFactor = Math.max(0.5, Math.min(1.5, 1 - (backSpin - 4000) / 5000));
-    // Lower landing angle (approximated by launch angle) = more roll
-    const landingAngleFactor = Math.max(0.7, Math.min(1.3, 1 - (launchAngle - 15) / 20));
+    // Lower spin = more roll (More sensitive formula and wider range)
+    const spinRollFactor = Math.max(0.6, Math.min(2.0, 1 - (backSpin - 5000) / 4000));
+    // Landing angle factor removed for simplicity and to emphasize spin's role
 
-    rolloutDistance = carryDistance * baseRollFactor * spinRollFactor * landingAngleFactor;
-    rolloutDistance = Math.max(0, Math.min(carryDistance * 0.5, rolloutDistance)); // Clamp rollout
+    rolloutDistance = carryDistance * baseRollFactor * spinRollFactor; // Removed landingAngleFactor
+    rolloutDistance = Math.max(0, Math.min(carryDistance * 0.75, rolloutDistance)); // Clamp rollout (Increased to 75% of carry)
     totalDistance = carryDistance + rolloutDistance;
 
-    console.log(`Rollout Factors: Base=${baseRollFactor.toFixed(2)}, Spin=${spinRollFactor.toFixed(2)}, Angle=${landingAngleFactor.toFixed(2)}`);
+    console.log(`Rollout Factors: Base=${baseRollFactor.toFixed(2)}, Spin=${spinRollFactor.toFixed(2)}`); // Removed Angle factor log
     console.log(`Calculated Rollout: ${rolloutDistance.toFixed(1)} yd, Total Distance: ${totalDistance.toFixed(1)} yd`);
 
 
@@ -567,6 +562,118 @@ function calculateTrajectoryPoints(shotData) {
 
     console.log(`Calculated ${airPoints.length} air + ${rollPoints.length} roll points. End: (${allPoints[allPoints.length - 1].x.toFixed(1)}, ${allPoints[allPoints.length - 1].y.toFixed(1)}, ${allPoints[allPoints.length - 1].z.toFixed(1)})`);
     return allPoints;
+}
+
+// --- Step-by-Step Flight Simulation ---
+function simulateFlightStepByStep(initialPos, initialVel, spinVec) {
+    const trajectoryPoints = [initialPos]; // Start with the initial position
+    let position = { ...initialPos }; // Current position (copy)
+    let velocity = { ...initialVel }; // Current velocity (copy)
+    let time = 0;
+    const dt = 0.01; // Time step in seconds
+    const gravity = 9.81;
+    let peakHeight = initialPos.y;
+
+    // --- Simulation Constants (Tunable) ---
+    const Cd = 0.25; // Drag coefficient (placeholder)
+    const Cl = 0.00005; // Lift coefficient (placeholder, related to spin)
+    const airDensity = 1.225; // kg/m^3 (standard air density)
+    const ballArea = Math.PI * (0.04267 / 2) * (0.04267 / 2); // Cross-sectional area of golf ball (m^2)
+    const ballMass = 0.04593; // kg (standard golf ball mass)
+    // Pre-calculate constant part of drag/lift force calculation
+    const dragConst = -0.5 * airDensity * ballArea * Cd / ballMass;
+    const liftConst = 0.5 * airDensity * ballArea * Cl / ballMass;
+    // --- End Constants ---
+
+    console.log("Starting step-by-step simulation...");
+    console.log(`Initial Vel: (${velocity.x.toFixed(2)}, ${velocity.y.toFixed(2)}, ${velocity.z.toFixed(2)}) m/s`);
+    console.log(`Spin Vec: (${spinVec.x.toFixed(0)}, ${spinVec.y.toFixed(0)}, ${spinVec.z.toFixed(0)}) rpm? (Needs conversion)`); // Spin units need clarification
+
+    // Convert spin from RPM to rad/s (approximate axis for now)
+    // Assuming side spin is around Y axis, back spin around X axis relative to path
+    // This needs refinement based on how side/back spin are defined relative to world coords
+    const spinRadPerSec = {
+        x: (spinVec.x || 0) * (2 * Math.PI / 60), // Backspin around X
+        y: (spinVec.y || 0) * (2 * Math.PI / 60), // Sidespin around Y
+        z: (spinVec.z || 0) * (2 * Math.PI / 60)  // Rifle spin? (Assume 0 for now)
+    };
+     console.log(`Spin rad/s: (${spinRadPerSec.x.toFixed(2)}, ${spinRadPerSec.y.toFixed(2)}, ${spinRadPerSec.z.toFixed(2)})`);
+
+
+    while (position.y > 0.01) { // Loop until ball is near/below ground
+        // 1. Calculate Velocity Magnitude
+        const velMag = Math.sqrt(velocity.x**2 + velocity.y**2 + velocity.z**2);
+        if (velMag < 0.01) break; // Stop if ball stops mid-air
+
+        // 2. Calculate Forces (as accelerations)
+        const accel_gravity = { x: 0, y: -gravity, z: 0 };
+
+        // Drag Force: Fd = -0.5 * rho * A * Cd * v^2 * (v_unit) => a = F/m
+        const accel_drag = {
+            x: dragConst * velMag * velocity.x,
+            y: dragConst * velMag * velocity.y,
+            z: dragConst * velMag * velocity.z
+        };
+
+        // Lift (Magnus) Force: Fl = 0.5 * rho * A * Cl * (w x v) => a = F/m
+        // Cross Product: w x v = (wy*vz - wz*vy, wz*vx - wx*vz, wx*vy - wy*vx)
+        const crossProd = {
+            x: spinRadPerSec.y * velocity.z - spinRadPerSec.z * velocity.y,
+            y: spinRadPerSec.z * velocity.x - spinRadPerSec.x * velocity.z,
+            z: spinRadPerSec.x * velocity.y - spinRadPerSec.y * velocity.x
+        };
+        const accel_lift = {
+            x: liftConst * crossProd.x,
+            y: liftConst * crossProd.y,
+            z: liftConst * crossProd.z
+        };
+
+        // 3. Net Acceleration
+        const accel_net = {
+            x: accel_gravity.x + accel_drag.x + accel_lift.x,
+            y: accel_gravity.y + accel_drag.y + accel_lift.y,
+            z: accel_gravity.z + accel_drag.z + accel_lift.z
+        };
+
+        // 4. Update Velocity (Euler integration)
+        velocity.x += accel_net.x * dt;
+        velocity.y += accel_net.y * dt;
+        velocity.z += accel_net.z * dt;
+
+        // 5. Update Position
+        position.x += velocity.x * dt;
+        position.y += velocity.y * dt;
+        position.z += velocity.z * dt;
+
+        // 6. Track Peak Height
+        if (position.y > peakHeight) {
+            peakHeight = position.y;
+        }
+
+        // 7. Store Point
+        trajectoryPoints.push({ ...position });
+
+        // 8. Increment Time
+        time += dt;
+
+        // Safety break
+        if (time > 20) {
+            console.warn("Simulation exceeded 20 seconds, breaking loop.");
+            break;
+        }
+    }
+
+    console.log(`Simulation finished. Time: ${time.toFixed(2)}s, Steps: ${trajectoryPoints.length}`);
+    const landingPosition = trajectoryPoints[trajectoryPoints.length - 1];
+    const carryDistanceMeters = Math.sqrt(landingPosition.x**2 + landingPosition.z**2);
+
+    return {
+        landingPosition: landingPosition,
+        carryDistance: carryDistanceMeters * 1.09361, // Convert to yards
+        peakHeight: peakHeight * 1.09361, // Convert to yards
+        timeOfFlight: time, // Actual simulated time
+        trajectoryPoints: trajectoryPoints // Array of {x, y, z} objects
+    };
 }
 
 

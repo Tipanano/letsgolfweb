@@ -56,7 +56,7 @@ export function populateClubSelect() {
         option.textContent = clubs[key].name;
         clubSelect.appendChild(option);
     }
-    clubSelect.value = '7I'; // Set default selection
+    clubSelect.value = 'I7'; // Set default selection to the correct key
 }
 
 export function setupBackswingBar() {
