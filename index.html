@@ -28,10 +28,10 @@
     <!-- 2. Instructions -->
     <div id="instructions">
         <p>Press and hold 'w' key to start backswing.</p>
-        <p>Press 's' during backswing for early rotation (optional).</p>
+        <p>Press 'a' during backswing for early rotation (optional).</p>
         <p>Press 'h' during backswing OR after releasing 'w' to initiate hip rotation (REQUIRED before downswing keys).</p>
         <p>Release 'w' key to finish backswing (will pause at top if 'h' not pressed yet).</p>
-        <p>After 'h' is pressed and 'w' is released, press 'a' (arms), 's' (rotation if not pressed earlier), 'd' (wrists) to sequence the downswing.</p>
+        <p>After 'h' is pressed and 'w' is released, press 'a' (rotation), 'j' (arms), 'd' (wrists) to sequence the downswing.</p>
     </div>
 
     <!-- 3. Timing Bars -->
@@ -46,24 +46,25 @@
         </div>
 
         <h2>Downswing Timing</h2>
+        <!-- Remapped: a=Rotation, j=Arms, d=Wrists -->
         <div class="timing-bar-container">
-            <span class="bar-label">Arms (a):</span>
+            <span class="bar-label">Rotation (a):</span> <!-- Changed Label -->
             <div class="timing-bar">
-                <div class="ideal-window" id="window-a"></div>
-                <div class="progress" id="progress-a"></div>
-                <div class="marker" id="marker-a"></div>
+                <div class="ideal-window" id="window-a"></div> <!-- ID stays 'a' for Rotation -->
+                <div class="progress" id="progress-a"></div> <!-- ID stays 'a' for Rotation -->
+                <div class="marker" id="marker-a"></div>     <!-- ID stays 'a' for Rotation -->
             </div>
         </div>
         <div class="timing-bar-container">
-             <span class="bar-label">Rotation (s):</span>
+             <span class="bar-label">Arms (j):</span> <!-- Changed Label -->
             <div class="timing-bar">
-                <div class="ideal-window" id="window-s"></div>
-                <div class="progress" id="progress-s"></div>
-                 <div class="marker" id="marker-s"></div>
+                <div class="ideal-window" id="window-j"></div> <!-- Changed ID from s to j -->
+                <div class="progress" id="progress-j"></div> <!-- Changed ID from s to j -->
+                 <div class="marker" id="marker-j"></div>     <!-- Changed ID from s to j -->
            </div>
         </div>
         <div class="timing-bar-container">
-            <span class="bar-label">Wrists (d):</span>
+            <span class="bar-label">Wrists (d):</span> <!-- Label stays 'd' -->
             <div class="timing-bar">
                 <div class="ideal-window" id="window-d"></div>
                 <div class="progress" id="progress-d"></div>

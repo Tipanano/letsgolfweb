@@ -15,15 +15,16 @@ const hipInitiationOffsetText = document.getElementById('hip-initiation-offset')
 
 const progressBackswing = document.getElementById('progress-backswing');
 const idealBackswingMarker = document.getElementById('ideal-backswing-marker');
-const progressA = document.getElementById('progress-a');
-const progressS = document.getElementById('progress-s');
-const progressD = document.getElementById('progress-d');
-const windowA = document.getElementById('window-a');
-const windowS = document.getElementById('window-s');
-const windowD = document.getElementById('window-d');
-const markerA = document.getElementById('marker-a');
-const markerS = document.getElementById('marker-s');
-const markerD = document.getElementById('marker-d');
+// Remapped: a=Rotation, j=Arms, d=Wrists
+const progressA = document.getElementById('progress-a'); // Rotation bar
+const progressJ = document.getElementById('progress-j'); // Arms bar
+const progressD = document.getElementById('progress-d'); // Wrists bar
+const windowA = document.getElementById('window-a');     // Rotation window
+const windowJ = document.getElementById('window-j');     // Arms window
+const windowD = document.getElementById('window-d');     // Wrists window
+const markerA = document.getElementById('marker-a');     // Rotation marker
+const markerJ = document.getElementById('marker-j');     // Arms marker
+const markerD = document.getElementById('marker-d');     // Wrists marker
 
 const resultText = document.getElementById('result-text');
 const chsText = document.getElementById('chs-text');
@@ -64,10 +65,11 @@ export function setupBackswingBar() {
 }
 
 export function setupTimingBarWindows(swingSpeed) {
+    // Ideal timings (match gameLogic.js)
     const idealWindowWidthMs = 50 / swingSpeed;
-    const idealArmsStart = 100 / swingSpeed;
-    const idealRotationStart = 50 / swingSpeed;
-    const idealWristsStart = 200 / swingSpeed;
+    const idealRotationStart = 50 / swingSpeed;  // Triggered by 'a'
+    const idealArmsStart = 100 / swingSpeed;     // Triggered by 'j'
+    const idealWristsStart = 200 / swingSpeed;   // Triggered by 'd'
     const effectiveDownswingDuration = DOWNSWING_TIMING_BAR_DURATION_MS / swingSpeed;
 
     const calculateWindow = (idealStart) => {
@@ -79,13 +81,14 @@ export function setupTimingBarWindows(swingSpeed) {
         return { left: leftPercent, width: widthPercent };
     };
 
-    const winA = calculateWindow(idealArmsStart);
-    const winS = calculateWindow(idealRotationStart);
-    const winD = calculateWindow(idealWristsStart);
+    // Calculate window positions based on NEW key assignments
+    const winA = calculateWindow(idealRotationStart); // Rotation window ('a')
+    const winJ = calculateWindow(idealArmsStart);     // Arms window ('j')
+    const winD = calculateWindow(idealWristsStart);   // Wrists window ('d')
 
-    windowA.style.left = `${winA.left}%`; windowA.style.width = `${winA.width}%`;
-    windowS.style.left = `${winS.left}%`; windowS.style.width = `${winS.width}%`;
-    windowD.style.left = `${winD.left}%`; windowD.style.width = `${winD.width}%`;
+    windowA.style.left = `${winA.left}%`; windowA.style.width = `${winA.width}%`; // Rotation ('a')
+    windowJ.style.left = `${winJ.left}%`; windowJ.style.width = `${winJ.width}%`; // Arms ('j')
+    windowD.style.left = `${winD.left}%`; windowD.style.width = `${winD.width}%`; // Wrists ('d')
 }
 
 export function updateBackswingBar(elapsedTime, swingSpeed) {
@@ -108,9 +111,10 @@ export function updateBackswingBar(elapsedTime, swingSpeed) {
 export function updateTimingBars(elapsedTime, swingSpeed) {
     const effectiveDownswingDuration = DOWNSWING_TIMING_BAR_DURATION_MS / swingSpeed;
     const progressPercent = Math.min(100, (elapsedTime / effectiveDownswingDuration) * 100);
-    progressA.style.width = `${progressPercent}%`;
-    progressS.style.width = `${progressPercent}%`;
-    progressD.style.width = `${progressPercent}%`;
+    // Update progress bars based on NEW key assignments
+    progressA.style.width = `${progressPercent}%`; // Rotation ('a')
+    progressJ.style.width = `${progressPercent}%`; // Arms ('j')
+    progressD.style.width = `${progressPercent}%`; // Wrists ('d')
     return progressPercent; // Return progress to check if animation should stop
 }
 
@@ -118,10 +122,11 @@ export function showKeyPressMarker(key, offset, swingSpeed) {
     const effectiveDownswingDuration = DOWNSWING_TIMING_BAR_DURATION_MS / swingSpeed;
     const markerPercent = Math.min(100, (offset / effectiveDownswingDuration) * 100);
     let markerElement;
+    // Assign marker based on NEW key assignments
     switch (key) {
-        case 'a': markerElement = markerA; break;
-        case 's': markerElement = markerS; break;
-        case 'd': markerElement = markerD; break;
+        case 'a': markerElement = markerA; break; // Rotation marker
+        case 'j': markerElement = markerJ; break; // Arms marker
+        case 'd': markerElement = markerD; break; // Wrists marker
         default: return;
     }
     markerElement.style.left = `${markerPercent}%`;
@@ -157,12 +162,14 @@ export function resetUI() {
     // Reset timing bars visually
     progressBackswing.style.width = '0%';
     progressBackswing.style.backgroundColor = '#28a745'; // Reset color
-    progressA.style.width = '0%';
-    progressS.style.width = '0%';
-    progressD.style.width = '0%';
-    markerA.style.display = 'none';
-    markerS.style.display = 'none';
-    markerD.style.display = 'none';
+    // Reset progress bars based on NEW key assignments
+    progressA.style.width = '0%'; // Rotation ('a')
+    progressJ.style.width = '0%'; // Arms ('j')
+    progressD.style.width = '0%'; // Wrists ('d')
+    // Reset markers based on NEW key assignments
+    markerA.style.display = 'none'; // Rotation ('a')
+    markerJ.style.display = 'none'; // Arms ('j')
+    markerD.style.display = 'none'; // Wrists ('d')
     nextShotButton.style.display = 'none'; // Hide button on reset
 
     // Reset result details

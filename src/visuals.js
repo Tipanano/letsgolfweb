@@ -20,9 +20,9 @@ export function initVisuals(canvasElement) {
     // 2. Camera
     const aspectRatio = canvasElement.clientWidth / canvasElement.clientHeight;
     camera = new THREE.PerspectiveCamera(60, aspectRatio, 0.1, 1000);
-    // Position camera behind and above the tee, looking downrange (positive Z)
-    camera.position.set(0, 10, -15); // x=0, y=10 (above), z=-15 (behind)
-    camera.lookAt(0, 0, 50); // Look towards a point down the range
+    // Position camera higher and slightly further back for a better overview
+    camera.position.set(0, 15, -20); // Increased y from 10 to 15, z from -15 to -20
+    camera.lookAt(0, 0, 60); // Look slightly further down range
     scene.add(camera);
 
     // 3. Renderer
@@ -101,18 +101,41 @@ function animate(timestamp) { // Pass timestamp for animation timing
             // Smooth interpolation between points (optional but nicer)
             const nextPointIndex = Math.min(pointIndex + 1, currentTrajectoryPoints.length - 1);
             const segmentProgress = (progress * (currentTrajectoryPoints.length - 1)) - pointIndex;
+
+            // --- DEBUG LOGGING ---
+            const vec1 = currentTrajectoryPoints[pointIndex];
+            const vec2 = currentTrajectoryPoints[nextPointIndex];
+            console.log(`Animating: progress=${progress.toFixed(3)}, pointIndex=${pointIndex}, nextPointIndex=${nextPointIndex}, segmentProgress=${segmentProgress.toFixed(3)}`);
+            if (!vec1 || !vec2) {
+                console.error(`!!! UNDEFINED VECTOR DETECTED: vec1=${vec1}, vec2=${vec2}`);
+            }
+            // --- END DEBUG LOGGING ---
+
             const interpolatedPosition = new THREE.Vector3().lerpVectors(
-                currentTrajectoryPoints[pointIndex],
-                currentTrajectoryPoints[nextPointIndex],
+                vec1, // Use logged variable
+                vec2, // Use logged variable
                 segmentProgress
             );
 
             ball.position.copy(interpolatedPosition);
+
+            // Update the draw range of the trajectory line
+            if (trajectoryLine) {
+                // The number of points to draw is based on the total points in the line * progress
+                // However, setDrawRange uses vertex count, not line segments.
+                // For a line with N points, there are N vertices.
+                const drawCount = Math.ceil(progress * currentTrajectoryPoints.length);
+                trajectoryLine.geometry.setDrawRange(0, drawCount);
+            }
         }
 
         if (progress >= 1) {
             isBallAnimating = false; // Animation finished
             console.log("Ball animation finished.");
+            // Ensure the full line is drawn at the end
+            if (trajectoryLine) {
+                trajectoryLine.geometry.setDrawRange(0, currentTrajectoryPoints.length);
+            }
             // Ensure ball is exactly at the end point
              if (currentTrajectoryPoints.length > 0) {
                  ball.position.copy(currentTrajectoryPoints[currentTrajectoryPoints.length - 1]);
@@ -146,13 +169,15 @@ export function animateBallFlight(shotData) {
         const points = shotData.trajectory.map(p => new THREE.Vector3(p.x, p.y, p.z));
         const geometry = new THREE.BufferGeometry().setFromPoints(points);
 
-        // 2. Create material
-        const material = new THREE.LineBasicMaterial({ color: 0xff0000, linewidth: 2 }); // Red line
+        // 2. Create material - Changed to yellow and thicker
+        const material = new THREE.LineBasicMaterial({ color: 0xffff00, linewidth: 3 }); // Yellow line, try width 3
 
         // 3. Create line object
         trajectoryLine = new THREE.Line(geometry, material);
+        // Set initial draw range to zero - line starts invisible
+        trajectoryLine.geometry.setDrawRange(0, 0);
         scene.add(trajectoryLine);
-        console.log("Trajectory line added to scene.");
+        console.log("Trajectory line added to scene (initially hidden).");
 
         // Set animation duration based on calculated time of flight (convert seconds to ms)
         ballAnimationDuration = shotData.timeOfFlight ? shotData.timeOfFlight * 1000 : 1500; // Use calculated time or default
