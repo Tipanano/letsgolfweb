@@ -217,4 +217,18 @@ body:not(.mode-range) #instructions {
     display: none;
 }
 
+/* Closest to Flag UI visibility */
+#closest-to-flag-info {
+    display: none; /* Hidden by default */
+    background-color: #e8f4f8; /* Light blue background */
+    border: 1px solid #b8dce8;
+    padding: 15px;
+    margin-bottom: 15px;
+    border-radius: 5px;
+}
+body.mode-closest-to-flag #closest-to-flag-info {
+    display: block; /* Shown only in this mode */
+}
+
+
 /* Add more mode-specific rules here later */

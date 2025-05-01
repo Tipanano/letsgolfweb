@@ -43,6 +43,13 @@ const ballPositionControl = document.getElementById('ball-position-control');
 const ballMarker = document.getElementById('ball-marker');
 const ballPositionText = document.getElementById('ball-position-text');
 
+// Closest to Flag UI Elements
+const ctfTargetDistanceText = document.getElementById('ctf-target-distance');
+const ctfShotsTakenText = document.getElementById('ctf-shots-taken');
+const ctfLastDistanceText = document.getElementById('ctf-last-distance');
+const ctfBestDistanceText = document.getElementById('ctf-best-distance');
+
+
 // --- Constants from gameLogic (will be passed in or imported if needed) ---
 // These might be better managed within gameLogic or passed during initialization
 const DOWNSWING_TIMING_BAR_DURATION_MS = 500;
@@ -353,6 +360,34 @@ export function setGameModeClass(mode) {
     // Add the new mode class
     body.classList.add(`mode-${mode}`);
     console.log(`UI: Set body class to mode-${mode}`);
+}
+
+// Function to update the target distance display in CTF mode
+export function updateTargetDistanceDisplay(distanceYards) {
+    if (ctfTargetDistanceText) {
+        ctfTargetDistanceText.textContent = distanceYards.toFixed(0);
+    }
+}
+
+// Function to update the results display in CTF mode
+export function updateClosestToFlagResult(lastDistance, bestDistance, shotsTaken) {
+    if (ctfLastDistanceText) {
+        ctfLastDistanceText.textContent = lastDistance.toFixed(1);
+    }
+    if (ctfBestDistanceText) {
+        ctfBestDistanceText.textContent = bestDistance < Infinity ? bestDistance.toFixed(1) : 'N/A';
+    }
+    if (ctfShotsTakenText) {
+        ctfShotsTakenText.textContent = shotsTaken;
+    }
+}
+
+// Function to reset the CTF display (e.g., when mode starts)
+export function resetClosestToFlagDisplay() {
+     if (ctfTargetDistanceText) ctfTargetDistanceText.textContent = 'N/A';
+     if (ctfShotsTakenText) ctfShotsTakenText.textContent = '0';
+     if (ctfLastDistanceText) ctfLastDistanceText.textContent = 'N/A';
+     if (ctfBestDistanceText) ctfBestDistanceText.textContent = 'N/A';
 }
 
 

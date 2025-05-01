@@ -8,6 +8,7 @@ let isBallAnimating = false;
 let ballAnimationStartTime = 0;
 let ballAnimationDuration = 1500; // Default duration, will be overwritten
 let currentTrajectoryPoints = [];
+let currentAnimationCallback = null; // Add variable to store the callback
 
 export function initCoreVisuals(canvasElement) {
     console.log("Initializing core visuals on canvas:", canvasElement);
@@ -15,13 +16,15 @@ export function initCoreVisuals(canvasElement) {
     // 1. Scene
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x87CEEB); // Sky blue background
-    scene.fog = new THREE.Fog(0x87CEEB, 100, 300); // Add fog for depth perception
+    // Increase fog start and far distance
+    scene.fog = new THREE.Fog(0x87CEEB, 150, 500); // Start further, end further
 
-    // 2. Camera
+    // 2. Camera (Default - Range View)
     const aspectRatio = canvasElement.clientWidth / canvasElement.clientHeight;
     camera = new THREE.PerspectiveCamera(60, aspectRatio, 0.1, 1000);
-    camera.position.set(0, 15, -20);
-    camera.lookAt(0, 0, 60);
+    // Slightly higher default position for range view
+    camera.position.set(0, 18, -25); // Raised Y, moved back Z
+    camera.lookAt(0, 0, 80); // Look slightly further down range
     scene.add(camera); // Add camera to scene
 
     // 3. Renderer
@@ -142,11 +145,17 @@ function animate(timestamp) {
                  // Ensure final position point exists
                  const finalPoint = currentTrajectoryPoints[currentTrajectoryPoints.length - 1];
                  if (finalPoint) {
-                    ball.position.copy(finalPoint);
+                     ball.position.copy(finalPoint);
                  }
              }
-        }
-    }
+             // Execute the callback if it exists
+             if (currentAnimationCallback) {
+                 console.log("Executing animation completion callback.");
+                 currentAnimationCallback();
+                 currentAnimationCallback = null; // Clear callback after execution
+             }
+         }
+     }
 
     renderer.render(scene, camera);
 }
@@ -155,12 +164,24 @@ export function showBallAtAddress() {
     if (ball) {
         ball.position.set(0, BALL_RADIUS, 0);
         console.log("Showing ball at address position");
+        ball.visible = true; // Ensure it's visible
+    }
+}
+
+// Function to hide the ball
+export function hideBall() {
+    if (ball) {
+        ball.visible = false;
+        console.log("Hiding ball.");
     }
 }
 
 // Function to handle the animation logic, potentially called by visuals.js
-export function startBallAnimation(points, duration) {
+export function startBallAnimation(points, duration, onCompleteCallback = null) { // Add callback parameter
      if (!scene) return; // Guard against uninitialized scene
+
+    // Store the callback
+    currentAnimationCallback = onCompleteCallback;
 
     // Remove previous line if it exists
     if (trajectoryLine) {
@@ -207,4 +228,26 @@ export function resetCoreVisuals() {
     isBallAnimating = false;
     currentTrajectoryPoints = [];
     showBallAtAddress(); // Put ball back at start
+}
+
+// Function to reset camera to default position/view
+export function resetCameraPosition() {
+    if (camera) {
+        camera.position.set(0, 15, -20); // Default position
+        camera.lookAt(0, 0, 60); // Default lookAt
+        console.log("Camera position reset for Range view.");
+    }
+}
+
+// Function to set camera for Target view
+export function setCameraForTargetView(targetZ = 150) { // Default target Z if not provided
+    if (camera) {
+        // Position camera higher and further back, looking down at the target
+        const cameraHeight = 30; // Higher Y position
+        const cameraDistBack = 100; // Further back along Z
+        camera.position.set(0, cameraHeight, targetZ - cameraDistBack);
+        // Look at a point slightly in front of the target Z on the ground
+        camera.lookAt(0, 0, targetZ / 1.5);
+        console.log(`Camera position set for Target view (looking at Z=${targetZ.toFixed(1)}).`);
+    }
 }

@@ -28,12 +28,26 @@ let downswingAnimationFrameId = null;
 let backswingAnimationFrameId = null;
 let downswingPhaseStartTime = null;
 
+// Callback for when shot calculation is complete
+let onShotCompleteCallback = null;
+
 // --- Initialization ---
 export function initializeGameLogic() {
     // Initial swing speed setup is handled by UI calling setSwingSpeed
     resetSwingState();
     console.log("Game Logic Initialized.");
 }
+
+// Function for main.js to register its handler
+export function registerShotCompletionCallback(callback) {
+    if (typeof callback === 'function') {
+        onShotCompleteCallback = callback;
+        console.log("Shot completion callback registered.");
+    } else {
+        console.error("Attempted to register invalid shot completion callback.");
+    }
+}
+
 
 // --- State Management ---
 export function setSwingSpeed(percentage) {
@@ -481,38 +495,63 @@ function calculateShot() {
     else spinDesc = sideSpin < -1000 ? "Hook" : "Draw";
     resultMessage = `${strikeQuality} ${spinDesc}.`;
 
-    // --- Update UI ---
-    updateResultDisplay({
+    // --- Prepare Shot Data ---
+    const shotData = {
+        // Input/Timing related (optional for mode logic, good for debug/analysis)
+        backswingDuration: backswingDuration,
+        timingDeviations: { rotation: rotationDev, arms: armsDev, wrists: wristsDev },
+        ballPositionFactor: ballPositionFactor,
+        // Core Results
         message: resultMessage,
-        chs: clubHeadSpeed,
+        clubHeadSpeed: clubHeadSpeed, // Renamed from chs for clarity
         ballSpeed: ballSpeed,
-        launchAngle: launchAngle, // Added launch angle
+        launchAngle: launchAngle,
         attackAngle: attackAngle,
         backSpin: backSpin,
         sideSpin: sideSpin,
+        // Simulation Results
         peakHeight: peakHeight,
         carryDistance: carryDistance,
-        rolloutDistance: rolloutDistance, // Add rollout
-        totalDistance: totalDistance // Add total
-    });
-    gameState = 'result';
-    updateStatus('Result - Press (n) for next shot');
-
-    // --- Trigger Visual Animation ---
-    const shotDataForVisuals = {
-        carryDistance: carryDistance,
-        peakHeight: peakHeight,
-        sideSpin: sideSpin, // Used to calculate curve/deviation
-        timeOfFlight: visualTimeOfFlight, // Pass clamped visual time of flight
-        rolloutDistance: rolloutDistance // Pass rollout distance
+        rolloutDistance: rolloutDistance,
+        totalDistance: totalDistance,
+        timeOfFlight: visualTimeOfFlight, // Clamped time for visuals
+        // Trajectory (calculated below)
+        trajectory: null,
+        // Add side distance (placeholder for now, needs calculation based on trajectory end point)
+        sideDistance: 0 // Placeholder - calculate based on trajectoryPoints[last].x
     };
-    // --- Calculate Trajectory Points ---
-    // Pass the full shotData including rollout
-    const trajectoryPoints = calculateTrajectoryPoints(shotDataForVisuals);
-    shotDataForVisuals.trajectory = trajectoryPoints; // Add points to data for visuals
 
-    visuals.animateBallFlight(shotDataForVisuals); // Call the animation function
+    // --- Calculate Trajectory Points ---
+    const trajectoryPoints = calculateTrajectoryPoints(shotData); // Pass full shotData
+    shotData.trajectory = trajectoryPoints; // Add points to data
+
+    // Calculate final side distance based on trajectory
+    if (trajectoryPoints && trajectoryPoints.length > 0) {
+        const finalX = trajectoryPoints[trajectoryPoints.length - 1].x;
+        // Convert final X (meters) back to yards for sideDistance
+        // Need to be careful with the sign convention used in trajectory calc vs desired output
+        // Current trajectory calc has positive X for slice (right visually), but we negated it.
+        // Let's use the non-negated value for sideDistance calculation.
+        const sideDeviationMeters_nonNegated = (shotData.sideSpin / 150) / 1.09361;
+        shotData.sideDistance = sideDeviationMeters_nonNegated * 1.09361; // Convert back to yards
+        console.log(`Calculated Side Distance: ${shotData.sideDistance.toFixed(1)} yards (based on final X: ${finalX.toFixed(1)}m)`);
+    }
+
+
+    // Update internal state
+    gameState = 'result';
+    console.log("Shot calculation complete. Calling registered callback.");
+
+    // --- Call Registered Callback ---
+    if (onShotCompleteCallback) {
+        onShotCompleteCallback(shotData); // Pass the comprehensive shot data object
+    } else {
+        console.warn("No shot completion callback registered in gameLogic.");
+        // Fallback? Maybe update status directly?
+        updateStatus('Result (Callback Missing) - Press (n)');
+    }
 }
+
 
 // --- Trajectory Calculation ---
 function calculateTrajectoryPoints(shotData) {

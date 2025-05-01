@@ -7,6 +7,7 @@ const Y_OFFSET_GREEN = 0.02;
 
 export function initRangeVisuals(scene) {
     console.log("Initializing range visuals...");
+    console.log("[range.js] initRangeVisuals: Received scene parameter:", scene); // ADD LOG
 
     // --- Ground (Rough) ---
     const groundGeometry = new THREE.PlaneGeometry(200, 400); // Width, Length
