@@ -106,6 +106,8 @@ function animate(timestamp) {
             const vec1 = currentTrajectoryPoints[pointIndex];
             const vec2 = currentTrajectoryPoints[nextPointIndex];
 
+            //console.log('vectors:', vec1, vec2);
+
             // Check if points exist before attempting lerp
             if (vec1 && vec2) {
                  const interpolatedPosition = new THREE.Vector3().lerpVectors(
@@ -113,6 +115,9 @@ function animate(timestamp) {
                     vec2,
                     segmentProgress
                 );
+
+                //console.log('interpolatedPosition:', interpolatedPosition);
+
                 if (ball) ball.position.copy(interpolatedPosition);
             } else {
                  console.error(`Undefined vector encountered during animation: vec1=${vec1}, vec2=${vec2}, index=${pointIndex}, nextIndex=${nextPointIndex}`);
@@ -192,6 +197,7 @@ export function startBallAnimation(points, duration, onCompleteCallback = null) 
     }
 
     if (points && points.length > 0) {
+        //console.log("Received trajectory points for animation 2:", points);
         const geometry = new THREE.BufferGeometry().setFromPoints(points);
         const material = new THREE.LineBasicMaterial({ color: 0xffff00, linewidth: 3 });
         trajectoryLine = new THREE.Line(geometry, material);

@@ -123,6 +123,8 @@ export function animateBallFlight(shotData) {
     // Convert trajectory points from {x, y, z} objects to THREE.Vector3 instances
     const points = shotData.trajectory.map(p => new THREE.Vector3(p.x, p.y, p.z));
 
+    //console.log('the points for drawing the ball flight:', points);
+
     // Calculate animation duration (convert seconds to ms)
     // Ensure duration is positive, default to 1500 if timeOfFlight is zero or negative
     const duration = (shotData.timeOfFlight && shotData.timeOfFlight > 0) ? shotData.timeOfFlight * 1000 : 1500;
@@ -172,6 +174,7 @@ export function animateBallFlightWithLanding(shotData) {
     }
 
     const points = shotData.trajectory.map(p => new THREE.Vector3(p.x, p.y, p.z));
+    //console.log('the points for drawing the ball flight:', points);
     const duration = (shotData.timeOfFlight && shotData.timeOfFlight > 0) ? shotData.timeOfFlight * 1000 : 1500;
 
     // Define the callback function for when the animation finishes

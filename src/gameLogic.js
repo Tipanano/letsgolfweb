@@ -2,6 +2,7 @@ import { clubs } from './clubs.js';
 // Import specific UI functions needed
 import { adjustBallPosition, getBallPositionIndex, getBallPositionLevels, setBallPosition, markHipInitiationOnBackswingBar, resetUIForNewShot, setupTimingBarWindows, updateStatus, resetUI, updateBackswingBar, updateTimingBars, showKeyPressMarker, updateResultDisplay, updateDebugTimingInfo } from './ui.js';
 import * as visuals from './visuals.js'; // Import visuals
+import { calculateImpactPhysics } from './swingPhysics.js'; // Import the new physics calculation module
 
 // --- Constants ---
 const DOWNSWING_TIMING_BAR_DURATION_MS = 500;
@@ -270,154 +271,57 @@ function calculateShot() {
     updateStatus('Calculating...');
     console.log("Calculating Shot...");
 
-    // --- Calculation Logic (mostly unchanged, uses selectedClub) ---
-    let clubHeadSpeed = 0;
-    let ballSpeed = 0;
-    let attackAngle = 0;
-    let backSpin = 0;
-    let sideSpin = 0;
-    let launchAngle = 0;
-    let peakHeight = 0;
-    let carryDistance = 0;
-    let rolloutDistance = 0; // Added
-    let totalDistance = 0; // Added
-    let resultMessage = "";
-    let strikeQuality = "Center";
-
-    // Ideal offsets remain associated with the ACTION, but triggered by NEW KEYS (a=Rotation, d=Arms, i=Wrists)
-    const idealTransitionOffset = -50 / swingSpeed; // Transition (early rotation 'a' or regular 'a')
-    const idealRotationOffset = 50 / swingSpeed;    // Rotation ('a' key)
-    const idealArmsOffset = 100 / swingSpeed;       // Arms ('d' key)
-    const idealWristsOffset = 200 / swingSpeed;     // Wrists ('i' key) - NEW KEY
-
-    // Assign large penalty time if input is missing, instead of Infinity
-    const MAX_PENALTY_TIME_MS = 5000;
-    const effectiveArmsStartTime = armsStartTime !== null ? armsStartTime : backswingEndTime + MAX_PENALTY_TIME_MS; // Triggered by 'd'
-    const effectiveWristsStartTime = wristsStartTime !== null ? wristsStartTime : backswingEndTime + MAX_PENALTY_TIME_MS; // Triggered by 'i' - NEW KEY
-    // Use rotationStartTime ('a' press) if available, otherwise use rotationInitiationTime ('a' press early) if available, otherwise penalty
-    const effectiveRotationStartTime = rotationStartTime !== null ? rotationStartTime : (rotationInitiationTime !== null ? rotationInitiationTime : backswingEndTime + MAX_PENALTY_TIME_MS); // Triggered by 'a'
-    // Transition time is based on when rotation was initiated ('a' key, early or regular)
-    const effectiveTransitionTime = rotationInitiationTime !== null ? rotationInitiationTime : effectiveRotationStartTime;
-
-
-    // Calculate deviations using the correct ideal offsets for each action's effective time
-    const transitionDev = (effectiveTransitionTime - backswingEndTime) - idealTransitionOffset; // Based on 'a' timing
-    const rotationDev = (effectiveRotationStartTime - backswingEndTime) - idealRotationOffset; // Based on 'a' timing
-    const armsDev = (effectiveArmsStartTime - backswingEndTime) - idealArmsOffset;             // Based on 'd' timing
-    const wristsDev = (effectiveWristsStartTime - backswingEndTime) - idealWristsOffset;       // Based on 'i' timing - NEW KEY
-
-    console.log(`Deviations - Rotation('a'): ${rotationDev.toFixed(0)}, Arms('d'): ${armsDev.toFixed(0)}, Wrists('i'): ${wristsDev.toFixed(0)}`); // Updated log
-
-    // --- Calculate Potential CHS based on backswing length relative to ideal mark ---
-    // Ideal duration scaled by swing speed determines the timing for the ideal mark
-    const scaledIdealBackswingDuration = IDEAL_BACKSWING_DURATION_MS / swingSpeed;
-    // Power factor: How close was the actual duration to the scaled ideal duration? Clamp between 0.1 and 1.0.
-    const powerFactor = Math.max(0.1, Math.min(1.0, backswingDuration / scaledIdealBackswingDuration));
-
-    const baseSpeed = selectedClub.basePotentialSpeed || 90; // Get base speed, fallback to 90
-    console.log(`Club: ${selectedClub.name}, Base Potential Speed: ${baseSpeed} mph`);
-    // Log the new power factor calculation details
-    console.log(`Backswing Duration: ${backswingDuration.toFixed(0)}ms, Scaled Ideal Duration (Mark): ${scaledIdealBackswingDuration.toFixed(0)}ms, Power Factor: ${powerFactor.toFixed(2)}`);
-
-    // Calculate potential CHS based on base speed, power factor, and swing speed slider
-    // Note: swingSpeed influences the powerFactor calculation AND multiplies the result.
-    let potentialCHS = baseSpeed * powerFactor * swingSpeed;
-
-    // Apply a minimum speed clamp (e.g., 60% of base potential, also scaled by slider)
-    const minPotentialCHS = baseSpeed * 0.6 * swingSpeed; // Minimum potential based on slider
-    potentialCHS = Math.max(minPotentialCHS, potentialCHS); // Ensure powerFactor doesn't drop below minimum
-    console.log(`Potential CHS (after power factor, speed slider, min clamp): ${potentialCHS.toFixed(1)} mph`);
-
-    // --- Apply Penalties ---
-    // Sequence Penalty (Timing deviations of downswing keys)
-    const sequencePenaltyFactor = Math.max(0.6, 1 - (Math.abs(armsDev) + Math.abs(rotationDev) + Math.abs(wristsDev)) / (1500 / swingSpeed)); // Denominator might need review
-    console.log(`Sequence Penalty Factor: ${sequencePenaltyFactor.toFixed(2)}`);
-
-    // Overswing Penalty (Holding backswing past the max bar duration)
-    let overswingPenalty = 0;
-    const scaledMaxBackswingDuration = BACKSWING_BAR_MAX_DURATION_MS / swingSpeed; // Max duration scaled by speed
-    if (backswingDuration > scaledMaxBackswingDuration) { // Check against scaled max duration
-        // Penalty based on how much *over* the scaled max duration
-        overswingPenalty = Math.min(0.3, (backswingDuration - scaledMaxBackswingDuration) / 1000); // Penalty amount (consider scaling this by swingSpeed too?)
-        console.log(`Overswing Penalty Applied: ${(overswingPenalty * 100).toFixed(1)}% (Duration ${backswingDuration.toFixed(0)} > Scaled Max ${scaledMaxBackswingDuration.toFixed(0)})`);
-    }
-
-    // Apply penalties to potential CHS
-    clubHeadSpeed = potentialCHS * sequencePenaltyFactor * (1 - overswingPenalty);
-
-    console.log(`Final CHS (after penalties): ${clubHeadSpeed.toFixed(1)} mph`);
-
-
-    // --- Calculate other initial shot parameters ---
-    // Get ball position setting from UI
-    const ballPositionIndex = getBallPositionIndex(); // 0 (Back) to levels-1 (Forward)
-    const ballPositionLevels = getBallPositionLevels(); // e.g., 5
-    const centerIndex = Math.floor(ballPositionLevels / 2); // e.g., 2 for 5 levels
-
-    // Calculate ball position factor: -1 (Back) to +1 (Forward), 0 for Center
-    const ballPositionFactor = (centerIndex - ballPositionIndex) / centerIndex; // e.g., (2-0)/2=1, (2-1)/2=0.5, (2-2)/2=0, (2-3)/2=-0.5, (2-4)/2=-1
+    // --- Prepare Inputs for swingPhysics Module ---
+    const ballPositionIndex = getBallPositionIndex();
+    const ballPositionLevels = getBallPositionLevels();
+    const centerIndex = Math.floor(ballPositionLevels / 2);
+    // Calculate ball position factor: -1 (Fwd) to +1 (Back), 0 for Center
+    const ballPositionFactor = ballPositionLevels > 1 ? (centerIndex - ballPositionIndex) / centerIndex : 0;
     console.log(`Ball Position: Index=${ballPositionIndex}, Factor=${ballPositionFactor.toFixed(2)} (-1=Fwd, 0=Ctr, +1=Back)`);
 
-    // Attack Angle Calculation
-    const baseAoA = selectedClub.baseAoA;
-    // Base adjustment still comes from arms timing ('d' key)
-    const armsTimingAoAAdjust = Math.max(-5, Math.min(5, -armsDev / (20 / swingSpeed)));
-    // Additional adjustment based on ball position (more forward = more positive AoA)
-    // Reduced max adjustment back to +/- 6 degrees (was +/- 9)
-    const ballPositionAoAAdjust = ballPositionFactor * -6.0; // Factor is -1 (Fwd) to +1 (Back), so multiply by -6 to get +6 (Fwd) to -6 (Back)
-    attackAngle = baseAoA + armsTimingAoAAdjust + ballPositionAoAAdjust;
-    console.log(`Club Base AoA: ${baseAoA}, ArmsDev: ${armsDev.toFixed(0)}, Arms AoA Adj: ${armsTimingAoAAdjust.toFixed(1)}, Ball Pos AoA Adj: ${ballPositionAoAAdjust.toFixed(1)}, Final AoA: ${attackAngle.toFixed(1)}`);
+    // Calculate ideal backswing end time for transition reference
+    // Note: backswingEndTime is the *actual* end time when 'w' was released.
+    // We need the *ideal* end time based on the start time and ideal duration.
+    const scaledIdealBackswingDuration = IDEAL_BACKSWING_DURATION_MS / swingSpeed;
+    const idealBackswingEndTime = backswingStartTime + scaledIdealBackswingDuration;
 
+    const timingInputs = {
+        backswingDuration: backswingDuration,
+        hipInitiationTime: hipInitiationTime,
+        rotationStartTime: rotationStartTime,
+        rotationInitiationTime: rotationInitiationTime,
+        armsStartTime: armsStartTime,
+        wristsStartTime: wristsStartTime,
+        downswingPhaseStartTime: downswingPhaseStartTime, // When the timing bars started
+        idealBackswingEndTime: idealBackswingEndTime, // For transition calculation
+    };
 
-    let smashFactor = selectedClub.baseSmash;
-    const aoaThreshold = selectedClub.name === 'Driver' ? 8 : 6;
-    if (Math.abs(attackAngle - baseAoA) > aoaThreshold) {
-        strikeQuality = attackAngle < baseAoA ? "Fat" : "Thin";
-        smashFactor *= 0.8;
-    } else if (Math.abs(wristsDev) > 100 / swingSpeed) {
-        strikeQuality = wristsDev < 0 ? "Thin" : "Fat";
-        smashFactor *= 0.9;
-    }
-    console.log(`Strike: ${strikeQuality}, Smash Factor: ${smashFactor.toFixed(2)}`);
+    // --- Call the new physics calculation module ---
+    const impactResult = calculateImpactPhysics(
+        timingInputs,
+        selectedClub,
+        swingSpeed,
+        ballPositionFactor
+    );
 
-    ballSpeed = clubHeadSpeed * smashFactor;
+    // --- Use results from impactResult ---
+    // We will pull most values directly from impactResult when creating shotData.
+    // Only declare local variables needed for intermediate steps (simulation, rollout).
+    const ballSpeed = impactResult.ballSpeed; // Needed for simulation input
+    const launchAngle = impactResult.launchAngle; // Needed for simulation input
+    const backSpin = impactResult.backSpin; // Needed for simulation input & rollout
+    const sideSpin = impactResult.sideSpin; // Needed for simulation input
+    const strikeQuality = impactResult.strikeQuality; // Needed for rollout & message
+    // Declare variables for simulation outputs and rollout
+    let peakHeight = 0;
+    let carryDistance = 0;
+    let rolloutDistance = 0;
+    let totalDistance = 0;
+    let resultMessage = "";
 
-    // Revised Back Spin Calculation - Incorporating Loft and AoA more directly
-    const baseSpin = 1000 + (clubHeadSpeed * 15) + (selectedClub.loft * 100) + (-attackAngle * 50);
-    backSpin = baseSpin * selectedClub.spinRateFactor;
-    backSpin = Math.max(500, Math.min(12000, backSpin)); // Keep clamp
-
-    const faceAngleDev = (wristsDev * 0.6 + rotationDev * 0.4) / (20 / swingSpeed);
-    const pathDev = (rotationDev * 0.7 - armsDev * 0.3) / (25 / swingSpeed);
-    const faceToPath = faceAngleDev - pathDev;
-    sideSpin = faceToPath * 200;
-    sideSpin = Math.max(-4000, Math.min(4000, sideSpin));
-
-    // Reduce backspin significantly if side spin is high (hook/slice)
-    const sideSpinThreshold = 2000;
-    if (Math.abs(sideSpin) > sideSpinThreshold) {
-        const reductionFactor = 0.3; // Reduce backspin by 70% (very aggressive)
-        const originalBackSpin = backSpin;
-        backSpin *= reductionFactor;
-        backSpin = Math.max(500, backSpin); // Ensure it doesn't go below minimum clamp
-        console.log(`High side spin detected (${sideSpin.toFixed(0)}). Reducing back spin from ${originalBackSpin.toFixed(0)} to ${backSpin.toFixed(0)}.`);
-    }
-
-    console.log(`Face Angle Dev: ${faceAngleDev.toFixed(1)}, Path Dev: ${pathDev.toFixed(1)}, Face-to-Path: ${faceToPath.toFixed(1)}`);
-    console.log(`Final Back Spin: ${backSpin.toFixed(0)}, Side Spin: ${sideSpin.toFixed(0)}`);
-
-
-    // --- Prepare for Simulation ---
-    const staticLoft = selectedClub.loft;
-    // Make launch angle more sensitive to AoA specifically for Driver
-    const dynamicLoftFactor = selectedClub.name === 'Driver' ? 1.0 : 0.8; // Driver: 1.0, Others: 0.8
-    launchAngle = staticLoft + attackAngle * dynamicLoftFactor; // Calculate launch angle
-    const minLaunch = selectedClub.name === 'Driver' ? 5 : (selectedClub.loft / 3);
-    const maxLaunch = selectedClub.name === 'Driver' ? 30 : (selectedClub.loft * 1.2); // Increased Driver max launch to 30 (was 25)
-    launchAngle = Math.max(minLaunch, Math.min(maxLaunch, launchAngle));
-    // const maxLaunch = selectedClub.name === 'Driver' ? 30 : (selectedClub.loft * 1.2); // REMOVED Duplicate
-    // launchAngle = Math.max(minLaunch, Math.min(maxLaunch, launchAngle)); // REMOVED Duplicate
-    // console.log(`Club Loft: ${staticLoft}, Estimated Launch Angle: ${launchAngle.toFixed(1)} deg`); // REMOVED Duplicate
+    // --- Prepare for Simulation (using calculated launch conditions) ---
+    console.log("--- Preparing Simulation ---");
+    console.log(`Launch Conditions: BallSpeed=${ballSpeed.toFixed(1)}mph, LaunchAngle=${launchAngle.toFixed(1)}deg, BackSpin=${backSpin.toFixed(0)}rpm, SideSpin=${sideSpin.toFixed(0)}rpm`);
 
     // --- Calculate Initial Vectors for Simulation ---
     const ballSpeedMPS = ballSpeed * 0.44704; // Convert mph to m/s
@@ -427,27 +331,22 @@ function calculateShot() {
     const initialVelY = ballSpeedMPS * Math.sin(launchAngleRad);
     const initialVelHorizontalMag = ballSpeedMPS * Math.cos(launchAngleRad);
 
-    // Determine initial X/Z velocity based on side spin (simple model: side spin affects initial direction)
-    // We need a relationship between sideSpin RPM and initial side angle/velocity.
-    // Let's try a simple linear relationship for side angle first (needs tuning).
-    // Max side spin ~4000rpm. Max angle ~5 deg? => angle = sideSpin / 800
-    const sideAngleDeg = sideSpin / 800; // Degrees off target line
-    const sideAngleRad = sideAngleDeg * Math.PI / 180;
+    // Determine initial X/Z velocity based on absolute face angle (relative to target line)
+    const launchDirectionAngleRad = impactResult.absoluteFaceAngle * Math.PI / 180; // Convert face angle to radians
 
-    const initialVelX = initialVelHorizontalMag * Math.sin(sideAngleRad);
-    const initialVelZ = initialVelHorizontalMag * Math.cos(sideAngleRad);
+    const initialVelX = initialVelHorizontalMag * Math.sin(launchDirectionAngleRad); // Positive angle = positive X (right)
+    const initialVelZ = initialVelHorizontalMag * Math.cos(launchDirectionAngleRad); // Positive Z = forward
 
     const initialVelocity = { x: initialVelX, y: initialVelY, z: initialVelZ };
     const initialPosition = { x: 0, y: 0.1, z: 0 }; // Start slightly above ground
 
-    // Define Spin Vector (RPM) - This is a simplification!
-    // Assumes backspin is around world X, sidespin around world Y.
-    // Positive side spin (slice) means spin around positive Y axis? (Needs verification/tuning)
+    // Define Spin Vector (RPM) - Simplification: backspin around X, sidespin around Y.
+    // Positive side spin (slice) means spin around positive Y axis (clockwise from above).
     const spinVectorRPM = { x: backSpin, y: sideSpin, z: 0 };
-    const clubLiftFactor = selectedClub.liftFactor || 1.0; // Get lift factor or default to 1.0
+    // const clubLiftFactor = selectedClub.liftFactor || 1.0; // REMOVED - Incorrect application
 
     // --- Run Simulation ---
-    const simulationResult = simulateFlightStepByStep(initialPosition, initialVelocity, spinVectorRPM, clubLiftFactor); // Pass lift factor
+    const simulationResult = simulateFlightStepByStep(initialPosition, initialVelocity, spinVectorRPM, selectedClub); // Pass selectedClub
 
     // --- Extract Results from Simulation ---
     carryDistance = simulationResult.carryDistance;
@@ -457,103 +356,118 @@ function calculateShot() {
     console.log(`Simulated Time of Flight: ${simulationResult.timeOfFlight.toFixed(2)}s`);
     console.log(`Simulated Carry: ${carryDistance.toFixed(1)} yd, Peak Height: ${peakHeight.toFixed(1)} yd`);
 
-    // --- Calculate Rollout (Revised Logic for Spin Effect) ---
-    let baseRollFactor = 0.06; // Lower base roll factor (6%)
-    if (strikeQuality === "Thin") {
-        baseRollFactor += 0.08; // Thin shots roll a bit more
-    } else if (strikeQuality === "Fat") {
-        baseRollFactor -= 0.04; // Fat shots roll less
+    // --- Calculate Rollout (Using new strikeQuality and backSpin) ---
+    let baseRollFactor = 0.06; // Base roll factor (6%)
+    // Adjust base roll based on strike quality
+    switch (strikeQuality) {
+        case "Thin": baseRollFactor += 0.08; break;
+        case "Punch": baseRollFactor += 0.04; break; // Punch rolls more than center
+        case "Fat": baseRollFactor -= 0.04; break;
+        case "Flip": baseRollFactor -= 0.02; break; // Flip rolls slightly less than center
     }
     baseRollFactor = Math.max(0.01, baseRollFactor); // Ensure base roll doesn't go below 1%
 
-    // New spin factor: Target zero roll around 7500rpm, allow negative for higher spin. More sensitive.
-    const targetSpinForZeroRoll = 7500; // Increased target slightly
-    const spinSensitivity = 3500; // Increased sensitivity (smaller number = more sensitive)
-    // Factor increases below target, decreases (potentially negative) above target
+    // Spin factor for roll (same logic as before, using the newly calculated backSpin)
+    const targetSpinForZeroRoll = 7500;
+    const spinSensitivity = 3500;
     const spinRollFactor = 1 - (backSpin - targetSpinForZeroRoll) / spinSensitivity;
 
-    console.log(`Rollout Factors: Base=${baseRollFactor.toFixed(2)}, SpinFactor=${spinRollFactor.toFixed(2)} (BackSpin: ${backSpin.toFixed(0)})`);
+    console.log(`Rollout Factors: Base=${baseRollFactor.toFixed(2)} (Strike: ${strikeQuality}), SpinFactor=${spinRollFactor.toFixed(2)} (BackSpin: ${backSpin.toFixed(0)})`);
 
-    // Calculate initial rollout based on carry, base factor, and spin factor
+    // Calculate initial rollout
     rolloutDistance = carryDistance * baseRollFactor * spinRollFactor;
 
-    // Clamp rollout: Allow negative (spin back), but limit max positive roll.
-    const maxPositiveRollFactor = 0.25; // Max positive roll is 25% of carry
-    const minNegativeRollFactor = -0.08; // Max spin back is 8% of carry (increased slightly)
+    // Clamp rollout
+    const maxPositiveRollFactor = 0.25;
+    const minNegativeRollFactor = -0.08;
+    rolloutDistance = Math.max(carryDistance * minNegativeRollFactor, rolloutDistance);
+    rolloutDistance = Math.min(carryDistance * maxPositiveRollFactor, rolloutDistance);
 
-    rolloutDistance = Math.max(carryDistance * minNegativeRollFactor, rolloutDistance); // Apply min (negative) clamp
-    rolloutDistance = Math.min(carryDistance * maxPositiveRollFactor, rolloutDistance); // Apply max (positive) clamp
-
-    totalDistance = carryDistance + rolloutDistance; // Total distance correctly accounts for negative rollout
+    totalDistance = carryDistance + rolloutDistance;
 
     console.log(`Calculated Rollout: ${rolloutDistance.toFixed(1)} yd, Total Distance: ${totalDistance.toFixed(1)} yd`);
 
-
+    // --- Determine Result Message ---
     let spinDesc = "";
     if (Math.abs(sideSpin) < 300) spinDesc = "Straight";
-    else if (sideSpin > 0) spinDesc = sideSpin > 1000 ? "Slice" : "Fade";
-    else spinDesc = sideSpin < -1000 ? "Hook" : "Draw";
+    else if (sideSpin > 0) spinDesc = sideSpin > 1000 ? "Slice" : "Fade"; // Positive sideSpin = Slice
+    else spinDesc = sideSpin < -1000 ? "Hook" : "Draw"; // Negative sideSpin = Hook
     resultMessage = `${strikeQuality} ${spinDesc}.`;
 
-    // --- Prepare Shot Data ---
+    // --- Prepare Shot Data Object for Callback ---
+    // Assign values directly from impactResult where appropriate
     const shotData = {
-        // Input/Timing related (optional for mode logic, good for debug/analysis)
-        backswingDuration: backswingDuration,
-        timingDeviations: { rotation: rotationDev, arms: armsDev, wrists: wristsDev },
-        ballPositionFactor: ballPositionFactor,
-        // Core Results
-        message: resultMessage,
-        clubHeadSpeed: clubHeadSpeed, // Renamed from chs for clarity
-        ballSpeed: ballSpeed,
-        launchAngle: launchAngle,
-        attackAngle: attackAngle,
-        backSpin: backSpin,
-        sideSpin: sideSpin,
-        // Simulation Results
-        peakHeight: peakHeight,
+        // Input/Timing related
+        backswingDuration: backswingDuration, // From gameLogic scope
+        timingDeviations: { // From impactResult
+            transition: impactResult.transitionDev,
+            rotation: impactResult.rotationDev,
+            arms: impactResult.armsDev,
+            wrists: impactResult.wristsDev
+        },
+        ballPositionFactor: ballPositionFactor, // From gameLogic scope
+
+        // Core Impact & Launch Parameters (Directly from impactResult)
+        message: resultMessage, // Combined message (calculated above)
+        clubHeadSpeed: impactResult.actualCHS,
+        ballSpeed: impactResult.ballSpeed,
+        launchAngle: impactResult.launchAngle,
+        attackAngle: impactResult.attackAngle,
+        backSpin: impactResult.backSpin,
+        sideSpin: impactResult.sideSpin,
+        clubPathAngle: impactResult.clubPathAngle,
+        absoluteFaceAngle: impactResult.absoluteFaceAngle,
+        faceAngleRelPath: impactResult.faceAngleRelPath,
+        strikeQuality: impactResult.strikeQuality, // Use value from impactResult
+        // Include other potentially useful impact results
+        potentialCHS: impactResult.potentialCHS,
+        dynamicLoft: impactResult.dynamicLoft,
+        smashFactor: impactResult.smashFactor,
+
+        // Simulation Results (Calculated in gameLogic)
+        peakHeight: peakHeight, // Calculated via simulationResult
         carryDistance: carryDistance,
         rolloutDistance: rolloutDistance,
         totalDistance: totalDistance,
         timeOfFlight: visualTimeOfFlight, // Clamped time for visuals
+
         // Trajectory (calculated below)
         trajectory: null,
-        // Add side distance (placeholder for now, needs calculation based on trajectory end point)
-        sideDistance: 0 // Placeholder - calculate based on trajectoryPoints[last].x
+        sideDistance: 0 // Placeholder - calculated after trajectory
     };
 
-    // --- Calculate Trajectory Points ---
-    const trajectoryPoints = calculateTrajectoryPoints(shotData); // Pass full shotData
+    // --- Calculate Trajectory Points (using new shotData) ---
+    const trajectoryPoints = calculateTrajectoryPoints(shotData); // Pass updated shotData
     shotData.trajectory = trajectoryPoints; // Add points to data
 
-    // Calculate final side distance based on trajectory
+    // Calculate final side distance based on trajectory end point
     if (trajectoryPoints && trajectoryPoints.length > 0) {
-        const finalX = trajectoryPoints[trajectoryPoints.length - 1].x;
-        // Convert final X (meters) back to yards for sideDistance
-        // Need to be careful with the sign convention used in trajectory calc vs desired output
-        // Current trajectory calc has positive X for slice (right visually), but we negated it.
-        // Let's use the non-negated value for sideDistance calculation.
-        const sideDeviationMeters_nonNegated = (shotData.sideSpin / 150) / 1.09361;
-        shotData.sideDistance = sideDeviationMeters_nonNegated * 1.09361; // Convert back to yards
+        const finalX = trajectoryPoints[trajectoryPoints.length - 1].x; // Meters
+        // Convert final X (meters) to yards. Positive X should be right (slice).
+        // The trajectory calculation already handles the direction.
+        shotData.sideDistance = finalX * 1.09361; // Convert meters to yards
         console.log(`Calculated Side Distance: ${shotData.sideDistance.toFixed(1)} yards (based on final X: ${finalX.toFixed(1)}m)`);
     }
 
-
     // Update internal state
     gameState = 'result';
-    console.log("Shot calculation complete. Calling registered callback.");
+    console.log("Shot calculation complete.");
+    // Log the final shotData object just before calling the callback
+    //console.log("Final shotData:", JSON.stringify(shotData, null, 2));
 
     // --- Call Registered Callback ---
     if (onShotCompleteCallback) {
         onShotCompleteCallback(shotData); // Pass the comprehensive shot data object
     } else {
         console.warn("No shot completion callback registered in gameLogic.");
-        // Fallback? Maybe update status directly?
         updateStatus('Result (Callback Missing) - Press (n)');
     }
 }
 
 
 // --- Trajectory Calculation ---
+// NOTE: This function now relies on shotData containing the results from swingPhysics
+// (e.g., carryDistance, peakHeight, sideSpin) which are calculated *before* this now.
 function calculateTrajectoryPoints(shotData) {
     const airPoints = []; // Points during flight
     const rollPoints = []; // Points during roll
@@ -562,30 +476,24 @@ function calculateTrajectoryPoints(shotData) {
 
     const carryYards = shotData.carryDistance;
     const peakYards = shotData.peakHeight;
-    const sideDeviationYards = shotData.sideSpin / 150; // Simple linear deviation based on spin
+    // Use sideSpin directly from shotData. Positive = Slice (right), Negative = Hook (left)
+    // Simple linear deviation model (needs tuning)
+    const sideDeviationYards = shotData.sideSpin / 150;
 
-    // Convert yards to scene units (assuming meters for now, adjust if needed)
+    // Convert yards to scene units (meters)
     const carryMeters = carryYards / 1.09361;
     const peakMeters = peakYards / 1.09361;
-    // Apply correction based on observation: Slice (positive sideSpin) was going left.
-    // We need positive sideSpin to result in positive X (right visually).
-    // The current calculation results in positive X, but it appears left.
-    // So, we negate the deviation to flip the visual direction.
-    const sideDeviationMeters = (sideDeviationYards / 1.09361) * -1.0;
+    // Positive side deviation (slice) should result in positive X (right visually)
+    const sideDeviationMeters = sideDeviationYards / 1.09361;
 
+    // Initial horizontal launch angle based on face angle
+    const initialLaunchAngleRad = shotData.absoluteFaceAngle * Math.PI / 180;
+    const tanInitialLaunch = Math.tan(initialLaunchAngleRad);
 
-    // Simple parabolic trajectory calculation (y = ax^2 + bx + c)
-    // We know:
-    // 1. Starts at (0, 0) [z=0, y=BALL_RADIUS ~ 0]
-    // 2. Peaks at (carryMeters / 2, peakMeters)
-    // 3. Ends at (carryMeters, 0) [z=carryMeters, y=BALL_RADIUS ~ 0]
-
-    // Vertex form for parabola: y = a(z - h)^2 + k where (h, k) is the vertex
+    // Simple parabolic trajectory calculation (y vs z)
     const h = carryMeters / 2; // z-coordinate of vertex
     const k = peakMeters;      // y-coordinate of vertex
-    // Use the starting point (0, BALL_RADIUS ~ 0) to find 'a'
-    // BALL_RADIUS = a(0 - h)^2 + k => a = (BALL_RADIUS - k) / h^2
-    const a = (0.2 - k) / (h * h); // Use BALL_RADIUS for slightly more accuracy start/end
+    const a = (k > 0.2) ? (0.2 - k) / (h * h) : 0; // Avoid issues if peak is below start
 
     // Calculate air points
     for (let i = 0; i <= airSteps; i++) {
@@ -593,74 +501,74 @@ function calculateTrajectoryPoints(shotData) {
         const z = progress * carryMeters;
 
         // Calculate vertical position (parabola)
-        let y = a * (z - h) * (z - h) + k;
-        y = Math.max(0.2, y); // Ensure y doesn't go below ground (use BALL_RADIUS)
+        let y = (a !== 0) ? a * (z - h) * (z - h) + k : 0.2;
+        y = Math.max(0.2, y); // Ensure y doesn't go below ground
 
-        // Calculate horizontal position (use a parabolic curve for side deviation)
-        // Similar to vertical: x = ax^2 + bx + c, but using z as the independent variable
-        // We want x=0 at z=0 and x=sideDeviationMeters at z=carryMeters
-        // Let's make it peak sideways halfway (like height peaks halfway)
-        // Vertex form: x = a_side * (z - h_side)^2 + k_side
-        // Vertex (peak sideways deviation) is at z = carryMeters / 2
-        // Let's assume peak deviation is roughly proportional to total deviation, maybe 1.2x? (Needs tuning)
-        // Or simpler: Make the curve start flat and curve more towards the end.
-        // Let's try a simple quadratic: x = c*z^2. We know x=sideDev at z=carry.
-        // sideDeviationMeters = c * carryMeters^2 => c = sideDeviationMeters / (carryMeters^2)
-        let x = 0;
-        if (carryMeters > 0.1) { // Avoid division by zero if carry is tiny
+        // Calculate horizontal position (quadratic curve for side deviation vs z)
+        // x = initial direction + spin curve
+        // initial direction = z * tan(initial angle)
+        // spin curve = c_side * z^2 (where c_side makes curve end at sideDeviationMeters)
+        let x = z * tanInitialLaunch; // Start with linear initial direction
+        if (carryMeters > 0.1) { // Avoid division by zero for spin curve
              const c_side = sideDeviationMeters / (carryMeters * carryMeters);
-             x = c_side * z * z;
-        }
-
-
+             // Add the quadratic curve for spin deviation
+             // We need to adjust the target deviation for the curve calculation
+             // Target deviation for curve = final deviation - deviation from initial angle at carry
+             const curveTargetDeviation = sideDeviationMeters - (carryMeters * tanInitialLaunch);
+             const c_side_adjusted = curveTargetDeviation / (carryMeters * carryMeters);
+             x += c_side_adjusted * z * z;
+         }
         airPoints.push({ x: x, y: y, z: z });
     }
 
     // Calculate roll points (straight line from landing point)
-    const landingPoint = airPoints[airSteps]; // Last point of air trajectory
+    const landingPoint = airPoints[airSteps] || { x: 0, y: 0.2, z: 0 }; // Last point or default
     const rolloutMeters = (shotData.rolloutDistance || 0) / 1.09361;
-    const totalDistanceMeters = carryMeters + rolloutMeters;
+    // const totalDistanceMeters = carryMeters + rolloutMeters; // Not needed here
 
-    if (rolloutMeters > 0.1 && rollSteps > 0) { // Only add roll if significant
+    if (Math.abs(rolloutMeters) > 0.1 && rollSteps > 0) { // Add roll if significant (positive or negative)
         const rollStartX = landingPoint.x;
         const rollStartZ = landingPoint.z;
-        // Assume roll continues in the same horizontal direction as landing
-        let directionX = landingPoint.x - (airPoints[airSteps - 1]?.x || 0);
-        let directionZ = landingPoint.z - (airPoints[airSteps - 1]?.z || 0);
+        // Roll direction based on the vector from origin (0,0) to landing point
+        let directionX = landingPoint.x; // Vector component X from origin
+        let directionZ = landingPoint.z; // Vector component Z from origin
         const length = Math.sqrt(directionX * directionX + directionZ * directionZ);
 
-        // Normalize the direction vector manually
-        if (length > 0.001) { // Avoid division by zero
+        if (length > 0.001) {
             directionX /= length;
             directionZ /= length;
-        } else {
-            // If landing point is same as previous, assume roll goes straight forward (positive Z)
+        } else { // If landing point is same as previous, assume roll goes straight forward
             directionX = 0;
             directionZ = 1;
         }
 
+        for (let i = 1; i <= rollSteps; i++) {
+            const rollProgress = i / rollSteps;
+            const currentRollDistance = rollProgress * rolloutMeters; // Handles negative roll
 
-        for (let i = 1; i <= rollSteps; i++) { // Start from 1 as landingPoint is step 0
-            const rollProgress = i / rollSteps; // 0 to 1 for roll segment
-            const currentRollDistance = rollProgress * rolloutMeters;
-
-            const x = rollStartX + directionX * currentRollDistance; // Use normalized directionX
-            const z = rollStartZ + directionZ * currentRollDistance; // Use normalized directionZ
-            const y = 0.2; // Ball sits on the ground (BALL_RADIUS)
-
-            rollPoints.push({ x: x, y: y, z: z });
-        }
+            const x = rollStartX + directionX * currentRollDistance;
+            const z = rollStartZ + directionZ * currentRollDistance;
+             const y = 0.2; // Ball sits on the ground
+             // Use the calculated X directly for roll points as well.
+             rollPoints.push({ x: x, y: y, z: z });
+         }
     }
 
-    const allPoints = [...airPoints, ...rollPoints]; // Combine air and roll points
+    const allPoints = [...airPoints, ...rollPoints];
 
-    console.log(`Calculated ${airPoints.length} air + ${rollPoints.length} roll points. End: (${allPoints[allPoints.length - 1].x.toFixed(1)}, ${allPoints[allPoints.length - 1].y.toFixed(1)}, ${allPoints[allPoints.length - 1].z.toFixed(1)})`);
+    if (allPoints.length > 0) {
+        console.log(`Calculated ${airPoints.length} air + ${rollPoints.length} roll points. End: (${allPoints[allPoints.length - 1].x.toFixed(1)}, ${allPoints[allPoints.length - 1].y.toFixed(1)}, ${allPoints[allPoints.length - 1].z.toFixed(1)})`);
+    } else {
+        console.warn("No trajectory points generated.");
+        allPoints.push({ x: 0, y: 0.2, z: 0 }); // Add starting point if empty
+    }
     return allPoints;
 }
 
 // --- Step-by-Step Flight Simulation ---
-function simulateFlightStepByStep(initialPos, initialVel, spinVec, clubLiftFactor) { // Added clubLiftFactor parameter
-    const trajectoryPoints = [initialPos]; // Start with the initial position
+// NOTE: This function remains largely the same, taking initial physics parameters.
+function simulateFlightStepByStep(initialPos, initialVel, spinVec, club) { // Added club parameter
+    const trajectoryPoints = [initialPos];
     let position = { ...initialPos }; // Current position (copy)
     let velocity = { ...initialVel }; // Current velocity (copy)
     let time = 0;
@@ -669,8 +577,8 @@ function simulateFlightStepByStep(initialPos, initialVel, spinVec, clubLiftFacto
     let peakHeight = initialPos.y;
 
     // --- Simulation Constants (Tunable) ---
-    const Cd = 0.25; // Drag coefficient (placeholder)
-    const Cl = -0.002; // Lift coefficient (placeholder, related to spin). Reverted (was -0.01, originally 0.00005).
+    const Cd = 0.38; // Drag coefficient (placeholder)
+    const Cl = 0.01; // Lift coefficient (placeholder, related to spin). Reduced from 0.1, still higher than original 0.002.
     const airDensity = 1.225; // kg/m^3 (standard air density)
     const ballArea = Math.PI * (0.04267 / 2) * (0.04267 / 2); // Cross-sectional area of golf ball (m^2)
     const ballMass = 0.04593; // kg (standard golf ball mass)
@@ -687,7 +595,7 @@ function simulateFlightStepByStep(initialPos, initialVel, spinVec, clubLiftFacto
     // Assuming side spin is around Y axis, back spin around X axis relative to path
     // This needs refinement based on how side/back spin are defined relative to world coords
     const spinRadPerSec = {
-        x: (spinVec.x || 0) * (2 * Math.PI / 60), // Backspin around X
+        x: -(spinVec.x || 0) * (2 * Math.PI / 60), // Backspin around X (Negated to produce upward lift)
         y: (spinVec.y || 0) * (2 * Math.PI / 60), // Sidespin around Y
         z: (spinVec.z || 0) * (2 * Math.PI / 60)  // Rifle spin? (Assume 0 for now)
     };
@@ -722,10 +630,13 @@ function simulateFlightStepByStep(initialPos, initialVel, spinVec, clubLiftFacto
             z: liftConst * crossProd.z
         };
 
+        // Additive "cheat" lift based on club's liftFactor
+        const cheatLiftAccelY = (club.liftFactor || 0) * 0.25; // Scaled boost
+
         // 3. Net Acceleration
         const accel_net = {
             x: accel_gravity.x + accel_drag.x + accel_lift.x,
-            y: accel_gravity.y + accel_drag.y + (accel_lift.y * clubLiftFactor), // Apply club-specific lift factor to vertical lift
+            y: accel_gravity.y + accel_drag.y + accel_lift.y + cheatLiftAccelY, // Added cheat lift
             z: accel_gravity.z + accel_drag.z + accel_lift.z
         };
 

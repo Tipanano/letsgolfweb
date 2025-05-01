@@ -126,6 +126,7 @@ h1, h2 {
     width: 100%;   /* Make canvas responsive */
     height: 400px; /* Example fixed height */
     background-color: #aaddcc; /* Placeholder canvas background */
+    transform: scaleX(-1) !important; /* Explicitly flip horizontally for testing */
 }
 
 /* --- Ball Position Control --- */

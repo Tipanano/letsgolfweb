@@ -30,6 +30,9 @@ const resultText = document.getElementById('result-text');
 const chsText = document.getElementById('chs-text');
 const ballSpeedText = document.getElementById('ball-speed-text');
 const attackAngleText = document.getElementById('attack-angle-text');
+const clubPathText = document.getElementById('club-path-text'); // Added
+const faceAngleText = document.getElementById('face-angle-text'); // Added
+const faceToPathText = document.getElementById('face-to-path-text'); // Added
 const backSpinText = document.getElementById('back-spin-text');
 const sideSpinText = document.getElementById('side-spin-text');
 const peakHeightText = document.getElementById('peak-height-text');
@@ -165,17 +168,25 @@ export function showKeyPressMarker(key, offset, swingSpeed) {
 
 export function updateResultDisplay(resultData) {
     resultText.textContent = resultData.message;
-    chsText.textContent = resultData.chs.toFixed(1);
-    ballSpeedText.textContent = resultData.ballSpeed.toFixed(1);
-    attackAngleText.textContent = resultData.attackAngle.toFixed(1);
-    backSpinText.textContent = resultData.backSpin.toFixed(0);
-    sideSpinText.textContent = resultData.sideSpin.toFixed(0);
-    peakHeightText.textContent = resultData.peakHeight.toFixed(1);
-    carryDistanceText.textContent = resultData.carryDistance.toFixed(1);
+    // Helper to format numbers or return 'N/A'
+    const formatNum = (num, digits = 1) => (num !== undefined && !isNaN(num)) ? num.toFixed(digits) : 'N/A';
+
+    // Use clubHeadSpeed from shotData (which comes from impactResult.actualCHS)
+    chsText.textContent = formatNum(resultData.clubHeadSpeed, 1);
+    ballSpeedText.textContent = formatNum(resultData.ballSpeed, 1);
+    attackAngleText.textContent = formatNum(resultData.attackAngle, 1);
+    // Add Club Path, Face Angle (vs Target), and Face-to-Path display
+    clubPathText.textContent = formatNum(resultData.clubPathAngle, 1);
+    faceAngleText.textContent = formatNum(resultData.absoluteFaceAngle, 1); // This is vs Target
+    faceToPathText.textContent = formatNum(resultData.faceAngleRelPath, 1); // Added Face-to-Path
+    backSpinText.textContent = formatNum(resultData.backSpin, 0);
+    sideSpinText.textContent = formatNum(resultData.sideSpin, 0);
+    peakHeightText.textContent = formatNum(resultData.peakHeight, 1);
+    carryDistanceText.textContent = formatNum(resultData.carryDistance, 1);
     // Added rollout and total distance display
-    rolloutDistanceText.textContent = resultData.rolloutDistance !== undefined ? resultData.rolloutDistance.toFixed(1) : 'N/A';
-    totalDistanceText.textContent = resultData.totalDistance !== undefined ? resultData.totalDistance.toFixed(1) : 'N/A';
-    launchAngleText.textContent = resultData.launchAngle !== undefined ? resultData.launchAngle.toFixed(1) : 'N/A'; // Added Launch Angle display
+    rolloutDistanceText.textContent = formatNum(resultData.rolloutDistance, 1);
+    totalDistanceText.textContent = formatNum(resultData.totalDistance, 1);
+    launchAngleText.textContent = formatNum(resultData.launchAngle, 1); // Added Launch Angle display
     nextShotButton.style.display = 'inline-block';
 }
 
@@ -208,6 +219,9 @@ export function resetUI() {
     chsText.textContent = 'N/A';
     ballSpeedText.textContent = 'N/A';
     attackAngleText.textContent = 'N/A';
+    clubPathText.textContent = 'N/A'; // Added reset
+    faceAngleText.textContent = 'N/A'; // Added reset
+    faceToPathText.textContent = 'N/A'; // Added reset
     backSpinText.textContent = 'N/A';
     sideSpinText.textContent = 'N/A';
     peakHeightText.textContent = 'N/A';
@@ -252,6 +266,9 @@ export function resetUIForNewShot() {
     chsText.textContent = 'N/A';
     ballSpeedText.textContent = 'N/A';
     attackAngleText.textContent = 'N/A';
+    clubPathText.textContent = 'N/A'; // Added reset
+    faceAngleText.textContent = 'N/A'; // Added reset
+    faceToPathText.textContent = 'N/A'; // Added reset
     backSpinText.textContent = 'N/A';
     sideSpinText.textContent = 'N/A';
     peakHeightText.textContent = 'N/A';

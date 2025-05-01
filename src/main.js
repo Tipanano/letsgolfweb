@@ -131,18 +131,25 @@ function handleShotCompletion(shotData) {
     console.log("main.js: Handling shot completion:", shotData);
 
     // 1. Update Standard UI Result Display
+    // Pass all relevant properties from shotData to the UI function
     ui.updateResultDisplay({
         message: shotData.message,
-        chs: shotData.clubHeadSpeed, // Use updated name
+        clubHeadSpeed: shotData.clubHeadSpeed, // Renamed from chs for consistency
         ballSpeed: shotData.ballSpeed,
         launchAngle: shotData.launchAngle,
         attackAngle: shotData.attackAngle,
+        attackAngle: shotData.attackAngle,
+        clubPathAngle: shotData.clubPathAngle, // Added
+        absoluteFaceAngle: shotData.absoluteFaceAngle, // Added
+        faceAngleRelPath: shotData.faceAngleRelPath, // Added
         backSpin: shotData.backSpin,
         sideSpin: shotData.sideSpin,
         peakHeight: shotData.peakHeight,
         carryDistance: shotData.carryDistance,
         rolloutDistance: shotData.rolloutDistance,
-        totalDistance: shotData.totalDistance
+        totalDistance: shotData.totalDistance,
+        // Pass other potentially useful data if needed by UI later
+        strikeQuality: shotData.strikeQuality
     });
     // Update debug timing (assuming getDebugTimingData exists and is accessible or passed)
     // ui.updateDebugTimingInfo(logic.getDebugTimingData()); // Need to expose getDebugTimingData or pass data
