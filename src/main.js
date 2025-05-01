@@ -1,6 +1,28 @@
 import * as ui from './ui.js';
 import * as logic from './gameLogic.js';
-import * as visuals from './visuals.js'; // Import visuals placeholder
+import * as visuals from './visuals.js';
+
+// --- Game Modes ---
+const GAME_MODES = {
+    RANGE: 'range',
+    CLOSEST_TO_FLAG: 'closest-to-flag',
+    PLAY_HOLE: 'play-hole',
+};
+let currentMode = GAME_MODES.RANGE; // Default mode
+
+// Function to change the game mode
+function setGameMode(newMode) {
+    if (Object.values(GAME_MODES).includes(newMode)) {
+        console.log(`Switching game mode to: ${newMode}`);
+        currentMode = newMode;
+        ui.setGameModeClass(currentMode); // Update UI (body class, etc.)
+        // TODO: Add logic to reset/initialize the specific mode (visuals, objectives, etc.)
+        // For now, just reset the basic swing state
+        logic.resetSwing();
+    } else {
+        console.error(`Attempted to switch to invalid game mode: ${newMode}`);
+    }
+}
 
 // --- Initial Setup ---
 
@@ -22,6 +44,9 @@ ui.setupTimingBarWindows(initialSwingSpeed / 100); // Setup downswing windows ba
 
 // Initialize game logic (which also calls ui.resetUI)
 logic.initializeGameLogic();
+
+// Set initial UI state for the default mode
+ui.setGameModeClass(currentMode);
 
 // Initialize visuals
 const canvas = document.getElementById('golf-canvas');
@@ -45,6 +70,12 @@ ui.addClubChangeListener((clubKey) => {
 ui.addNextShotClickListener(() => {
     logic.resetSwing(); // Logic reset now calls visuals.resetVisuals()
 });
+
+// --- Connect Mode Selection Buttons ---
+document.getElementById('mode-btn-range')?.addEventListener('click', () => setGameMode(GAME_MODES.RANGE));
+document.getElementById('mode-btn-closest')?.addEventListener('click', () => setGameMode(GAME_MODES.CLOSEST_TO_FLAG));
+document.getElementById('mode-btn-hole')?.addEventListener('click', () => setGameMode(GAME_MODES.PLAY_HOLE));
+
 
 // Add global key listeners that call logic handlers
 document.addEventListener('keydown', (event) => {

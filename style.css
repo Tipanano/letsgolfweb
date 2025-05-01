@@ -209,3 +209,12 @@ h1, h2 {
     /* width: 40px; */
     background-color: rgba(233, 236, 239, 0.85); /* Semi-transparent */
 }
+
+/* --- Game Mode Specific Styles --- */
+
+/* Hide instructions when not in range mode */
+body:not(.mode-range) #instructions {
+    display: none;
+}
+
+/* Add more mode-specific rules here later */

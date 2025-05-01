@@ -342,6 +342,20 @@ export function setInitialSwingSpeedDisplay(percentage) {
 // Initial setup call for ball position
 updateBallPositionDisplay();
 
+
+// --- Game Mode UI ---
+
+// Function to update the body class based on the current game mode
+export function setGameModeClass(mode) {
+    const body = document.body;
+    // Remove any existing mode classes
+    body.classList.remove('mode-range', 'mode-closest-to-flag', 'mode-play-hole');
+    // Add the new mode class
+    body.classList.add(`mode-${mode}`);
+    console.log(`UI: Set body class to mode-${mode}`);
+}
+
+
 // Remove initial setup calls from here; they will be called explicitly from main.js
 // populateClubSelect();
 // setupBackswingBar();
