@@ -1,7 +1,6 @@
 import { clubs } from './clubs.js';
-import * as ui from './ui.js';
-// Import specific UI functions needed for ball position
-import { adjustBallPosition, getBallPositionIndex, getBallPositionLevels, setBallPosition, markHipInitiationOnBackswingBar } from './ui.js';
+// Import specific UI functions needed
+import { adjustBallPosition, getBallPositionIndex, getBallPositionLevels, setBallPosition, markHipInitiationOnBackswingBar, resetUIForNewShot, setupTimingBarWindows, updateStatus, resetUI, updateBackswingBar, updateTimingBars, showKeyPressMarker, updateResultDisplay, updateDebugTimingInfo } from './ui.js';
 import * as visuals from './visuals.js'; // Import visuals
 
 // --- Constants ---
@@ -39,7 +38,7 @@ export function initializeGameLogic() {
 // --- State Management ---
 export function setSwingSpeed(percentage) {
     swingSpeed = percentage / 100;
-    ui.setupTimingBarWindows(swingSpeed); // Update UI windows when speed changes
+    setupTimingBarWindows(swingSpeed); // Update UI windows when speed changes
     console.log(`Logic Swing Speed set to: ${percentage}% (Multiplier: ${swingSpeed.toFixed(2)})`);
 }
 
@@ -75,9 +74,9 @@ function resetSwingState() {
     downswingAnimationFrameId = null;
     downswingPhaseStartTime = null;
 
-    ui.resetUI(); // Reset all UI elements
+    resetUIForNewShot(); // Use the new reset function that preserves ball position
     visuals.resetVisuals(); // Reset visuals (e.g., ball position)
-    console.log("Swing state reset.");
+    console.log("Swing state reset (preserving ball position).");
 }
 
 // --- Input Handling Callbacks (to be called by main.js) ---
@@ -103,9 +102,9 @@ export function handleKeyDown(event) {
         console.log("'w' pressed in ready state - starting backswing"); // Log branch execution
         gameState = 'backswing';
         backswingStartTime = performance.now();
-        ui.updateStatus('Backswing...');
+        updateStatus('Backswing...'); // Use directly imported function
         console.log("Backswing started");
-        ui.resetUI(); // Reset UI elements for the new swing start
+        resetUIForNewShot(); // Use the reset function that preserves ball position
 
         // Start backswing bar animation
         if (backswingAnimationFrameId) cancelAnimationFrame(backswingAnimationFrameId);
@@ -129,19 +128,19 @@ export function handleKeyDown(event) {
     if (event.key === 'j' && (gameState === 'backswing' || gameState === 'backswingPausedAtTop') && !hipInitiationTime) {
         hipInitiationTime = performance.now();
         console.log(`'j' (Hips) pressed at ${hipInitiationTime.toFixed(0)}ms. State: ${gameState}`); // UPDATED LOG
-        ui.updateStatus("Hips Initiated..."); // Update status
+        updateStatus("Hips Initiated..."); // Update status
         markHipInitiationOnBackswingBar(); // Call UI function to change bar color
 
         // If paused at top, pressing 'j' starts the downswing phase immediately
         if (gameState === 'backswingPausedAtTop') {
             gameState = 'downswingWaiting';
-            ui.updateStatus('Downswing: Press a, d, i...'); // UPDATED PROMPT
+            updateStatus('Downswing: Press a, d, i...'); // UPDATED PROMPT
             console.log("Transitioning from Paused to DownswingWaiting due to 'j' press."); // UPDATED LOG
             // Start downswing timing bar animation
             downswingPhaseStartTime = performance.now(); // Start timing from 'h' press
             if (downswingAnimationFrameId) cancelAnimationFrame(downswingAnimationFrameId);
             downswingAnimationFrameId = requestAnimationFrame(updateDownswingBarsAnimation);
-            ui.updateDebugTimingInfo(getDebugTimingData()); // Update debug display
+            updateDebugTimingInfo(getDebugTimingData()); // Update debug display
         }
     }
 
@@ -155,18 +154,18 @@ export function handleKeyDown(event) {
         // Check keys in the new sequence: a (rotation), d (arms), i (wrists)
         if (event.key === 'd' && !armsStartTime) { // 'd' still controls Arms
             armsStartTime = timeNow;
-            ui.showKeyPressMarker('d', offset, swingSpeed); // Pass 'd' to UI for Arms marker
-            ui.updateDebugTimingInfo(getDebugTimingData());
+            showKeyPressMarker('d', offset, swingSpeed); // Pass 'd' to UI for Arms marker
+            updateDebugTimingInfo(getDebugTimingData());
             console.log(`'d' (Arms) pressed at offset: ${offset.toFixed(0)} ms`);
         } else if (event.key === 'i' && !wristsStartTime) { // 'i' now controls Wrists - NEW KEY
             wristsStartTime = timeNow;
-            ui.showKeyPressMarker('i', offset, swingSpeed); // Pass 'i' to UI for Wrists marker
-             ui.updateDebugTimingInfo(getDebugTimingData());
+            showKeyPressMarker('i', offset, swingSpeed); // Pass 'i' to UI for Wrists marker
+             updateDebugTimingInfo(getDebugTimingData());
            console.log(`'i' (Wrists) pressed at offset: ${offset.toFixed(0)} ms`); // UPDATED LOG
         } else if (event.key === 'a' && !rotationStartTime && !rotationInitiationTime) { // 'a' still controls Rotation
             rotationStartTime = timeNow;
-            ui.showKeyPressMarker('a', offset, swingSpeed); // Pass 'a' to UI for Rotation marker
-             ui.updateDebugTimingInfo(getDebugTimingData());
+            showKeyPressMarker('a', offset, swingSpeed); // Pass 'a' to UI for Rotation marker
+             updateDebugTimingInfo(getDebugTimingData());
             console.log(`'a' (Rotation) pressed post-backswing at offset: ${offset.toFixed(0)} ms`);
         }
 
@@ -195,7 +194,7 @@ export function handleKeyUp(event) {
         if (hipInitiationTime) {
             // Hips already initiated, go straight to downswing waiting
             gameState = 'downswingWaiting';
-            ui.updateStatus('Downswing: Press a, s, d...');
+            updateStatus('Downswing: Press a, s, d...');
             console.log(`Backswing ended. Hips initiated during backswing. Duration: ${backswingDuration.toFixed(0)} ms. Waiting for a, s, d.`);
             // Start downswing timing bar animation
             downswingPhaseStartTime = performance.now(); // Start timing from 'w' release
@@ -204,11 +203,11 @@ export function handleKeyUp(event) {
         } else {
             // Hips not initiated yet, pause at the top
             gameState = 'backswingPausedAtTop';
-            ui.updateStatus("Paused at Top... Press 'h' to start downswing");
+            updateStatus("Paused at Top... Press 'h' to start downswing");
             console.log(`Backswing ended. Hips NOT initiated. Duration: ${backswingDuration.toFixed(0)} ms. Paused.`);
             // Do not start downswing bars yet
         }
-        ui.updateDebugTimingInfo(getDebugTimingData()); // Update debug display
+        updateDebugTimingInfo(getDebugTimingData()); // Update debug display
     }
 }
 
@@ -219,7 +218,7 @@ function updateBackswingBarAnimation(timestamp) {
         return;
     }
     const elapsedTime = timestamp - backswingStartTime;
-    ui.updateBackswingBar(elapsedTime, swingSpeed); // Call UI update function
+    updateBackswingBar(elapsedTime, swingSpeed); // Call UI update function
     backswingAnimationFrameId = requestAnimationFrame(updateBackswingBarAnimation);
 }
 
@@ -229,7 +228,7 @@ function updateDownswingBarsAnimation(timestamp) {
         return;
     }
     const elapsedTime = timestamp - downswingPhaseStartTime;
-    const progressPercent = ui.updateTimingBars(elapsedTime, swingSpeed); // Call UI update
+    const progressPercent = updateTimingBars(elapsedTime, swingSpeed); // Call UI update
 
     if (progressPercent < 100) {
         downswingAnimationFrameId = requestAnimationFrame(updateDownswingBarsAnimation);
@@ -254,7 +253,7 @@ function calculateShot() {
     downswingAnimationFrameId = null;
 
     gameState = 'calculating';
-    ui.updateStatus('Calculating...');
+    updateStatus('Calculating...');
     console.log("Calculating Shot...");
 
     // --- Calculation Logic (mostly unchanged, uses selectedClub) ---
@@ -350,8 +349,8 @@ function calculateShot() {
     // Base adjustment still comes from arms timing ('d' key)
     const armsTimingAoAAdjust = Math.max(-5, Math.min(5, -armsDev / (20 / swingSpeed)));
     // Additional adjustment based on ball position (more forward = more positive AoA)
-    // Let's say max adjustment is +/- 3 degrees based on position? (Tunable)
-    const ballPositionAoAAdjust = ballPositionFactor * -3.0; // Factor is -1 (Fwd) to +1 (Back), so multiply by -3 to get +3 (Fwd) to -3 (Back)
+    // Reduced max adjustment back to +/- 6 degrees (was +/- 9)
+    const ballPositionAoAAdjust = ballPositionFactor * -6.0; // Factor is -1 (Fwd) to +1 (Back), so multiply by -6 to get +6 (Fwd) to -6 (Back)
     attackAngle = baseAoA + armsTimingAoAAdjust + ballPositionAoAAdjust;
     console.log(`Club Base AoA: ${baseAoA}, ArmsDev: ${armsDev.toFixed(0)}, Arms AoA Adj: ${armsTimingAoAAdjust.toFixed(1)}, Ball Pos AoA Adj: ${ballPositionAoAAdjust.toFixed(1)}, Final AoA: ${attackAngle.toFixed(1)}`);
 
@@ -396,12 +395,13 @@ function calculateShot() {
 
     // --- Prepare for Simulation ---
     const staticLoft = selectedClub.loft;
-    const dynamicLoftFactor = 0.5; // Keep this for launch angle calculation
+    // Make launch angle more sensitive to AoA specifically for Driver
+    const dynamicLoftFactor = selectedClub.name === 'Driver' ? 1.0 : 0.8; // Driver: 1.0, Others: 0.8
     launchAngle = staticLoft + attackAngle * dynamicLoftFactor; // Calculate launch angle
     const minLaunch = selectedClub.name === 'Driver' ? 5 : (selectedClub.loft / 3);
-    const maxLaunch = selectedClub.name === 'Driver' ? 25 : (selectedClub.loft * 1.2);
+    const maxLaunch = selectedClub.name === 'Driver' ? 30 : (selectedClub.loft * 1.2); // Increased Driver max launch to 30 (was 25)
     launchAngle = Math.max(minLaunch, Math.min(maxLaunch, launchAngle));
-    // const maxLaunch = selectedClub.name === 'Driver' ? 25 : (selectedClub.loft * 1.2); // REMOVED Duplicate
+    // const maxLaunch = selectedClub.name === 'Driver' ? 30 : (selectedClub.loft * 1.2); // REMOVED Duplicate
     // launchAngle = Math.max(minLaunch, Math.min(maxLaunch, launchAngle)); // REMOVED Duplicate
     // console.log(`Club Loft: ${staticLoft}, Estimated Launch Angle: ${launchAngle.toFixed(1)} deg`); // REMOVED Duplicate
 
@@ -430,9 +430,10 @@ function calculateShot() {
     // Assumes backspin is around world X, sidespin around world Y.
     // Positive side spin (slice) means spin around positive Y axis? (Needs verification/tuning)
     const spinVectorRPM = { x: backSpin, y: sideSpin, z: 0 };
+    const clubLiftFactor = selectedClub.liftFactor || 1.0; // Get lift factor or default to 1.0
 
     // --- Run Simulation ---
-    const simulationResult = simulateFlightStepByStep(initialPosition, initialVelocity, spinVectorRPM);
+    const simulationResult = simulateFlightStepByStep(initialPosition, initialVelocity, spinVectorRPM, clubLiftFactor); // Pass lift factor
 
     // --- Extract Results from Simulation ---
     carryDistance = simulationResult.carryDistance;
@@ -481,10 +482,11 @@ function calculateShot() {
     resultMessage = `${strikeQuality} ${spinDesc}.`;
 
     // --- Update UI ---
-    ui.updateResultDisplay({
+    updateResultDisplay({
         message: resultMessage,
         chs: clubHeadSpeed,
         ballSpeed: ballSpeed,
+        launchAngle: launchAngle, // Added launch angle
         attackAngle: attackAngle,
         backSpin: backSpin,
         sideSpin: sideSpin,
@@ -494,7 +496,7 @@ function calculateShot() {
         totalDistance: totalDistance // Add total
     });
     gameState = 'result';
-    ui.updateStatus('Result - Press (n) for next shot');
+    updateStatus('Result - Press (n) for next shot');
 
     // --- Trigger Visual Animation ---
     const shotDataForVisuals = {
@@ -618,7 +620,7 @@ function calculateTrajectoryPoints(shotData) {
 }
 
 // --- Step-by-Step Flight Simulation ---
-function simulateFlightStepByStep(initialPos, initialVel, spinVec) {
+function simulateFlightStepByStep(initialPos, initialVel, spinVec, clubLiftFactor) { // Added clubLiftFactor parameter
     const trajectoryPoints = [initialPos]; // Start with the initial position
     let position = { ...initialPos }; // Current position (copy)
     let velocity = { ...initialVel }; // Current velocity (copy)
@@ -629,7 +631,7 @@ function simulateFlightStepByStep(initialPos, initialVel, spinVec) {
 
     // --- Simulation Constants (Tunable) ---
     const Cd = 0.25; // Drag coefficient (placeholder)
-    const Cl = 0.00005; // Lift coefficient (placeholder, related to spin)
+    const Cl = -0.002; // Lift coefficient (placeholder, related to spin). Reverted (was -0.01, originally 0.00005).
     const airDensity = 1.225; // kg/m^3 (standard air density)
     const ballArea = Math.PI * (0.04267 / 2) * (0.04267 / 2); // Cross-sectional area of golf ball (m^2)
     const ballMass = 0.04593; // kg (standard golf ball mass)
@@ -684,7 +686,7 @@ function simulateFlightStepByStep(initialPos, initialVel, spinVec) {
         // 3. Net Acceleration
         const accel_net = {
             x: accel_gravity.x + accel_drag.x + accel_lift.x,
-            y: accel_gravity.y + accel_drag.y + accel_lift.y,
+            y: accel_gravity.y + accel_drag.y + (accel_lift.y * clubLiftFactor), // Apply club-specific lift factor to vertical lift
             z: accel_gravity.z + accel_drag.z + accel_lift.z
         };
 

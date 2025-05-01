@@ -36,6 +36,7 @@ const peakHeightText = document.getElementById('peak-height-text');
 const carryDistanceText = document.getElementById('carry-distance-text');
 const rolloutDistanceText = document.getElementById('result-rollout'); // Added
 const totalDistanceText = document.getElementById('result-total-distance'); // Added
+const launchAngleText = document.getElementById('launch-angle-text'); // Added for Launch Angle
 
 // Ball Position Elements
 const ballPositionControl = document.getElementById('ball-position-control');
@@ -167,6 +168,7 @@ export function updateResultDisplay(resultData) {
     // Added rollout and total distance display
     rolloutDistanceText.textContent = resultData.rolloutDistance !== undefined ? resultData.rolloutDistance.toFixed(1) : 'N/A';
     totalDistanceText.textContent = resultData.totalDistance !== undefined ? resultData.totalDistance.toFixed(1) : 'N/A';
+    launchAngleText.textContent = resultData.launchAngle !== undefined ? resultData.launchAngle.toFixed(1) : 'N/A'; // Added Launch Angle display
     nextShotButton.style.display = 'inline-block';
 }
 
@@ -205,6 +207,7 @@ export function resetUI() {
     carryDistanceText.textContent = 'N/A';
     rolloutDistanceText.textContent = 'N/A'; // Added reset
     totalDistanceText.textContent = 'N/A'; // Added reset
+    launchAngleText.textContent = 'N/A'; // Added reset
 
     // Reset debug timing
     updateDebugTimingInfo({
@@ -221,6 +224,51 @@ export function resetUI() {
     currentBallPositionIndex = 5; // Reset to Center-Fwd (index 5)
     updateBallPositionDisplay();
 }
+
+// New function to reset UI *without* resetting ball position
+export function resetUIForNewShot() {
+    // Reset timing bars visually
+    progressBackswing.style.width = '0%';
+    progressBackswing.style.backgroundColor = '#28a745'; // Reset color back to default green
+    // Reset progress bars (IDs remain the same: a=Rotation, j=Arms, d=Wrists)
+    progressA.style.width = '0%'; // Rotation ('a') -> progress-a
+    progressJ.style.width = '0%'; // Arms ('d') -> progress-j
+    progressD.style.width = '0%'; // Wrists ('u') -> progress-d
+    // Reset markers (IDs remain the same: a=Rotation, j=Arms, d=Wrists)
+    markerA.style.display = 'none'; // Rotation ('a') -> marker-a
+    markerJ.style.display = 'none'; // Arms ('d') -> marker-j
+    markerD.style.display = 'none'; // Wrists ('u') -> marker-d
+    nextShotButton.style.display = 'none'; // Hide button on reset
+
+    // Reset result details
+    resultText.textContent = 'Hit the ball!';
+    chsText.textContent = 'N/A';
+    ballSpeedText.textContent = 'N/A';
+    attackAngleText.textContent = 'N/A';
+    backSpinText.textContent = 'N/A';
+    sideSpinText.textContent = 'N/A';
+    peakHeightText.textContent = 'N/A';
+    carryDistanceText.textContent = 'N/A';
+    rolloutDistanceText.textContent = 'N/A'; // Added reset
+    totalDistanceText.textContent = 'N/A'; // Added reset
+    launchAngleText.textContent = 'N/A'; // Added reset
+
+    // Reset debug timing
+    updateDebugTimingInfo({
+        backswingDuration: null,
+        rotationStartOffset: null,
+        rotationInitiatedEarly: false,
+        armsStartOffset: null,
+        wristsStartOffset: null,
+        hipInitiationOffset: null, // Added reset
+    });
+
+    updateStatus('Ready');
+    // DO NOT reset ball position here
+    // currentBallPositionIndex = 5;
+    // updateBallPositionDisplay();
+}
+
 
 // --- Ball Position UI Functions ---
 
