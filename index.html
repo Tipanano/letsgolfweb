@@ -9,34 +9,6 @@
 <body>
     <h1>Let's Golf!</h1>
 
-    <!-- 1. Game Status (Club/Speed Select) -->
-    <div id="game-status">
-        <p>Status: <span id="status-text">Ready</span></p>
-        <div>
-            <label for="swing-speed-slider">Swing Speed (%): </label>
-            <input type="range" id="swing-speed-slider" name="swing-speed" min="30" max="100" value="90">
-            <span id="swing-speed-value">90</span>%
-        </div>
-        <div>
-            <label for="club-select">Club: </label>
-            <select name="club" id="club-select">
-                <!-- Options will be populated by JS -->
-            </select>
-        </div>
-     </div>
-
-    <!-- NEW Ball Position Section -->
-    <div id="ball-position-control">
-        <h2>Ball Position</h2>
-        <p>Use Up/Down arrows to adjust (when Ready)</p>
-        <div class="stance-visual">
-            <div class="foot" id="left-foot"></div>
-            <div class="ball-marker" id="ball-marker"></div>
-            <div class="foot" id="right-foot"></div>
-        </div>
-        <p>Position: <span id="ball-position-text">Center</span></p>
-    </div>
-
     <!-- 2. Instructions -->
     <div id="instructions">
         <p>Press and hold 'w' key to start backswing.</p>
@@ -87,6 +59,36 @@
 
     <!-- 4. Visuals Canvas -->
     <div id="visuals-container">
+        <!-- Moved Elements -->
+        <!-- 1. Game Status (Club/Speed Select) -->
+        <div id="game-status">
+            <p>Status: <span id="status-text">Ready</span></p>
+            <div>
+                <label for="swing-speed-slider">Swing Speed (%): </label>
+                <input type="range" id="swing-speed-slider" name="swing-speed" min="30" max="100" value="90">
+                <span id="swing-speed-value">90</span>%
+            </div>
+            <div>
+                <label for="club-select">Club: </label>
+                <select name="club" id="club-select">
+                    <!-- Options will be populated by JS -->
+                </select>
+            </div>
+         </div>
+
+        <!-- NEW Ball Position Section -->
+        <div id="ball-position-control">
+            <h2>Ball Position</h2>
+            <p>Use Up/Down to adjust</p>
+            <div class="stance-visual">
+                <div class="foot" id="left-foot"></div>
+                <div class="ball-marker" id="ball-marker"></div>
+                <div class="foot" id="right-foot"></div>
+            </div>
+            <p>Position: <span id="ball-position-text">Center</span></p>
+        </div>
+
+        <!-- Original Canvas -->
         <canvas id="golf-canvas"></canvas>
     </div>
 
