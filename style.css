@@ -218,18 +218,40 @@ body:not(.mode-range) #instructions {
     display: none;
 }
 
-/* Closest to Flag UI visibility */
-#closest-to-flag-info {
-    display: none; /* Hidden by default */
-    background-color: #e8f4f8; /* Light blue background */
-    border: 1px solid #b8dce8;
+/* --- Game Mode Specific Styles --- */
+
+/* Hide instructions when not in range mode */
+body:not(.mode-range) #instructions {
+    display: none;
+}
+
+/* Hide all mode-specific info panels by default */
+.mode-info-panel {
+    display: none;
     padding: 15px;
     margin-bottom: 15px;
     border-radius: 5px;
 }
+
+/* Closest to Flag UI visibility */
+#closest-to-flag-info {
+    /* display: none; /* Hidden by default via .mode-info-panel */
+    background-color: #e8f4f8; /* Light blue background */
+    border: 1px solid #b8dce8;
+    /* padding: 15px; */ /* Handled by .mode-info-panel */
+    /* margin-bottom: 15px; */ /* Handled by .mode-info-panel */
+    /* border-radius: 5px; */ /* Handled by .mode-info-panel */
+}
 body.mode-closest-to-flag #closest-to-flag-info {
-    display: block; /* Shown only in this mode */
+    display: block; /* Show only in this mode */
 }
 
-
-/* Add more mode-specific rules here later */
+/* Play Hole UI visibility */
+#play-hole-info {
+    /* display: none; /* Hidden by default via .mode-info-panel */
+    background-color: #e8f8e8; /* Light green background */
+    border: 1px solid #b8e8b8;
+}
+body.mode-play-hole #play-hole-info {
+    display: block; /* Show only in this mode */
+}

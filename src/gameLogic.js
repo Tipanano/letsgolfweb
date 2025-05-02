@@ -663,6 +663,10 @@ function calculateFullSwingShot() {
         // The trajectory calculation already handles the direction.
         shotData.sideDistance = finalX * 1.09361; // Convert meters to yards
         console.log(`Full Swing: Calculated Side Distance: ${shotData.sideDistance.toFixed(1)} yards (based on final X: ${finalX.toFixed(1)}m)`);
+        // Add final position
+        shotData.finalPosition = trajectoryPoints[trajectoryPoints.length - 1];
+    } else {
+        shotData.finalPosition = initialPosition; // Fallback if no trajectory
     }
 
     // Update internal state
@@ -841,7 +845,12 @@ function calculateChipShot() {
         const finalX = trajectoryPoints[trajectoryPoints.length - 1].x;
         shotData.sideDistance = finalX * 1.09361;
         console.log(`Chip: Calculated Side Distance: ${shotData.sideDistance.toFixed(1)} yards (based on final X: ${finalX.toFixed(1)}m)`);
+        // Add final position
+        shotData.finalPosition = trajectoryPoints[trajectoryPoints.length - 1];
+    } else {
+        shotData.finalPosition = initialPosition; // Fallback if no trajectory
     }
+
 
     // Update internal state
     gameState = 'result';
@@ -970,6 +979,8 @@ function calculatePuttShot() {
     }
     shotData.trajectory = puttPoints;
     console.log(`Putt: Generated ${puttPoints.length} trajectory points. End: (${endX.toFixed(1)}, 0.1, ${endZ.toFixed(1)})m`);
+    // Add final position
+    shotData.finalPosition = puttPoints[puttPoints.length - 1];
 
 
     // Update internal state

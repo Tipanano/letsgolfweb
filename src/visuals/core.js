@@ -28,7 +28,7 @@ export function initCoreVisuals(canvasElement) {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x87CEEB); // Sky blue background
     // Increase fog start and far distance
-    scene.fog = new THREE.Fog(0x87CEEB, 150, 500); // Start further, end further
+    // scene.fog = new THREE.Fog(0x87CEEB, 150, 500); // Start further, end further // TEMP DISABLED
 
     // 2. Camera (Default - Range View)
     const aspectRatio = canvasElement.clientWidth / canvasElement.clientHeight;
@@ -339,6 +339,10 @@ export function applyStaticCameraView(viewType = null) {
         case 'putt':
             setCameraForPuttView();
             break;
+        case 'tee': // Add case for the new hole tee view
+            // We might need hole length here, but let's use the default for now
+            setCameraForHoleTeeView();
+            break;
         case 'range':
         default:
             resetCameraPosition(); // Default to range view
@@ -396,6 +400,18 @@ export function setCameraForPuttView() {
     // activeCameraMode = CameraMode.STATIC; // Set by applyStaticCameraView or setActiveCameraMode
     console.log("Static camera set to: Putt View");
 }
+
+// Sets camera for Hole Tee view (overview)
+export function setCameraForHoleTeeView(holeLengthYards = 400) {
+    if (!camera) return;
+    const holeLengthMeters = holeLengthYards * YARDS_TO_METERS;
+    // Position slightly behind tee, higher up, looking down the hole center
+    camera.position.set(0, 30, -40); // Higher Y, further back Z than range view
+    camera.lookAt(0, 5, holeLengthMeters * 0.6); // Look towards middle/end of hole
+    currentStaticView = 'tee'; // Update stored static view type
+    console.log(`Static camera set to: Hole Tee View (looking towards Z=${(holeLengthMeters * 0.6).toFixed(1)})`);
+}
+
 
 // Sets camera for Reverse Angle view
 export function setCameraReverseAngle(positionZ) {

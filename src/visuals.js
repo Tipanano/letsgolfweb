@@ -2,6 +2,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.m
 import * as CoreVisuals from './visuals/core.js'; // Includes CameraMode enum and camera functions
 import * as RangeVisuals from './visuals/range.js';
 import * as TargetVisuals from './visuals/targetView.js'; // Includes green getters
+import * as HoleVisuals from './visuals/holeView.js'; // Import the new hole view module
 import { getCurrentShotType } from './gameLogic.js'; // Import shot type getter
 
 // Store references from core visuals if needed
@@ -18,7 +19,7 @@ const VISUAL_MODES = {
     NONE: 'none',
     RANGE: 'range',
     TARGET: 'target',
-    // Add HOLE later
+    HOLE: 'hole' // Add HOLE mode
 };
 let currentVisualMode = VISUAL_MODES.NONE;
 
@@ -58,9 +59,13 @@ export function initVisuals(canvasElement) {
 
 function unloadCurrentView() {
     console.log(`Unloading view: ${currentVisualMode}`);
-    // Add logic here to remove elements specific to the current view if needed
-    // e.g., RangeVisuals.removeRangeElements(coreScene);
-    // e.g., TargetVisuals.clearTargetElements(); // If needed
+    if (currentVisualMode === VISUAL_MODES.RANGE) {
+        RangeVisuals.removeRangeVisuals(coreScene);
+    } else if (currentVisualMode === VISUAL_MODES.TARGET) {
+        TargetVisuals.hideTargetElements(); // Or clearTargetElements if it exists
+    } else if (currentVisualMode === VISUAL_MODES.HOLE) {
+        HoleVisuals.clearHoleLayout(); // Clear the hole geometry
+    }
     currentVisualMode = VISUAL_MODES.NONE;
 }
 
@@ -114,6 +119,30 @@ export function switchToTargetView(targetDistance, initialScene = null) {
     //CoreVisuals.hideBall(); // Hide the ball at address in target view? Or reposition?
 }
 
+// Switch to Hole View
+export function switchToHoleView(holeLayout, initialScene = null) {
+    const sceneToUse = initialScene || coreScene;
+    if (!sceneToUse) {
+        console.error("switchToHoleView: Scene is not available!");
+        return;
+    }
+    if (currentVisualMode === VISUAL_MODES.HOLE && !initialScene) return; // Already in hole view
+
+    unloadCurrentView();
+    console.log("Switching to Hole View...");
+    currentVisualMode = VISUAL_MODES.HOLE;
+    RangeVisuals.removeRangeVisuals(sceneToUse); // Ensure range is gone
+    TargetVisuals.hideTargetElements(); // Ensure target is gone
+    HoleVisuals.drawHoleLayout(holeLayout); // Draw the actual hole
+    setCameraView('tee'); // Set initial camera for the hole view
+    CoreVisuals.showBallAtAddress(); // Ensure ball is visible at the tee
+}
+
+// Wrapper function called by playHole.js
+export function drawHole(holeLayout) {
+    switchToHoleView(holeLayout);
+}
+
 
 // --- Core Wrappers / Passthroughs ---
 
@@ -150,7 +179,10 @@ export function resetVisuals() {
         CoreVisuals.showBallAtAddress(); // Ensure ball is back for 3D range
     } else if (currentVisualMode === VISUAL_MODES.TARGET) {
         TargetVisuals.resetView(); // Reset target view elements (e.g., clear landing markers)
-        //CoreVisuals.hideBall(); // Keep ball hidden if in target view
+        //CoreVisuals.hideBall(); // Keep ball hidden if in target view?
+    } else if (currentVisualMode === VISUAL_MODES.HOLE) {
+        // Hole view doesn't have specific reset actions beyond core reset yet
+        CoreVisuals.showBallAtAddress(); // Ensure ball is back at tee
     }
 
     // Check current camera mode before resetting
@@ -185,6 +217,9 @@ function handleLandingAnimation(shotData) {
          console.log("Range View: Landing animation placeholder.");
      } else if (currentVisualMode === VISUAL_MODES.TARGET) {
          TargetVisuals.animateShotLanding(shotData); // Now uses 3D
+     } else if (currentVisualMode === VISUAL_MODES.HOLE) {
+         // TODO: Implement landing marker/animation for Hole view if desired
+         console.log("Hole View: Landing animation placeholder.");
      }
 }
 
@@ -279,5 +314,31 @@ export function activateGreenCamera() {
         CoreVisuals.setCameraGreenFocus(greenCenter, greenRadius);
     } else {
         console.error("Could not get green position or radius from TargetVisuals.");
+    }
+}
+
+// Set specific camera views, potentially used by modes like playHole
+export function setCameraView(viewType) {
+    console.log(`Setting camera view specifically to: ${viewType}`);
+    switch (viewType) {
+        case 'tee':
+            // Use the 'range' camera settings for the tee shot for now
+            CoreVisuals.applyStaticCameraView('range');
+            break;
+        case 'approach':
+            // Maybe use 'target' view logic if we know the distance?
+            // For now, fallback to range
+            CoreVisuals.applyStaticCameraView('range');
+            break;
+        case 'chip':
+            CoreVisuals.applyStaticCameraView('chip');
+            break;
+        case 'putt':
+            CoreVisuals.applyStaticCameraView('putt');
+            break;
+        default:
+            console.warn(`Unknown camera view type requested: ${viewType}. Defaulting to range.`);
+            CoreVisuals.applyStaticCameraView('range');
+            break;
     }
 }

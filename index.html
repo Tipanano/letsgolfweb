@@ -18,12 +18,20 @@
     </div>
 
     <!-- Closest to Flag Info Panel (Hidden by default) -->
-    <div id="closest-to-flag-info">
+    <div id="closest-to-flag-info" class="mode-info-panel">
         <h2>Closest to the Flag</h2>
         <p>Target Distance: <strong id="ctf-target-distance">N/A</strong> yards</p>
         <p>Shots Taken: <strong id="ctf-shots-taken">0</strong></p>
         <p>Distance from Hole: <strong id="ctf-last-distance">N/A</strong> yards</p>
         <p>Best Distance: <strong id="ctf-best-distance">N/A</strong> yards</p>
+    </div>
+
+    <!-- Play Hole Info Panel (Hidden by default) -->
+    <div id="play-hole-info" class="mode-info-panel">
+        <h2>Play Hole</h2>
+        <p>Par: <strong id="ph-par">N/A</strong> | Length: <strong id="ph-length">N/A</strong> yards</p>
+        <p>Score: <strong id="ph-score">0</strong></p>
+        <div id="ph-hole-out-message" style="color: green; font-weight: bold; margin-top: 5px;"></div>
     </div>
 
     <!-- 2. Instructions -->

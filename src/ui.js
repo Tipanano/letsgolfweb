@@ -61,6 +61,12 @@ const ctfShotsTakenText = document.getElementById('ctf-shots-taken');
 const ctfLastDistanceText = document.getElementById('ctf-last-distance');
 const ctfBestDistanceText = document.getElementById('ctf-best-distance');
 
+// Play Hole UI Elements (Need corresponding HTML elements)
+const phParText = document.getElementById('ph-par');
+const phLengthText = document.getElementById('ph-length');
+const phScoreText = document.getElementById('ph-score');
+const phHoleOutMessage = document.getElementById('ph-hole-out-message'); // A div/span to show the message
+
 
 // --- Constants from gameLogic (will be passed in or imported if needed) ---
 // These might be better managed within gameLogic or passed during initialization
@@ -567,6 +573,36 @@ export function resetClosestToFlagDisplay() {
      if (ctfShotsTakenText) ctfShotsTakenText.textContent = '0';
      if (ctfLastDistanceText) ctfLastDistanceText.textContent = 'N/A';
      if (ctfBestDistanceText) ctfBestDistanceText.textContent = 'N/A';
+}
+
+// --- Play Hole UI Functions ---
+
+// Function to update the hole info display
+export function updatePlayHoleInfo(par, lengthYards, score) {
+    if (phParText) phParText.textContent = par;
+    if (phLengthText) phLengthText.textContent = lengthYards.toFixed(0);
+    if (phScoreText) phScoreText.textContent = score;
+    // Hide hole out message when updating score during play
+    if (phHoleOutMessage) phHoleOutMessage.style.display = 'none';
+}
+
+// Function to reset the Play Hole display
+export function resetPlayHoleDisplay() {
+    if (phParText) phParText.textContent = 'N/A';
+    if (phLengthText) phLengthText.textContent = 'N/A';
+    if (phScoreText) phScoreText.textContent = '0';
+    if (phHoleOutMessage) {
+        phHoleOutMessage.textContent = '';
+        phHoleOutMessage.style.display = 'none';
+    }
+}
+
+// Function to show the hole out message
+export function showHoleOutMessage(score) {
+    if (phHoleOutMessage) {
+        phHoleOutMessage.textContent = `Hole Out! Score: ${score}`;
+        phHoleOutMessage.style.display = 'block';
+    }
 }
 
 

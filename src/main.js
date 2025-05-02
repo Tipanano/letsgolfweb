@@ -2,7 +2,8 @@ import * as ui from './ui.js';
 import * as logic from './gameLogic.js'; // Game state and actions
 import * as visuals from './visuals.js';
 import * as inputHandler from './inputHandler.js'; // Import the new input handler
-import * as closestToFlag from './modes/closestToFlag.js'; // Import the new mode logic
+import * as closestToFlag from './modes/closestToFlag.js'; // Import the CTF mode logic
+import * as playHole from './modes/playHole.js'; // Import the Play Hole mode logic
 
 // --- Game Modes ---
 const GAME_MODES = {
@@ -24,8 +25,9 @@ function setGameMode(newMode) {
     // Terminate previous mode if necessary
     if (currentMode === GAME_MODES.CLOSEST_TO_FLAG) {
         closestToFlag.terminateMode();
+    } else if (currentMode === GAME_MODES.PLAY_HOLE) {
+        playHole.terminateMode();
     }
-    // Add termination for other modes here later
 
     // Set new mode
     currentMode = newMode;
@@ -38,9 +40,8 @@ function setGameMode(newMode) {
         closestToFlag.initializeMode();
         visuals.switchToTargetView(closestToFlag.getTargetDistance()); // Pass target distance
     } else if (currentMode === GAME_MODES.PLAY_HOLE) {
-        // TODO: Initialize Play Hole mode
-        // visuals.switchToHoleView(holeData);
-        console.warn("Play Hole mode initialization not implemented yet.");
+        playHole.initializeMode(); // This now calls visuals.drawHole internally
+        // No need to call visuals.switchToHoleView here directly
     }
 
     // Reset basic swing state for the new mode
@@ -168,7 +169,7 @@ function handleShotCompletion(shotData) {
     if (currentMode === GAME_MODES.CLOSEST_TO_FLAG) {
         closestToFlag.handleShotResult(shotData);
     } else if (currentMode === GAME_MODES.PLAY_HOLE) {
-        // playHole.handleShotResult(shotData); // TODO
+        playHole.handleShotResult(shotData);
     }
     // Range mode doesn't need specific handling here
 
