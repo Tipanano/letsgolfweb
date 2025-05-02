@@ -388,11 +388,26 @@ function calculateShot() {
     console.log(`Calculated Rollout: ${rolloutDistance.toFixed(1)} yd, Total Distance: ${totalDistance.toFixed(1)} yd`);
 
     // --- Determine Result Message ---
+    // Shape based on side spin
     let spinDesc = "";
-    if (Math.abs(sideSpin) < 300) spinDesc = "Straight";
-    else if (sideSpin > 0) spinDesc = sideSpin > 1000 ? "Slice" : "Fade"; // Positive sideSpin = Slice
-    else spinDesc = sideSpin < -1000 ? "Hook" : "Draw"; // Negative sideSpin = Hook
-    resultMessage = `${strikeQuality} ${spinDesc}.`;
+    const absSideSpin = Math.abs(sideSpin);
+    if (absSideSpin < 300) spinDesc = "Straight";
+    else if (sideSpin > 0) spinDesc = absSideSpin > 1500 ? "Slice" : "Fade"; // Positive sideSpin = Slice
+    else spinDesc = absSideSpin > 1500 ? "Hook" : "Draw"; // Negative sideSpin = Hook
+
+    // Start direction based on club path
+    let startDirPrefix = "";
+    const pathThreshold = 3.5; // Degrees threshold for push/pull
+    if (impactResult.clubPathAngle > pathThreshold) {
+        startDirPrefix = "Push "; // Add space
+    } else if (impactResult.clubPathAngle < -pathThreshold) {
+        startDirPrefix = "Pull "; // Add space
+    }
+
+    // Combine strike, start direction (if any), and shape
+    resultMessage = `${strikeQuality} ${startDirPrefix}${spinDesc}.`;
+    console.log(`ResultMessage: Strike=${strikeQuality}, Path=${impactResult.clubPathAngle.toFixed(1)}, SideSpin=${sideSpin.toFixed(0)} => ${resultMessage}`);
+
 
     // --- Prepare Shot Data Object for Callback ---
     // Assign values directly from impactResult where appropriate
