@@ -1,0 +1,226 @@
+import {
+    getGameState, getCurrentShotType, getHipInitiationTime, getRotationInitiationTime,
+    getArmsStartTime, getWristsStartTime, getRotationStartTime, getChipRotationStartTime,
+    getChipWristsStartTime, getPuttHitTime, getBackswingDuration,
+    setGameState, setBackswingStartTime, setBackswingEndTime, setRotationInitiationTime,
+    setHipInitiationTime, setDownswingPhaseStartTime, setArmsStartTime, setWristsStartTime,
+    setRotationStartTime, setChipRotationStartTime, setChipWristsStartTime, setPuttHitTime,
+    resetSwingState // Import the state reset function
+} from './state.js';
+import {
+    startBackswingAnimation, stopBackswingAnimation, startFullDownswingAnimation,
+    startChipDownswingAnimation, stopChipDownswingAnimation, startPuttDownswingAnimation,
+    stopPuttDownswingAnimation, stopAllAnimations // Import animation controls
+} from './animations.js';
+import {
+    updateStatus, resetUIForNewShot, updateDebugTimingInfo // Import UI functions
+} from '../ui.js';
+// Import calculation functions directly
+import { calculateFullSwingShot, calculateChipShot, calculatePuttShot } from './calculations.js';
+// Import debug data getter directly
+import { getDebugTimingData } from './utils.js';
+
+// --- Action Functions for Input Handler ---
+
+export function startBackswing() {
+    if (getGameState() !== 'ready') return;
+    const shotType = getCurrentShotType();
+
+    console.log(`Action: ${shotType}: Starting backswing`);
+    setGameState('backswing');
+    setBackswingStartTime(performance.now());
+    updateStatus(`${shotType.charAt(0).toUpperCase() + shotType.slice(1)} Backswing...`);
+    resetUIForNewShot(); // Reset UI elements (preserving ball position)
+
+    // Start backswing bar animation
+    startBackswingAnimation();
+}
+
+export function endBackswing() {
+    const state = getGameState();
+    if (state !== 'backswing') return;
+    const shotType = getCurrentShotType();
+
+    console.log(`Action: ${shotType}: Ending backswing`);
+    setBackswingEndTime(performance.now()); // This also calculates backswingDuration in state.js
+    const duration = getBackswingDuration(); // Get the calculated duration
+
+    // Stop backswing bar animation
+    stopBackswingAnimation();
+
+    // --- Transition logic based on shot type ---
+    if (shotType === 'full') {
+        // Decide next state based on whether 'j' was pressed during backswing
+        if (getHipInitiationTime()) {
+            startDownswingPhase(); // Hips already initiated, go straight to downswing waiting
+            console.log(`Action: Full Swing: Backswing ended. Hips initiated. Duration: ${duration?.toFixed(0)} ms. Waiting for a, d, i.`);
+        } else {
+            // Hips not initiated yet, pause at the top
+            setGameState('backswingPausedAtTop');
+            updateStatus("Paused at Top... Press 'j' to start downswing");
+            console.log(`Action: Full Swing: Backswing ended. Hips NOT initiated. Duration: ${duration?.toFixed(0)} ms. Paused.`);
+        }
+        updateDebugTimingInfo(getDebugTimingData()); // Update debug display
+    } else if (shotType === 'chip') {
+        // Transition to waiting for chip inputs AND start the downswing phase
+        setGameState('chipDownswingWaiting');
+        setDownswingPhaseStartTime(performance.now()); // Start chip downswing phase NOW
+        updateStatus('Chip: Press a (rotate), then i (hit)');
+        console.log(`Action: Chip: Backswing ended. Duration: ${duration?.toFixed(0)} ms. Starting downswing phase. Waiting for a, i.`);
+        // Start chip timing bar animation
+        startChipDownswingAnimation();
+        // updateDebugTimingInfo(getDebugTimingData()); // Need chip-specific debug info
+    } else if (shotType === 'putt') {
+        // Transition to waiting for putt hit input ('i') AND start the downswing phase
+        setGameState('puttDownswingWaiting');
+        setDownswingPhaseStartTime(performance.now()); // Start putt downswing phase NOW (W release)
+        updateStatus('Putt: Press i (hit)');
+        console.log(`Action: Putt: Backswing ended. Duration: ${duration?.toFixed(0)} ms. Starting downswing phase. Waiting for i.`);
+        // Start putt downswing timing bar animation
+        startPuttDownswingAnimation(); // Animation module handles duration check
+    }
+}
+
+export function recordRotationInitiation() {
+    const state = getGameState();
+    if (state === 'backswing' && !getRotationInitiationTime()) {
+        setRotationInitiationTime(performance.now());
+        console.log("Action: Recorded early rotation ('a')");
+    }
+}
+
+export function recordHipInitiation() {
+    const state = getGameState();
+    if ((state === 'backswing' || state === 'backswingPausedAtTop') && !getHipInitiationTime()) {
+        const time = performance.now();
+        setHipInitiationTime(time);
+        console.log(`Action: Recorded 'j' (Hips) at ${time.toFixed(0)}ms. State: ${state}`);
+        // UI updates (status, marker) are handled directly in inputHandler for now
+    }
+}
+
+// Called when 'j' is pressed while paused, or automatically after 'w' release if 'j' was pressed during backswing
+export function startDownswingPhase() {
+    const shotType = getCurrentShotType();
+    const state = getGameState();
+    if (shotType === 'full' && (state === 'backswingPausedAtTop' || (state === 'backswing' && getHipInitiationTime()))) {
+        setGameState('downswingWaiting');
+        updateStatus('Downswing: Press a, d, i...');
+        setDownswingPhaseStartTime(performance.now()); // Set common downswing start time
+        startFullDownswingAnimation();
+        console.log("Action: Started Full Swing Downswing Phase.");
+    }
+    // Add logic for chip/putt if needed, though their downswing starts on 'w' release
+}
+
+
+export function recordDownswingKey(keyType, timestamp) {
+    const shotType = getCurrentShotType();
+    const state = getGameState();
+    if (shotType !== 'full' || state !== 'downswingWaiting' || !getHipInitiationTime()) return;
+
+    switch (keyType) {
+        case 'arms':
+            if (!getArmsStartTime()) setArmsStartTime(timestamp);
+            break;
+        case 'wrists':
+            if (!getWristsStartTime()) setWristsStartTime(timestamp);
+            break;
+        case 'rotation':
+             // Only record if not initiated early ('a' during backswing)
+            if (!getRotationStartTime() && !getRotationInitiationTime()) setRotationStartTime(timestamp);
+            break;
+    }
+    // UI updates (marker, debug) handled in inputHandler
+}
+
+export function recordChipKey(keyType, timestamp) {
+    const shotType = getCurrentShotType();
+    const state = getGameState();
+    if (shotType !== 'chip' || state !== 'chipDownswingWaiting') return;
+
+    switch (keyType) {
+        case 'rotation':
+            if (!getChipRotationStartTime()) setChipRotationStartTime(timestamp);
+            break;
+        case 'hit':
+            // Must be after rotation
+            if (getChipRotationStartTime() && !getChipWristsStartTime()) setChipWristsStartTime(timestamp);
+            break;
+    }
+     // UI updates (marker, status) handled in inputHandler
+}
+
+export function recordPuttKey(keyType, timestamp) {
+    const shotType = getCurrentShotType();
+    const state = getGameState();
+    if (shotType !== 'putt' || state !== 'puttDownswingWaiting') return;
+
+    if (keyType === 'hit' && !getPuttHitTime()) {
+        setPuttHitTime(timestamp);
+        // Stop the putt downswing animation loop immediately when hit is recorded
+        stopPuttDownswingAnimation();
+    }
+    // UI updates handled in inputHandler
+}
+
+export function triggerFullSwingCalc() {
+    const shotType = getCurrentShotType();
+    const state = getGameState(); // Keep only one declaration
+    if (shotType === 'full' && state === 'downswingWaiting') {
+        // Check if all required keys are pressed
+        if (getArmsStartTime() && getWristsStartTime() && (getHipInitiationTime() || getRotationStartTime())) {
+            console.log("Action: Triggering full swing calculation from key presses.");
+            calculateFullSwingShot(); // Call the calculation function directly
+        } else {
+            console.warn("Action: Attempted to trigger full swing calc prematurely (missing keys).");
+            // Optionally trigger anyway if timeout occurred (handled in animation loop)
+            // Or maybe force calculation with missing inputs here if needed?
+            // For now, rely on animation timeout to trigger if keys missing.
+        }
+    }
+}
+
+export function triggerChipCalc() {
+    const shotType = getCurrentShotType();
+    const state = getGameState(); // Keep only one declaration
+    if (shotType === 'chip' && state === 'chipDownswingWaiting') {
+        // Check if hit key is pressed (rotation is checked implicitly by state)
+        if (getChipWristsStartTime()) {
+             // Stop the chip animation loop (if not already stopped by timeout)
+            stopChipDownswingAnimation();
+            console.log("Action: Triggering chip calculation from key presses.");
+            setGameState('calculatingChip'); // Set state BEFORE calling calculation
+            calculateChipShot(); // Call the calculation function directly
+        } else {
+             console.warn("Action: Attempted to trigger chip calc prematurely (missing hit key).");
+             // Rely on animation timeout to trigger if 'i' missing.
+        }
+    }
+}
+
+export function triggerPuttCalc() {
+    const shotType = getCurrentShotType();
+    const state = getGameState(); // Keep only one declaration
+     if (shotType === 'putt' && state === 'puttDownswingWaiting') {
+        // Check if hit key is pressed
+        if (getPuttHitTime()) {
+             // Animation loop is stopped in recordPuttKey
+            console.log("Action: Triggering putt calculation from key press.");
+            setGameState('calculatingPutt'); // Set state BEFORE calling calculation
+            calculatePuttShot(); // Call the calculation function directly
+        } else {
+            console.warn("Action: Attempted to trigger putt calc prematurely (missing hit key).");
+            // Rely on animation timeout to trigger if 'i' missing.
+        }
+    }
+}
+
+// --- Reset Function ---
+// This function is exported for use by UI or input handler to reset the swing.
+export function resetSwing() {
+    console.log("Action: Initiating swing reset.");
+    stopAllAnimations(); // Stop any running animations
+    resetSwingState();   // Reset all state variables
+    // UI reset is called within resetSwingState
+}
