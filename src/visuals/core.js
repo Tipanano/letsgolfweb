@@ -257,3 +257,25 @@ export function setCameraForTargetView(targetZ = 150) { // Default target Z if n
         console.log(`Camera position set for Target view (looking at Z=${targetZ.toFixed(1)}).`);
     }
 }
+
+// Function to set camera for Chip view
+export function setCameraForChipView() {
+    if (camera) {
+        // Position camera lower and closer, looking at the ball
+        camera.position.set(0, 4, -8); // Lower Y, closer Z
+        camera.lookAt(0, 0, 20); // Look directly at the ball's origin
+        console.log("Camera position set for Chip view.");
+    }
+}
+
+// Function to set camera for Putt view (reuse chip view for now)
+export function setCameraForPuttView() {
+    if (camera) {
+        // For now, use the same close-up view as chipping
+        setCameraForChipView(); // Re-use chip logic
+        // Or define a slightly different putt-specific view later:
+        // camera.position.set(0, 4, -6); // Example: Even lower/closer
+        // camera.lookAt(0, 0, 0);
+        console.log("Camera position set for Putt view (using chip view settings).");
+    }
+}

@@ -6,6 +6,11 @@ const swingSpeedSlider = document.getElementById('swing-speed-slider');
 const swingSpeedValueSpan = document.getElementById('swing-speed-value');
 const clubSelect = document.getElementById('club-select');
 const nextShotButton = document.getElementById('next-shot-button');
+// Shot Type Selector Elements
+const shotTypeRadios = document.querySelectorAll('input[name="shot-type"]'); // Get all radio buttons
+const shotTypeFull = document.getElementById('shot-type-full');
+const shotTypeChip = document.getElementById('shot-type-chip');
+const shotTypePutt = document.getElementById('shot-type-putt');
 
 const backswingDurationText = document.getElementById('backswing-duration');
 const rotationStartOffsetText = document.getElementById('rotation-start-offset');
@@ -25,6 +30,8 @@ const windowD = document.getElementById('window-d');     // Wrists window
 const markerA = document.getElementById('marker-a');     // Rotation marker
 const markerJ = document.getElementById('marker-j');     // Arms marker
 const markerD = document.getElementById('marker-d');     // Wrists marker
+// Containers for hiding/showing elements based on shot type
+const armsTimingContainer = markerJ.closest('.timing-bar-container'); // Find parent container for Arms bar
 
 const resultText = document.getElementById('result-text');
 const chsText = document.getElementById('chs-text');
@@ -58,6 +65,7 @@ const ctfBestDistanceText = document.getElementById('ctf-best-distance');
 const DOWNSWING_TIMING_BAR_DURATION_MS = 500;
 const BACKSWING_BAR_MAX_DURATION_MS = 1500;
 const IDEAL_BACKSWING_DURATION_MS = 1000;
+const CHIP_DOWNSWING_DURATION_MS = 1500; // Match full swing bar duration visually
 
 // --- Ball Position State ---
 const ballPositionLevels = 10; // Increased granularity
@@ -151,11 +159,24 @@ export function updateTimingBars(elapsedTime, swingSpeed) {
     return progressPercent; // Return progress to check if animation should stop
 }
 
-export function showKeyPressMarker(key, offset, swingSpeed) {
-    const effectiveDownswingDuration = DOWNSWING_TIMING_BAR_DURATION_MS / swingSpeed;
-    const markerPercent = Math.min(100, (offset / effectiveDownswingDuration) * 100);
+// New function to update chip-specific timing bars (Rotation 'a' and Hit 'i')
+export function updateChipTimingBars(elapsedTime) {
+    const progressPercent = Math.min(100, (elapsedTime / CHIP_DOWNSWING_DURATION_MS) * 100);
+    // Update Rotation ('a' -> progressA) and Hit ('i' -> progressD) bars
+    progressA.style.width = `${progressPercent}%`;
+    progressD.style.width = `${progressPercent}%`;
+    return progressPercent; // Return progress for timeout check
+}
+
+
+export function showKeyPressMarker(key, offset, speedFactor) {
+    // Determine duration based on shot type (passed via speedFactor, 1.0 for chip)
+    const isChip = speedFactor === 1.0; // Simple check, might need refinement
+    const effectiveDownswingDuration = isChip ? CHIP_DOWNSWING_DURATION_MS : (DOWNSWING_TIMING_BAR_DURATION_MS / speedFactor);
+
+    const markerPercent = Math.min(100, Math.max(0, (offset / effectiveDownswingDuration) * 100)); // Clamp 0-100
     let markerElement;
-    // Assign marker based on NEW key assignments (a=Rotation, d=Arms, i=Wrists)
+    // Assign marker based on key assignments (a=Rotation, d=Arms, i=Wrists/Hit)
     switch (key) {
         case 'a': markerElement = markerA; break; // Rotation ('a') -> marker-a
         case 'd': markerElement = markerJ; break; // Arms ('d') -> marker-j
@@ -335,6 +356,55 @@ export function getBallPositionLevels() {
     return ballPositionLevels;
 }
 
+// --- Shot Type UI Functions ---
+
+export function getShotType() {
+    for (const radio of shotTypeRadios) {
+        if (radio.checked) {
+            return radio.value; // 'full', 'chip', or 'putt'
+        }
+    }
+    return 'full'; // Default if none checked (shouldn't happen with default)
+}
+
+export function setSwingSpeedControlState(enabled) {
+    swingSpeedSlider.disabled = !enabled;
+    // Optionally add a class to visually grey out the slider/label when disabled
+    const sliderContainer = swingSpeedSlider.parentElement; // Get the div containing the label/slider/value
+    if (enabled) {
+        sliderContainer.classList.remove('disabled');
+    } else {
+        sliderContainer.classList.add('disabled');
+    }
+    console.log(`UI: Swing speed control ${enabled ? 'enabled' : 'disabled'}`);
+}
+
+// Function to show/hide timing bars AND windows based on shot type
+export function updateTimingBarVisibility(shotType) {
+    const isFullSwing = shotType === 'full';
+
+    // Arms bar ('j') visibility
+    if (armsTimingContainer) {
+        armsTimingContainer.style.display = isFullSwing ? '' : 'none';
+    }
+
+    // Timing Windows visibility (Rotation 'a' -> windowA, Hit 'i' -> windowD)
+    // Hide windows for Chip and Putt, show for Full
+    if (windowA) {
+        windowA.style.display = isFullSwing ? '' : 'none';
+    }
+    if (windowD) {
+        windowD.style.display = isFullSwing ? '' : 'none';
+    }
+    // Also hide Arms window ('j' -> windowJ) if not full swing
+    if (windowJ) {
+        windowJ.style.display = isFullSwing ? '' : 'none';
+    }
+
+
+    console.log(`UI: Updated timing bar/window visibility for shot type: ${shotType}`);
+}
+
 
 // --- Event Listener Setup ---
 // We export functions to attach listeners from main.js
@@ -351,6 +421,16 @@ export function addSwingSpeedInputListener(callback) {
 export function addClubChangeListener(callback) {
     clubSelect.addEventListener('change', (event) => {
         callback(event.target.value); // Pass the selected club key
+    });
+}
+
+export function addShotTypeChangeListener(callback) {
+    shotTypeRadios.forEach(radio => {
+        radio.addEventListener('change', (event) => {
+            if (event.target.checked) {
+                callback(event.target.value); // Pass the selected shot type ('full', 'chip', 'putt')
+            }
+        });
     });
 }
 

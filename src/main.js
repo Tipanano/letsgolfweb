@@ -1,5 +1,5 @@
 import * as ui from './ui.js';
-import * as logic from './gameLogic.js';
+import * as logic from './gameLogic.js'; // Assuming setShotType will be added here
 import * as visuals from './visuals.js';
 import * as closestToFlag from './modes/closestToFlag.js'; // Import the new mode logic
 
@@ -61,6 +61,8 @@ logic.setSwingSpeed(initialSwingSpeed);
 
 const initialClubKey = document.getElementById('club-select').value; // Read value *after* populating
 logic.setSelectedClub(initialClubKey);
+const initialShotType = ui.getShotType(); // Get initial shot type from UI
+logic.setShotType(initialShotType); // Set initial shot type in logic
 
 // Set other initial UI display values based on logic state
 ui.setInitialSwingSpeedDisplay(initialSwingSpeed);
@@ -100,6 +102,10 @@ ui.addSwingSpeedInputListener((percentage) => {
 
 ui.addClubChangeListener((clubKey) => {
     logic.setSelectedClub(clubKey);
+});
+
+ui.addShotTypeChangeListener((shotType) => {
+    logic.setShotType(shotType);
 });
 
 ui.addNextShotClickListener(() => {
