@@ -23,13 +23,22 @@ export function handleKeyDown(event) {
 
     console.log(`inputHandler keydown: Key='${event.key}', State='${gameState}', ShotType='${currentShotType}'`);
 
-    // --- Camera Controls (To be added later) ---
-    // if (event.key === '1') { Visuals.switchToStaticCamera(); return; }
-    // if (event.key === '2') { Visuals.activateFollowBallCamera(); return; }
-    // if (event.key === '3') { Visuals.activateReverseCamera(); return; }
-    // if (event.key === '4') { Visuals.activateGreenCamera(); return; }
+    // --- Camera Controls (Independent of game state) ---
+    if (event.key === '1') {
+        Visuals.switchToStaticCamera();
+        return; // Consume event
+    } else if (event.key === '2') {
+        Visuals.activateFollowBallCamera();
+        return; // Consume event
+    } else if (event.key === '3') {
+        Visuals.activateReverseCamera();
+        return; // Consume event
+    } else if (event.key === '4') {
+        Visuals.activateGreenCamera();
+        return; // Consume event
+    }
 
-    // --- Ball Position Adjustment ---
+    // --- Ball Position Adjustment (Only when ready) ---
     if (gameState === 'ready') {
         if (event.key === 'ArrowUp') {
             event.preventDefault();

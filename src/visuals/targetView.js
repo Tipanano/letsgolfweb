@@ -210,10 +210,11 @@ export function animateShotLanding(shotData) {
     landingMarker.position.set(landingPos.x, Math.max(0.15, landingPos.y), landingPos.z);
     landingMarker.visible = true; // Ensure it's visible
 
-    scene.add(landingMarker);
-    landingMarkers.push(landingMarker); // Keep track to remove later
+    //Drop displaying landing marker for now
+    //scene.add(landingMarker);
+    //landingMarkers.push(landingMarker); // Keep track to remove later
 
-    console.log(`TargetView (3D): Added landing marker at (${landingPos.x.toFixed(1)}, ${landingPos.y.toFixed(1)}, ${landingPos.z.toFixed(1)})`);
+    //console.log(`TargetView (3D): Added landing marker at (${landingPos.x.toFixed(1)}, ${landingPos.y.toFixed(1)}, ${landingPos.z.toFixed(1)})`);
 
     // TODO: Add actual animation later if desired (e.g., marker fades in/out)
 }
@@ -240,3 +241,16 @@ export function resetView() {
 }
 
 // Duplicate setScene removed. The correct one is defined near the top.
+
+// --- Getters for External Use (e.g., Camera Control) ---
+
+// Returns the center position of the green mesh
+export function getGreenCenter() {
+    return greenMesh ? greenMesh.position.clone() : null; // Return a clone to prevent external modification
+}
+
+// Returns the radius of the green in meters
+export function getGreenRadius() {
+    // Assuming greenGeometry is CircleGeometry and radius is stored
+    return greenMesh?.geometry?.parameters?.radius || null;
+}

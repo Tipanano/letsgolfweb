@@ -1,7 +1,8 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
-import * as CoreVisuals from './visuals/core.js';
+import * as CoreVisuals from './visuals/core.js'; // Includes CameraMode enum and camera functions
 import * as RangeVisuals from './visuals/range.js';
-import * as TargetVisuals from './visuals/targetView.js'; // Import new target view
+import * as TargetVisuals from './visuals/targetView.js'; // Includes green getters
+import { getCurrentShotType } from './gameLogic.js'; // Import shot type getter
 
 // Store references from core visuals if needed
 let coreScene;
@@ -10,6 +11,7 @@ let coreCanvas;
 // let coreCtx; // Remove 2D context tracking
 let coreCanvasWidth;
 let coreCanvasHeight;
+let currentTargetDistanceYards = 0; // Store target distance for reverse camera
 
 // Track current visual mode
 const VISUAL_MODES = {
@@ -44,8 +46,10 @@ export function initVisuals(canvasElement) {
 
     console.log("Main visuals module initialized.");
 
-    // Set the initial view after successful initialization, passing the scene directly
-    switchToRangeView(coreScene); // Pass the scene explicitly
+    // Explicitly initialize Range visuals and set camera for initial load
+    RangeVisuals.initRangeVisuals(coreScene); // Create range-specific elements
+    CoreVisuals.applyStaticCameraView('range'); // Ensure camera is set to static range view
+    currentVisualMode = VISUAL_MODES.RANGE; // Set initial mode tracker
 
     return true; // Indicate success
 }
@@ -69,13 +73,13 @@ export function switchToRangeView(initialScene = null) {
     }
     if (currentVisualMode === VISUAL_MODES.RANGE && !initialScene) return; // Already in range view (unless it's the initial call)
 
-    unloadCurrentView(); // Unload previous view first
+    unloadCurrentView(); // Unload previous view first (removes target elements etc.)
     console.log("Switching to Range View...");
     currentVisualMode = VISUAL_MODES.RANGE;
-    TargetVisuals.hideTargetElements(); // Hide target elements
-    console.log("[visuals.js] switchToRangeView: Using scene:", sceneToUse); // Log the scene being used
-    RangeVisuals.initRangeVisuals(sceneToUse); // Ensure range elements are added/visible using the correct scene reference
-    CoreVisuals.resetCameraPosition(); // Use the default camera position for Range
+    TargetVisuals.hideTargetElements(); // Ensure target elements are hidden
+    console.log("[visuals.js] switchToRangeView: Using scene:", sceneToUse);
+    RangeVisuals.initRangeVisuals(sceneToUse); // Add/show range elements
+    CoreVisuals.applyStaticCameraView('range'); // Set camera to static range view
     CoreVisuals.showBallAtAddress(); // Ensure ball is visible
 }
 
@@ -96,16 +100,18 @@ export function switchToTargetView(targetDistance, initialScene = null) {
     }
 
     // If not already in target mode, proceed with switching:
-    unloadCurrentView(); // Unload previous view first
+    unloadCurrentView(); // Unload previous view first (removes range elements etc.)
     console.log("Switching to Target View...");
     currentVisualMode = VISUAL_MODES.TARGET;
-    RangeVisuals.removeRangeVisuals(sceneToUse); // Remove range specific elements using correct scene
+    currentTargetDistanceYards = targetDistance; // Store for reverse camera
+    RangeVisuals.removeRangeVisuals(sceneToUse); // Remove range specific elements
     TargetVisuals.setTargetDistance(targetDistance);
-    TargetVisuals.drawTargetView(); // Create/show target elements (uses its internally set scene)
+    TargetVisuals.drawTargetView(); // Create/show target elements
     // Set the camera specifically for the target view
-    const targetZ = targetDistance * (1 / 1.09361); // Convert target yards to meters
-    CoreVisuals.setCameraForTargetView(targetZ); // Call the new camera function
-    CoreVisuals.hideBall(); // Hide the ball at address in target view? Or reposition?
+    const targetZ = targetDistance * CoreVisuals.YARDS_TO_METERS; // Use constant from core
+    CoreVisuals.setCameraForTargetView(targetZ); // Set the static target view
+    CoreVisuals.applyStaticCameraView('target'); // Ensure mode is static and view is applied
+    //CoreVisuals.hideBall(); // Hide the ball at address in target view? Or reposition?
 }
 
 
@@ -136,14 +142,32 @@ export function animateBallFlight(shotData) {
 // Reset visuals - Resets core elements and the current view
 export function resetVisuals() {
     console.log(`Resetting visuals for mode: ${currentVisualMode}`);
-    CoreVisuals.resetCoreVisuals(); // Resets ball, trajectory line, camera
+    CoreVisuals.resetCoreVisuals(); // Resets ball, trajectory line
 
      // Reset the specific view elements
     if (currentVisualMode === VISUAL_MODES.RANGE) {
-        showBallAtAddress(); // Ensure ball is back for 3D range
         // RangeVisuals might have specific resets later
+        CoreVisuals.showBallAtAddress(); // Ensure ball is back for 3D range
     } else if (currentVisualMode === VISUAL_MODES.TARGET) {
         TargetVisuals.resetView(); // Reset target view elements (e.g., clear landing markers)
+        //CoreVisuals.hideBall(); // Keep ball hidden if in target view
+    }
+
+    // Check current camera mode before resetting
+    const currentCameraMode = CoreVisuals.getActiveCameraMode();
+    if (currentCameraMode === CoreVisuals.CameraMode.REVERSE_ANGLE || currentCameraMode === CoreVisuals.CameraMode.GREEN_FOCUS) {
+        console.log(`Camera was ${currentCameraMode}, resetting to static view.`);
+        switchToStaticCamera(); // Reset only if it was reverse or green focus
+    } else {
+        console.log(`Camera is ${currentCameraMode}, preserving camera mode.`);
+        // Re-apply the current camera mode to reset its position if necessary
+        if (currentCameraMode === CoreVisuals.CameraMode.STATIC) {
+            switchToStaticCamera(); // Re-apply the correct static view
+        } else if (currentCameraMode === CoreVisuals.CameraMode.FOLLOW_BALL) {
+            // Re-calling setActiveCameraMode will snap the camera to the initial follow position
+            // relative to the ball's new address position.
+            CoreVisuals.setActiveCameraMode(CoreVisuals.CameraMode.FOLLOW_BALL);
+        }
     }
 }
 
@@ -185,4 +209,75 @@ export function animateBallFlightWithLanding(shotData) {
 
     // Always use 3D animation now
     CoreVisuals.startBallAnimation(points, duration, onAnimationComplete);
+}
+
+
+// --- New Camera Control Functions ---
+
+// Switch to the appropriate static camera view based on current mode AND shot type
+export function switchToStaticCamera() {
+    const shotType = getCurrentShotType(); // Get current shot type from gameLogic
+    let viewType = 'range'; // Default view
+
+    // Determine the correct static view based on shot type first
+    switch (shotType) {
+        case 'chip':
+            viewType = 'chip';
+            break;
+        case 'putt':
+            viewType = 'putt';
+            break;
+        case 'full':
+        default:
+            // For full swing, decide between range and target based on visual mode
+            if (currentVisualMode === VISUAL_MODES.TARGET) {
+                viewType = 'target';
+            } else {
+                viewType = 'range'; // Default full swing view is range
+            }
+            break;
+    }
+
+    console.log(`Switching to static camera view: ${viewType} (ShotType: ${shotType}, VisualMode: ${currentVisualMode})`);
+    CoreVisuals.applyStaticCameraView(viewType);
+}
+
+// Activate the follow ball camera mode
+export function activateFollowBallCamera() {
+    console.log("Activating Follow Ball Camera");
+    CoreVisuals.setActiveCameraMode(CoreVisuals.CameraMode.FOLLOW_BALL);
+}
+
+// Activate the reverse angle camera
+export function activateReverseCamera() {
+    console.log("Activating Reverse Angle Camera");
+    let positionZ = 300 * CoreVisuals.YARDS_TO_METERS; // Default 300 yards for Range
+
+    if (currentVisualMode === VISUAL_MODES.TARGET && currentTargetDistanceYards > 0) {
+        positionZ = currentTargetDistanceYards * CoreVisuals.YARDS_TO_METERS;
+        console.log(`Using target distance for reverse camera: ${currentTargetDistanceYards} yards`);
+    } else {
+        console.log("Using default 300 yards for reverse camera.");
+    }
+
+    CoreVisuals.setCameraReverseAngle(positionZ);
+}
+
+// Activate the green focus camera (only works in Target mode)
+export function activateGreenCamera() {
+    console.log("Attempting to activate Green Focus Camera");
+    if (currentVisualMode !== VISUAL_MODES.TARGET) {
+        console.warn("Green Focus camera only available in Target mode.");
+        return;
+    }
+
+    const greenCenter = TargetVisuals.getGreenCenter();
+    const greenRadius = TargetVisuals.getGreenRadius();
+
+    if (greenCenter && greenRadius) {
+        console.log(`Found green data: Center Z=${greenCenter.z.toFixed(1)}, Radius=${greenRadius.toFixed(1)}`);
+        CoreVisuals.setCameraGreenFocus(greenCenter, greenRadius);
+    } else {
+        console.error("Could not get green position or radius from TargetVisuals.");
+    }
 }

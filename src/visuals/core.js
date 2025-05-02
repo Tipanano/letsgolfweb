@@ -2,6 +2,17 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.m
 
 export let scene, camera, renderer, ball, trajectoryLine;
 export const BALL_RADIUS = 0.2;
+export const YARDS_TO_METERS = 1 / 1.09361; // Define and export the conversion factor
+
+// Camera Modes
+export const CameraMode = {
+    STATIC: 'static',
+    FOLLOW_BALL: 'follow_ball',
+    REVERSE_ANGLE: 'reverse_angle',
+    GREEN_FOCUS: 'green_focus',
+};
+let activeCameraMode = CameraMode.STATIC;
+let currentStaticView = 'range'; // 'range', 'target', 'chip', 'putt' - Tracks the *current* static view setting
 
 // Animation state
 let isBallAnimating = false;
@@ -23,9 +34,11 @@ export function initCoreVisuals(canvasElement) {
     const aspectRatio = canvasElement.clientWidth / canvasElement.clientHeight;
     camera = new THREE.PerspectiveCamera(60, aspectRatio, 0.1, 1000);
     // Slightly higher default position for range view
-    camera.position.set(0, 18, -25); // Raised Y, moved back Z
-    camera.lookAt(0, 0, 80); // Look slightly further down range
+    camera.position.set(0, 18, -25); // Default: Range view position
+    camera.lookAt(0, 0, 80); // Default: Range view lookAt
     scene.add(camera); // Add camera to scene
+    currentStaticView = 'range'; // Set initial static view type
+    activeCameraMode = CameraMode.STATIC; // Set initial mode
 
     // 3. Renderer
     renderer = new THREE.WebGLRenderer({ canvas: canvasElement, antialias: true });
@@ -82,15 +95,16 @@ function animate(timestamp) {
     if (!renderer) return; // Ensure renderer exists
     requestAnimationFrame(animate);
 
-    // Ball flight animation logic
+    // --- Camera Update Logic ---
+    updateCamera(timestamp); // Call camera update logic each frame
+
+    // --- Ball Flight Animation Logic ---
     if (isBallAnimating) {
         const elapsedTime = timestamp - ballAnimationStartTime;
-        // Ensure progress is clamped between 0 and 1 before use
-        const progress = Math.max(0, Math.min(1, elapsedTime / ballAnimationDuration));
+        const progress = Math.max(0, Math.min(1, elapsedTime / ballAnimationDuration)); // Clamped progress
 
         if (currentTrajectoryPoints.length > 0) {
-            // Calculate index using clamped progress
-            const pointIndex = Math.floor(progress * (currentTrajectoryPoints.length - 1));
+            const pointIndex = Math.floor(progress * (currentTrajectoryPoints.length - 1)); // Current segment start index
 
             // Ensure pointIndex is valid (this check might be redundant now but safe to keep)
              if (pointIndex < 0 || pointIndex >= currentTrajectoryPoints.length) {
@@ -101,31 +115,29 @@ function animate(timestamp) {
              }
 
             const nextPointIndex = Math.min(pointIndex + 1, currentTrajectoryPoints.length - 1);
-            const segmentProgress = (progress * (currentTrajectoryPoints.length - 1)) - pointIndex;
+            const segmentProgress = (progress * (currentTrajectoryPoints.length - 1)) - pointIndex; // Progress within the current segment
 
-            const vec1 = currentTrajectoryPoints[pointIndex];
-            const vec2 = currentTrajectoryPoints[nextPointIndex];
+            // const nextPointIndex = Math.min(pointIndex + 1, currentTrajectoryPoints.length - 1); // Already declared above
+            // const segmentProgress = (progress * (currentTrajectoryPoints.length - 1)) - pointIndex; // Already declared above
 
-            //console.log('vectors:', vec1, vec2);
+            const currentPoint = currentTrajectoryPoints[pointIndex];
+            const nextPoint = currentTrajectoryPoints[nextPointIndex]; // Use the already declared nextPointIndex
 
-            // Check if points exist before attempting lerp
-            if (vec1 && vec2) {
-                 const interpolatedPosition = new THREE.Vector3().lerpVectors(
-                    vec1,
-                    vec2,
+            if (currentPoint && nextPoint) {
+                // Interpolate ball position
+                const interpolatedPosition = new THREE.Vector3().lerpVectors(
+                    currentPoint,
+                    nextPoint,
                     segmentProgress
                 );
-
-                //console.log('interpolatedPosition:', interpolatedPosition);
-
                 if (ball) ball.position.copy(interpolatedPosition);
+
             } else {
-                 console.error(`Undefined vector encountered during animation: vec1=${vec1}, vec2=${vec2}, index=${pointIndex}, nextIndex=${nextPointIndex}`);
-                 // Optionally stop animation or handle error appropriately
-                 isBallAnimating = false;
+                console.error(`Undefined vector encountered during animation: current=${currentPoint}, next=${nextPoint}, index=${pointIndex}, nextIndex=${nextPointIndex}`);
+                isBallAnimating = false; // Stop animation on error
             }
 
-
+            // Update trajectory line draw range
             if (trajectoryLine) {
                 const drawCount = Math.ceil(progress * currentTrajectoryPoints.length);
                  // Ensure drawCount is valid before setting
@@ -165,6 +177,42 @@ function animate(timestamp) {
     renderer.render(scene, camera);
 }
 
+// --- Camera Update Function (called in animate loop) ---
+function updateCamera(timestamp) {
+    if (!camera || !ball) return;
+
+    if (activeCameraMode === CameraMode.FOLLOW_BALL && isBallAnimating) {
+        const targetPosition = new THREE.Vector3();
+        const lookAtPosition = new THREE.Vector3();
+
+        // Camera slightly behind and above the ball
+        targetPosition.copy(ball.position).add(new THREE.Vector3(0, 3, -6)); // Offset from ball
+
+        // Look at the ball's current position
+        lookAtPosition.copy(ball.position);
+
+        // Smoothly interpolate camera position and lookAt target
+        camera.position.lerp(targetPosition, 0.05); // Adjust lerp factor for smoothness
+        // To smoothly lookAt, we need to lerp the target point the camera is looking at,
+        // then call lookAt() each frame. We'll store a temporary target.
+        // This requires a variable outside this function scope, e.g., `cameraLookAtTarget`
+        // For simplicity now, let's just look directly, which might be jittery.
+        camera.lookAt(lookAtPosition);
+
+    } else if (activeCameraMode === CameraMode.STATIC) {
+        // Static camera is handled by the setCamera... functions, no per-frame update needed
+        // unless we add smooth transitions *between* static views later.
+    } else if (activeCameraMode === CameraMode.REVERSE_ANGLE) {
+        // Position is set once by setCameraReverseAngle, no per-frame update needed.
+    } else if (activeCameraMode === CameraMode.GREEN_FOCUS) {
+        // Position is set once by setCameraGreenFocus, no per-frame update needed.
+    }
+    // Ensure projection matrix is updated if camera properties change
+    // camera.updateProjectionMatrix(); // Usually only needed if FOV, aspect, near/far change
+}
+
+
+// --- Ball Visibility ---
 export function showBallAtAddress() {
     if (ball) {
         ball.position.set(0, BALL_RADIUS, 0);
@@ -234,48 +282,150 @@ export function resetCoreVisuals() {
     isBallAnimating = false;
     currentTrajectoryPoints = [];
     showBallAtAddress(); // Put ball back at start
+
+    // Reset camera to the default static view for the current mode
+    // This might be redundant if resetVisuals in visuals.js handles it
+    // setActiveCameraMode(CameraMode.STATIC); // Ensure mode is static
+    // applyStaticCameraView(currentStaticView); // Re-apply the correct static view
 }
 
-// Function to reset camera to default position/view
-export function resetCameraPosition() {
-    if (camera) {
-        camera.position.set(0, 15, -20); // Default position
-        camera.lookAt(0, 0, 60); // Default lookAt
-        console.log("Camera position reset for Range view.");
+// --- Camera Control Functions ---
+
+// Sets the active camera mode and immediately applies starting position if needed
+export function setActiveCameraMode(mode) {
+    if (!Object.values(CameraMode).includes(mode)) {
+        console.warn(`Attempted to set invalid camera mode: ${mode}`);
+        return;
+    }
+
+    activeCameraMode = mode;
+    console.log(`Camera mode set to: ${activeCameraMode}`);
+
+    // If switching TO follow ball, immediately set the camera position relative to the current ball position
+    if (mode === CameraMode.FOLLOW_BALL && camera && ball) {
+        console.log("Setting initial follow ball camera position.");
+        const targetPosition = new THREE.Vector3().copy(ball.position).add(new THREE.Vector3(0, 3, -6)); // Offset from ball
+        const lookAtPosition = new THREE.Vector3().copy(ball.position);
+        camera.position.copy(targetPosition); // Snap position
+        camera.lookAt(lookAtPosition);      // Snap lookAt
+    }
+    // If switching away from follow, ensure ball animation doesn't control camera
+    else if (mode !== CameraMode.FOLLOW_BALL) {
+        // Potentially stop lerping if smooth lookAt was implemented
     }
 }
 
-// Function to set camera for Target view
-export function setCameraForTargetView(targetZ = 150) { // Default target Z if not provided
-    if (camera) {
-        // Position camera higher and further back, looking down at the target
-        const cameraHeight = 30; // Higher Y position
-        const cameraDistBack = 100; // Further back along Z
-        camera.position.set(0, cameraHeight, targetZ - cameraDistBack);
-        // Look at a point slightly in front of the target Z on the ground
-        camera.lookAt(0, 0, targetZ / 1.5);
-        console.log(`Camera position set for Target view (looking at Z=${targetZ.toFixed(1)}).`);
+// Applies a specific static camera view based on the stored type ('range', 'target', etc.)
+// This is called by visuals.js when switching to static mode.
+export function applyStaticCameraView(viewType = null) {
+    const viewToApply = viewType || currentStaticView; // Use provided type or the stored one
+    console.log(`Applying static camera view: ${viewToApply}`);
+    activeCameraMode = CameraMode.STATIC; // Ensure mode is static
+
+    switch (viewToApply) {
+        case 'target':
+            // Re-apply the target view using the stored Z distance
+            if (currentTargetZ !== undefined) {
+                setCameraForTargetView(currentTargetZ); // Call the setter with the stored value
+            } else {
+                console.error("applyStaticCameraView: Cannot apply target view, currentTargetZ is undefined.");
+                // Fallback to range view?
+                resetCameraPosition();
+            }
+            break;
+        case 'chip':
+            setCameraForChipView();
+            break;
+        case 'putt':
+            setCameraForPuttView();
+            break;
+        case 'range':
+        default:
+            resetCameraPosition(); // Default to range view
+            break;
     }
 }
 
-// Function to set camera for Chip view
+
+// --- Specific Camera Setters ---
+
+// Sets camera to default Range view
+export function resetCameraPosition() { // Renamed slightly for clarity (was default view)
+    if (!camera) return;
+    camera.position.set(0, 18, -25); // Raised Y, moved back Z
+    camera.lookAt(0, 0, 80); // Look slightly further down range
+    currentStaticView = 'range'; // Update stored static view type
+    // activeCameraMode = CameraMode.STATIC; // Set by applyStaticCameraView or setActiveCameraMode
+    console.log("Static camera set to: Range View");
+}
+
+// Sets camera for Target view
+let currentTargetZ = 150; // Store target Z for potential re-application
+export function setCameraForTargetView(targetZ = 150) {
+    if (!camera) return;
+    currentTargetZ = targetZ; // Store the Z distance
+    const cameraHeight = 20;
+    const cameraDistBack = targetZ + 30;
+    camera.position.set(0, cameraHeight, targetZ - cameraDistBack);
+    camera.lookAt(0, 0, targetZ / 1.5);
+    currentStaticView = 'target'; // Update stored static view type
+    // activeCameraMode = CameraMode.STATIC; // Set by applyStaticCameraView or setActiveCameraMode
+    console.log(`Static camera set to: Target View (Z=${targetZ.toFixed(1)})`);
+}
+
+// Sets camera for Chip view
 export function setCameraForChipView() {
-    if (camera) {
-        // Position camera lower and closer, looking at the ball
-        camera.position.set(0, 4, -8); // Lower Y, closer Z
-        camera.lookAt(0, 0, 20); // Look directly at the ball's origin
-        console.log("Camera position set for Chip view.");
-    }
+    if (!camera) return;
+    camera.position.set(0, 4, -8);
+    camera.lookAt(0, 0, 20);
+    currentStaticView = 'chip'; // Update stored static view type
+    // activeCameraMode = CameraMode.STATIC; // Set by applyStaticCameraView or setActiveCameraMode
+    console.log("Static camera set to: Chip View");
 }
 
-// Function to set camera for Putt view (reuse chip view for now)
+// Sets camera for Putt view
 export function setCameraForPuttView() {
-    if (camera) {
-        // For now, use the same close-up view as chipping
-        setCameraForChipView(); // Re-use chip logic
-        // Or define a slightly different putt-specific view later:
-        // camera.position.set(0, 4, -6); // Example: Even lower/closer
-        // camera.lookAt(0, 0, 0);
-        console.log("Camera position set for Putt view (using chip view settings).");
-    }
+    if (!camera) return;
+    // Use chip view settings for now
+    camera.position.set(0, 4, -8);
+    camera.lookAt(0, 0, 20);
+    // Or define a slightly different putt-specific view later:
+    // camera.position.set(0, 3, -6);
+    // camera.lookAt(0, 0, 0);
+    currentStaticView = 'putt'; // Update stored static view type
+    // activeCameraMode = CameraMode.STATIC; // Set by applyStaticCameraView or setActiveCameraMode
+    console.log("Static camera set to: Putt View");
+}
+
+// Sets camera for Reverse Angle view
+export function setCameraReverseAngle(positionZ) {
+    if (!camera) return;
+    const cameraHeight = 10; // Height above ground
+    const offsetBehind = 15; // Distance behind the target Z
+    camera.position.set(0, cameraHeight, positionZ + offsetBehind);
+    camera.lookAt(0, 0, 0); // Look back towards the tee (origin)
+    setActiveCameraMode(CameraMode.REVERSE_ANGLE); // Set the mode
+    console.log(`Camera set to: Reverse Angle (looking from Z=${(positionZ + offsetBehind).toFixed(1)})`);
+}
+
+// Sets camera for Green Focus view
+export function setCameraGreenFocus(greenCenter, greenRadius) {
+    if (!camera || !greenCenter || !greenRadius) return;
+    // Example: Position camera overhead, slightly offset
+    const cameraHeight = greenRadius * 2.5; // Adjust height based on green size
+    const cameraOffsetZ = -greenRadius * 0.5; // Slight offset back from center
+
+    camera.position.set(
+        greenCenter.x,
+        greenCenter.y + cameraHeight,
+        greenCenter.z + cameraOffsetZ
+    );
+    camera.lookAt(greenCenter); // Look at the center of the green
+    setActiveCameraMode(CameraMode.GREEN_FOCUS); // Set the mode
+    console.log(`Camera set to: Green Focus (looking at ${greenCenter.z.toFixed(1)})`);
+}
+
+// --- Getters ---
+export function getActiveCameraMode() {
+    return activeCameraMode;
 }
