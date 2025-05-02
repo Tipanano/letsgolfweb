@@ -24,4 +24,6 @@ export const clubs = {
     'GW54': { name: 'Gap Wedge (54)', loft: 54, lengthFactor: 0.72, baseSmash: 1.34, baseAoA: -6.2, spinRateFactor: 1.3, basePotentialSpeed: 81, optimalSpin: 10000, defaultBallPositionIndex: 4, liftFactor: 0.8 }, // Center-Back
     'SW58': { name: 'Sand Wedge (58)',loft: 58, lengthFactor: 0.71, baseSmash: 1.33, baseAoA: -6.5, spinRateFactor: 1.35, basePotentialSpeed: 79, optimalSpin: 10500, defaultBallPositionIndex: 4, liftFactor: 0.7 }, // Center-Back
     'LW60': { name: 'Lob Wedge (60)', loft: 60, lengthFactor: 0.70, baseSmash: 1.32, baseAoA: -6.8, spinRateFactor: 1.4, basePotentialSpeed: 77, optimalSpin: 10800, defaultBallPositionIndex: 4, liftFactor: 0.5 }, // Center-Back
+    // Putter
+    'PT': { name: 'Putter',         loft: 3,    lengthFactor: 0.70, baseSmash: 1.0,  baseAoA: 0,    spinRateFactor: 0.1, basePotentialSpeed: 20, optimalSpin: 100, defaultBallPositionIndex: 5, liftFactor: 0.0 }, // Center-Fwd (Ball position less critical for putt, but set a default)
 };

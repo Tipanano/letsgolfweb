@@ -1,19 +1,21 @@
 import { clubs } from './clubs.js';
 // Import specific UI functions needed
-import { adjustBallPosition, getBallPositionIndex, getBallPositionLevels, setBallPosition, markHipInitiationOnBackswingBar, resetUIForNewShot, setupTimingBarWindows, updateStatus, resetUI, updateBackswingBar, updateTimingBars, updateChipTimingBars, showKeyPressMarker, updateResultDisplay, updateDebugTimingInfo, getShotType, setSwingSpeedControlState, updateTimingBarVisibility } from './ui.js'; // Added updateChipTimingBars, getShotType, setSwingSpeedControlState, updateTimingBarVisibility
+import { adjustBallPosition, getBallPositionIndex, getBallPositionLevels, setBallPosition, markHipInitiationOnBackswingBar, resetUIForNewShot, setupTimingBarWindows, updateStatus, resetUI, updateBackswingBar, updateTimingBars, updateChipTimingBars, updatePuttTimingBar, showKeyPressMarker, updateResultDisplay, updateDebugTimingInfo, getShotType, setSwingSpeedControlState, updateTimingBarVisibility, setClubSelectValue } from './ui.js'; // Added updatePuttTimingBar, setClubSelectValue
 import * as visuals from './visuals.js'; // Import visuals main module
 // Import specific camera functions from core visuals
 import { resetCameraPosition, setCameraForChipView, setCameraForPuttView } from './visuals/core.js';
 import { calculateImpactPhysics } from './swingPhysics.js'; // Import the new physics calculation module
 import { calculateChipImpact } from './chipPhysics.js'; // Import the new chip physics module
+import { calculatePuttImpact } from './puttPhysics.js'; // Import the new putt physics module
 
 // --- Constants ---
-const DOWNSWING_TIMING_BAR_DURATION_MS = 500;
-const BACKSWING_BAR_MAX_DURATION_MS = 1500;
-const IDEAL_BACKSWING_DURATION_MS = 1000;
+const DOWNSWING_TIMING_BAR_DURATION_MS = 500; // For full swing
+const BACKSWING_BAR_MAX_DURATION_MS = 1500; // Max visual duration for bar
+const IDEAL_BACKSWING_DURATION_MS = 1000; // Ideal for full swing power reference
+const PUTT_DISTANCE_FACTOR = 1.5; // Yards per mph of ball speed (Needs tuning!)
 
 // --- Game State ---
-let gameState = 'ready'; // ready, backswing, backswingPausedAtTop, downswingWaiting, calculating, result, chipDownswingWaiting, calculatingChip
+let gameState = 'ready'; // ready, backswing, backswingPausedAtTop, downswingWaiting, calculating, result, chipDownswingWaiting, calculatingChip, puttDownswingWaiting, calculatingPutt
 let currentShotType = 'full'; // 'full', 'chip', 'putt'
 let swingSpeed = 1.0; // Base speed factor (0.3 to 1.0) - Only for 'full' swing
 let selectedClub = clubs['7I']; // Default club
@@ -30,13 +32,17 @@ let hipInitiationTime = null; // Added
 
 // Chip Timing Variables
 let chipRotationStartTime = null;
-let chipWristsStartTime = null;
+let chipWristsStartTime = null; // Represents 'hit' time for chip
+
+// Putt Timing Variables
+let puttHitTime = null; // Represents 'i' press time for putt
 
 // --- Animation Frame IDs ---
 let backswingAnimationFrameId = null;
 let fullDownswingAnimationFrameId = null; // Renamed for clarity
 let chipDownswingAnimationFrameId = null; // Added for chip
-let downswingPhaseStartTime = null; // Common start time for downswing phase
+let puttDownswingAnimationFrameId = null; // Added for putt
+let downswingPhaseStartTime = null; // Common start time for downswing phase (W release for chip/putt)
 
 // Callback for when shot calculation is complete
 let onShotCompleteCallback = null;
@@ -94,16 +100,23 @@ export function setShotType(type) {
     // Update visibility of timing bars based on shot type
     updateTimingBarVisibility(type);
 
-    // Update camera position based on shot type
+    // Update camera position and potentially select club
     switch (type) {
         case 'chip':
             setCameraForChipView();
+            // Optionally force a wedge? Or leave club selection open? For now, leave open.
             break;
         case 'putt':
             setCameraForPuttView();
+            // Automatically select the Putter internally
+            setSelectedClub('PT'); // Assuming 'PT' is the key for the Putter
+            // Update the UI dropdown to reflect this change
+            setClubSelectValue('PT');
             break;
         case 'full':
         default:
+            // If switching *back* from putt, maybe re-select a default iron? Or leave as is?
+            // If switching *back* from putt, maybe re-select a default iron? Or leave as is?
             resetCameraPosition(); // Use default range view camera
             break;
     }
@@ -125,14 +138,17 @@ function resetSwingState() {
     hipInitiationTime = null; // Full swing reset
     chipRotationStartTime = null; // Chip reset
     chipWristsStartTime = null; // Chip reset
+    puttHitTime = null; // Putt reset
 
     // Stop animations if still running
     if (backswingAnimationFrameId) cancelAnimationFrame(backswingAnimationFrameId);
-    if (fullDownswingAnimationFrameId) cancelAnimationFrame(fullDownswingAnimationFrameId); // Use renamed ID
-    if (chipDownswingAnimationFrameId) cancelAnimationFrame(chipDownswingAnimationFrameId); // Stop chip animation too
+    if (fullDownswingAnimationFrameId) cancelAnimationFrame(fullDownswingAnimationFrameId);
+    if (chipDownswingAnimationFrameId) cancelAnimationFrame(chipDownswingAnimationFrameId);
+    if (puttDownswingAnimationFrameId) cancelAnimationFrame(puttDownswingAnimationFrameId);
     backswingAnimationFrameId = null;
-    fullDownswingAnimationFrameId = null; // Use renamed ID
-    chipDownswingAnimationFrameId = null; // Reset chip animation ID
+    fullDownswingAnimationFrameId = null;
+    chipDownswingAnimationFrameId = null;
+    puttDownswingAnimationFrameId = null;
     downswingPhaseStartTime = null;
 
     resetUIForNewShot(); // Use the new reset function that preserves ball position
@@ -286,9 +302,45 @@ export function handleKeyDown(event) {
             }
         }
     }
-    // --- Putt Shot Logic (Placeholder) ---
+    // --- Putt Shot Logic ---
     else if (currentShotType === 'putt') {
-        // TODO: Implement putt key handling
+        // Start Backswing with 'w' key
+        if (event.key === 'w' && gameState === 'ready') {
+            console.log("Putt: 'w' pressed in ready state - starting backswing");
+            gameState = 'backswing'; // Use same state for backswing bar
+            backswingStartTime = performance.now();
+            updateStatus('Putt Backswing...');
+            resetUIForNewShot();
+
+            // Start backswing bar animation (using existing function, speed 1.0)
+            if (backswingAnimationFrameId) cancelAnimationFrame(backswingAnimationFrameId);
+            backswingAnimationFrameId = requestAnimationFrame(updateBackswingBarAnimation);
+        }
+
+        // Trigger reset with 'n' key when in result state
+        if (event.key === 'n' && gameState === 'result') {
+            console.log("Putt: 'n' pressed in result state - resetting");
+            resetSwingState();
+        }
+
+        // Capture putt hit key ('i') *after* downswing has started (W released)
+        if (gameState === 'puttDownswingWaiting' && downswingPhaseStartTime) {
+            const timeNow = performance.now();
+            const offset = timeNow - downswingPhaseStartTime; // Offset relative to putt downswing start (W release)
+
+            // Putt uses 'i' for hit
+            if (event.key === 'i' && !puttHitTime) {
+                puttHitTime = timeNow;
+                 // Stop the putt downswing animation loop
+                if (puttDownswingAnimationFrameId) cancelAnimationFrame(puttDownswingAnimationFrameId);
+                puttDownswingAnimationFrameId = null;
+                // No visual marker needed for putt timing bar
+                console.log(`Putt: 'i' (Hit) pressed at offset ${offset.toFixed(0)} ms`);
+
+                gameState = 'calculatingPutt'; // Set state BEFORE calling calculation
+                calculatePuttShot(); // Trigger putt calculation
+            }
+        }
     }
 }
 
@@ -352,9 +404,46 @@ export function handleKeyUp(event) {
             // updateDebugTimingInfo(getDebugTimingData()); // Need chip-specific debug info
         }
     }
-     // --- Putt Shot Logic (Placeholder) ---
+     // --- Putt Shot Logic ---
     else if (currentShotType === 'putt') {
-        // TODO: Implement putt key handling
+        // End Backswing with 'w' key release
+        if (event.key === 'w' && gameState === 'backswing') {
+            console.log("Putt: 'w' released in backswing state - ending backswing");
+            backswingEndTime = performance.now();
+            backswingDuration = backswingEndTime - backswingStartTime;
+
+            console.log(`Putt: Backswing ended. Duration: ${backswingDuration.toFixed(0)} ms`);
+
+            // Stop backswing bar animation
+            if (backswingAnimationFrameId) cancelAnimationFrame(backswingAnimationFrameId);
+            backswingAnimationFrameId = null;
+
+            // Transition to waiting for putt hit input ('i') AND start the downswing phase
+            gameState = 'puttDownswingWaiting';
+            downswingPhaseStartTime = performance.now(); // Start putt downswing phase NOW (W release)
+            updateStatus('Putt: Press i (hit)');
+            console.log(`Putt: Backswing ended. Duration: ${backswingDuration.toFixed(0)} ms. Starting downswing phase. Waiting for i.`);
+
+            // Start putt downswing timing bar animation
+            if (puttDownswingAnimationFrameId) cancelAnimationFrame(puttDownswingAnimationFrameId);
+            // Ensure backswingDuration is valid before starting animation
+            if (backswingDuration && backswingDuration > 0) {
+                 puttDownswingAnimationFrameId = requestAnimationFrame(updatePuttDownswingBarAnimation);
+            } else {
+                console.warn("Putt: Invalid backswing duration, cannot start downswing animation.");
+                // Handle this case? Maybe reset or show an error?
+            }
+
+            // Optional: Set a timeout? If 'i' isn't pressed within X seconds, trigger a whiff?
+            // setTimeout(() => {
+            //     if (gameState === 'puttDownswingWaiting') {
+            //         console.log("Putt: Hit timed out.");
+            //         // Handle timeout - maybe calculate with a huge offset or reset?
+            //         // calculatePuttShot(); // Calculate with missing hit time
+            //         resetSwingState(); // Or just reset
+            //     }
+            // }, 3000); // 3 second timeout?
+        }
     }
 }
 
@@ -418,6 +507,43 @@ function updateChipDownswingBarsAnimation(timestamp) {
             gameState = 'calculatingChip'; // Set state before calling
             calculateChipShot(); // Trigger shot calculation
         }
+    }
+}
+
+// New animation loop for putt downswing bar
+function updatePuttDownswingBarAnimation(timestamp) {
+    // Only run if it's a putt in the correct state and downswing has started
+    if (currentShotType !== 'putt' || gameState !== 'puttDownswingWaiting' || !downswingPhaseStartTime) {
+        puttDownswingAnimationFrameId = null;
+        return;
+    }
+    const elapsedTime = timestamp - downswingPhaseStartTime;
+    // Call the UI update function which uses a fixed duration for visual speed
+    const progressPercent = updatePuttTimingBar(elapsedTime); // Visually fills based on BACKSWING_BAR_MAX_DURATION_MS
+
+    // Check for timeout based on actual backswingDuration *independently*
+    // This needs to happen even if the visual bar isn't full yet, if backswing was short.
+    // Or, more accurately, the timeout happens when the visual bar completes *if* 'i' wasn't pressed.
+    // Let the visual bar run its course. The timeout is handled when progressPercent hits 100.
+
+    // Continue the animation as long as the VISUAL bar isn't full
+    if (progressPercent < 100) {
+        puttDownswingAnimationFrameId = requestAnimationFrame(updatePuttDownswingBarAnimation);
+    } else {
+        // Visual bar is full. Stop the animation.
+        puttDownswingAnimationFrameId = null;
+        console.log("Putt: Downswing visual bar reached 100%.");
+
+        // Now, check if the shot hasn't already been triggered by the 'i' key press.
+        // If still waiting, it means the player didn't press 'i' in time (or at all).
+        if (gameState === 'puttDownswingWaiting') {
+            console.log("Putt: Downswing timed out (visual bar full). Triggering calculation with missing hit input.");
+            // puttHitTime remains null, which puttPhysics handles as a very late hit (pull)
+            gameState = 'calculatingPutt'; // Set state before calling
+            calculatePuttShot(); // Trigger shot calculation
+        }
+        // If gameState is already 'calculatingPutt', it means 'i' was pressed just before timeout,
+        // and the calculation is already underway. Do nothing here.
     }
 }
 
@@ -541,7 +667,7 @@ function calculateFullSwingShot() {
     // Landing angle factor (shallower angle = more roll)
     // Using cosine: angle 0 (horizontal) -> cos(0)=1; angle 90 (vertical) -> cos(90)=0
     // Power helps control sensitivity. Clamp to avoid extreme values.
-    const landingAngleFactor = clamp(Math.pow(Math.cos(landingAngleRadians), 0.5), 0.1, 1.5); // Function clamp is defined in chipPhysics.js, need it here or redefine
+    const landingAngleFactor = clamp(Math.pow(Math.cos(landingAngleRadians), 0.5), 0.1, 1.5); // Use local clamp function
 
     console.log(`Full Swing: Rollout Factors: Base=${baseRollFactor.toFixed(2)} (Strike: ${strikeQuality}), SpinFactor=${spinRollFactor.toFixed(2)} (BackSpin: ${backSpin.toFixed(0)}), AngleFactor=${landingAngleFactor.toFixed(2)} (Angle: ${(landingAngleRadians * 180 / Math.PI).toFixed(1)} deg)`);
 
@@ -739,7 +865,7 @@ function calculateChipShot() {
     const spinSensitivity = 2500;
     const spinRollFactor = 1 - (backSpin - targetSpinForZeroRoll) / spinSensitivity;
     // Landing angle factor (same logic as full swing)
-    const landingAngleFactor = clamp(Math.pow(Math.cos(landingAngleRadians), 0.5), 0.1, 1.5); // Function clamp is defined in chipPhysics.js, need it here or redefine
+    const landingAngleFactor = clamp(Math.pow(Math.cos(landingAngleRadians), 0.5), 0.1, 1.5); // Use local clamp function
     console.log(`Chip: Rollout Factors: Base=${baseRollFactor.toFixed(2)} (Strike: ${strikeQuality}), SpinFactor=${spinRollFactor.toFixed(2)} (BackSpin: ${backSpin.toFixed(0)}), AngleFactor=${landingAngleFactor.toFixed(2)} (Angle: ${(landingAngleRadians * 180 / Math.PI).toFixed(1)} deg)`);
     rolloutDistance = carryDistance * baseRollFactor * spinRollFactor * landingAngleFactor;
     const maxPositiveRollFactor = 0.35; // Allow more roll %
@@ -826,8 +952,137 @@ function calculateChipShot() {
     }
 }
 
+// --- Putt Shot Calculation ---
+function calculatePuttShot() {
+    if (gameState !== 'calculatingPutt' || currentShotType !== 'putt') return;
 
-// --- Trajectory Calculation (Common?) ---
+    gameState = 'calculating'; // Use generic calculating state
+    updateStatus('Calculating Putt...');
+    console.log("Calculating Putt Shot...");
+
+    // --- Prepare Inputs for puttPhysics Module ---
+    // Calculate hit offset relative to downswingPhaseStartTime (W release)
+    const hitOffset = puttHitTime ? puttHitTime - downswingPhaseStartTime : null;
+
+    console.log(`Putt Inputs: Duration=${backswingDuration?.toFixed(0)}, DownswingStart=${downswingPhaseStartTime?.toFixed(0)}, HitTime=${puttHitTime?.toFixed(0)}`);
+    console.log(`Putt Inputs: HitOffset=${hitOffset?.toFixed(0)}`);
+
+    // --- Call the putt physics calculation module ---
+    const impactResult = calculatePuttImpact(
+        backswingDuration,
+        hitOffset
+    );
+
+    // --- Use results from impactResult ---
+    const ballSpeed = impactResult.ballSpeed;
+    const launchAngle = impactResult.launchAngle; // Vertical
+    const horizontalLaunchAngle = impactResult.horizontalLaunchAngle; // Horizontal (Push/Pull)
+    const backSpin = impactResult.backSpin;
+    const sideSpin = impactResult.sideSpin; // Should be 0 from puttPhysics
+    const strikeQuality = impactResult.strikeQuality; // Center, Push, Pull
+    let resultMessage = impactResult.message || "Putt Result";
+
+    // --- Simplified Putt Distance Calculation ---
+    // No air simulation needed. Distance is primarily based on initial speed.
+    // Assume a simple linear relationship for now, maybe factor in green speed later.
+    let totalDistance = ballSpeed * PUTT_DISTANCE_FACTOR; // Simple scaling factor
+    totalDistance = Math.max(0.1, totalDistance); // Ensure minimum distance
+
+    // Calculate side distance based on horizontal launch angle and total distance
+    const horizontalLaunchAngleRad = horizontalLaunchAngle * Math.PI / 180;
+    let sideDistance = totalDistance * Math.tan(horizontalLaunchAngleRad);
+
+    console.log(`Putt: BallSpeed=${ballSpeed.toFixed(1)}mph, HorizAngle=${horizontalLaunchAngle.toFixed(1)}deg`);
+    console.log(`Putt: Calculated Total Distance: ${totalDistance.toFixed(1)} yd, Side Distance: ${sideDistance.toFixed(1)} yd`);
+
+    // --- Prepare Shot Data Object for Callback (Consistent Structure) ---
+    const shotData = {
+        // Input/Timing related
+        backswingDuration: backswingDuration,
+        timingDeviations: { // Putt specific timing
+            hitDeviation: impactResult.timingDeviations?.hitDeviation, // Get from physics result
+        },
+        ballPositionFactor: 0, // Not applicable for putt
+
+        // Core Impact & Launch Parameters (From puttImpactResult)
+        message: resultMessage,
+        clubHeadSpeed: 0, // Not calculated for putt
+        ballSpeed: impactResult.ballSpeed,
+        launchAngle: impactResult.launchAngle, // Vertical (now fixed at 0)
+        horizontalLaunchAngle: impactResult.horizontalLaunchAngle, // Horizontal
+        attackAngle: 0, // Fixed at 0 for putts
+        backSpin: impactResult.backSpin,
+        sideSpin: impactResult.sideSpin, // Should be 0
+        clubPathAngle: 0, // Not applicable for putt
+        absoluteFaceAngle: impactResult.horizontalLaunchAngle, // Use horizontal angle as effective face angle
+        faceAngleRelPath: 0, // Not applicable
+        strikeQuality: impactResult.strikeQuality,
+        potentialCHS: 0, // Not applicable
+        dynamicLoft: 0, // Not applicable
+        smashFactor: 0, // Not applicable
+
+        // Simulation Results (Simplified for Putt)
+        peakHeight: 0, // No significant height
+        carryDistance: 0, // No carry distance
+        rolloutDistance: totalDistance, // All distance is rollout
+        totalDistance: totalDistance,
+        timeOfFlight: 0, // No flight time
+
+        // Trajectory (Simplified for Putt - straight line)
+        trajectory: null, // Calculated below
+        sideDistance: sideDistance // Calculated above
+    };
+
+    // --- Calculate Trajectory Points (Simple Straight Line for Putt) ---
+    const puttPoints = [];
+    const puttSteps = 10;
+    const totalDistanceMeters = totalDistance / 1.09361;
+    const sideDistanceMeters = sideDistance / 1.09361;
+
+    // Calculate end point based on total distance and side distance
+    // Assume totalDistance is along the Z-axis if sideDistance is 0
+    // Use Pythagorean theorem if sideDistance is non-zero: totalDist^2 = endZ^2 + endX^2
+    // endX = sideDistanceMeters
+    // endZ = sqrt(totalDistanceMeters^2 - sideDistanceMeters^2)
+    let endZ = totalDistanceMeters;
+    let endX = sideDistanceMeters;
+    if (Math.abs(sideDistanceMeters) > 0.01 && totalDistanceMeters > Math.abs(sideDistanceMeters)) {
+         endZ = Math.sqrt(totalDistanceMeters * totalDistanceMeters - sideDistanceMeters * sideDistanceMeters);
+    } else if (totalDistanceMeters < Math.abs(sideDistanceMeters)) {
+        // If side distance is somehow larger than total, just use side as X and Z=0
+        endZ = 0;
+        endX = sideDistanceMeters > 0 ? totalDistanceMeters : -totalDistanceMeters;
+    }
+
+
+    puttPoints.push({ x: 0, y: 0.1, z: 0 }); // Start point
+    for (let i = 1; i <= puttSteps; i++) {
+        const progress = i / puttSteps;
+        puttPoints.push({
+            x: endX * progress,
+            y: 0.1, // Stays on ground
+            z: endZ * progress
+        });
+    }
+    shotData.trajectory = puttPoints;
+    console.log(`Putt: Generated ${puttPoints.length} trajectory points. End: (${endX.toFixed(1)}, 0.1, ${endZ.toFixed(1)})m`);
+
+
+    // Update internal state
+    gameState = 'result';
+    console.log("Putt: Shot calculation complete.");
+
+    // --- Call Registered Callback (Common) ---
+    if (onShotCompleteCallback) {
+        onShotCompleteCallback(shotData);
+    } else {
+        console.warn("No shot completion callback registered in gameLogic.");
+        updateStatus('Result (Callback Missing) - Press (n)');
+    }
+}
+
+
+// --- Trajectory Calculation (Common for Full/Chip) ---
 // NOTE: This function relies on shotData containing the results from physics
 // (e.g., carryDistance, peakHeight, sideSpin, absoluteFaceAngle)
 function calculateTrajectoryPoints(shotData) {
@@ -1095,3 +1350,11 @@ function getDebugTimingData() {
 
 // Export reset function for button/key binding
 export const resetSwing = resetSwingState;
+
+/**
+ * Clamps a value between a minimum and maximum.
+ * (Added locally as it's used in rollout calculations)
+ */
+function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+}

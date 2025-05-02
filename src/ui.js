@@ -31,7 +31,9 @@ const markerA = document.getElementById('marker-a');     // Rotation marker
 const markerJ = document.getElementById('marker-j');     // Arms marker
 const markerD = document.getElementById('marker-d');     // Wrists marker
 // Containers for hiding/showing elements based on shot type
-const armsTimingContainer = markerJ.closest('.timing-bar-container'); // Find parent container for Arms bar
+const rotationTimingContainer = progressA.closest('.timing-bar-container'); // Find parent container for Rotation bar
+const armsTimingContainer = progressJ.closest('.timing-bar-container'); // Find parent container for Arms bar
+const wristsTimingContainer = progressD.closest('.timing-bar-container'); // Find parent container for Wrists/Hit bar
 
 const resultText = document.getElementById('result-text');
 const chsText = document.getElementById('chs-text');
@@ -170,21 +172,58 @@ export function updateChipTimingBars(elapsedTime) {
 
 
 export function showKeyPressMarker(key, offset, speedFactor) {
-    // Determine duration based on shot type (passed via speedFactor, 1.0 for chip)
-    const isChip = speedFactor === 1.0; // Simple check, might need refinement
-    const effectiveDownswingDuration = isChip ? CHIP_DOWNSWING_DURATION_MS : (DOWNSWING_TIMING_BAR_DURATION_MS / speedFactor);
+    const currentShotType = getShotType(); // Get the current shot type
+
+    // Determine duration based on shot type. Putt doesn't use timing markers in the same way.
+    // Chip uses a fixed duration. Full uses speedFactor.
+    let effectiveDownswingDuration;
+    if (currentShotType === 'chip') {
+        effectiveDownswingDuration = CHIP_DOWNSWING_DURATION_MS;
+    } else if (currentShotType === 'full') {
+        effectiveDownswingDuration = DOWNSWING_TIMING_BAR_DURATION_MS / speedFactor;
+    } else {
+        // Putt doesn't use these key press markers in the downswing bar
+        return;
+    }
 
     const markerPercent = Math.min(100, Math.max(0, (offset / effectiveDownswingDuration) * 100)); // Clamp 0-100
     let markerElement;
-    // Assign marker based on key assignments (a=Rotation, d=Arms, i=Wrists/Hit)
+
+    // Assign marker based on key assignments AND shot type validity
     switch (key) {
-        case 'a': markerElement = markerA; break; // Rotation ('a') -> marker-a
-        case 'd': markerElement = markerJ; break; // Arms ('d') -> marker-j
-        case 'i': markerElement = markerD; break; // Wrists ('i') -> marker-d
-        default: return;
+        case 'a': // Rotation ('a') -> marker-a
+            // Only show Rotation marker for Full and Chip
+            if (currentShotType === 'full' || currentShotType === 'chip') {
+                markerElement = markerA;
+            } else {
+                return; // Don't show for Putt
+            }
+            break;
+        case 'd': // Arms ('d') -> marker-j
+            // Only show Arms marker for Full swing
+            if (currentShotType === 'full') {
+                markerElement = markerJ;
+            } else {
+                return; // Don't show for Chip or Putt
+            }
+            break;
+        case 'i': // Wrists/Hit ('i') -> marker-d
+            // Show Hit marker for Full, Chip (assuming 'i' is the key for hit)
+            // Putt uses a different mechanism (power bar) - this marker shouldn't show for putt via this function.
+            if (currentShotType === 'full' || currentShotType === 'chip') {
+                 markerElement = markerD;
+            } else {
+                return; // Don't show for Putt
+            }
+            break;
+        default: return; // Unknown key
     }
-    markerElement.style.left = `${markerPercent}%`;
-    markerElement.style.display = 'block';
+
+    // If we have a valid markerElement for the current shot type and key
+    if (markerElement) {
+        markerElement.style.left = `${markerPercent}%`;
+        markerElement.style.display = 'block';
+    }
 }
 
 export function updateResultDisplay(resultData) {
@@ -379,32 +418,75 @@ export function setSwingSpeedControlState(enabled) {
     console.log(`UI: Swing speed control ${enabled ? 'enabled' : 'disabled'}`);
 }
 
-// Function to show/hide timing bars AND windows based on shot type
-export function updateTimingBarVisibility(shotType) {
+// Function to show/hide timing bars, windows, AND other controls based on shot type
+export function updateTimingBarVisibility(shotType) { // Consider renaming later if scope expands further
     const isFullSwing = shotType === 'full';
+    const isChip = shotType === 'chip';
+    const isPutt = shotType === 'putt';
 
-    // Arms bar ('j') visibility
+    // Rotation Bar ('a') Visibility: Show for Full & Chip, Hide for Putt
+    if (rotationTimingContainer) {
+        rotationTimingContainer.style.display = (isFullSwing || isChip) ? '' : 'none';
+    }
+
+    // Arms Bar ('j') Visibility: Show only for Full
     if (armsTimingContainer) {
         armsTimingContainer.style.display = isFullSwing ? '' : 'none';
     }
 
-    // Timing Windows visibility (Rotation 'a' -> windowA, Hit 'i' -> windowD)
-    // Hide windows for Chip and Putt, show for Full
-    if (windowA) {
-        windowA.style.display = isFullSwing ? '' : 'none';
-    }
-    if (windowD) {
-        windowD.style.display = isFullSwing ? '' : 'none';
-    }
-    // Also hide Arms window ('j' -> windowJ) if not full swing
-    if (windowJ) {
-        windowJ.style.display = isFullSwing ? '' : 'none';
+    // Wrists/Hit Bar ('i'/'d') Visibility: Show for Full, Chip, AND Putt
+    if (wristsTimingContainer) {
+        wristsTimingContainer.style.display = (isFullSwing || isChip || isPutt) ? '' : 'none';
     }
 
+    // Timing Windows (a, j, d) Visibility: Show only for Full
+    if (windowA) windowA.style.display = isFullSwing ? '' : 'none';
+    if (windowJ) windowJ.style.display = isFullSwing ? '' : 'none';
+    if (windowD) windowD.style.display = isFullSwing ? '' : 'none';
 
-    console.log(`UI: Updated timing bar/window visibility for shot type: ${shotType}`);
+    // Ball Position Control Visibility: Show for Full & Chip, Hide for Putt
+    if (ballPositionControl) {
+        ballPositionControl.style.display = (isFullSwing || isChip) ? '' : 'none';
+    }
+
+    // Club Select Dropdown: Enable for Full & Chip, Disable for Putt
+    if (clubSelect) {
+        clubSelect.disabled = isPutt;
+        // Add/remove a class for visual styling if desired
+        if (isPutt) {
+            clubSelect.classList.add('disabled');
+        } else {
+            clubSelect.classList.remove('disabled');
+        }
+    }
+
+    // Ideal Backswing Marker Visibility: Show only for Full swing
+    if (idealBackswingMarker) {
+        idealBackswingMarker.style.display = isFullSwing ? '' : 'none';
+    }
+
+    console.log(`UI: Updated control visibility for shot type: ${shotType}`);
 }
 
+// New function specifically for updating the putt downswing timing bar (e.g., progressD)
+// The visual fill rate is constant, based on BACKSWING_BAR_MAX_DURATION_MS.
+export function updatePuttTimingBar(elapsedTime) {
+    // Use the fixed max duration for consistent visual fill speed
+    const progressPercent = Math.min(100, (elapsedTime / BACKSWING_BAR_MAX_DURATION_MS) * 100);
+    // Update only the bar designated for putt downswing (progressD)
+    progressD.style.width = `${progressPercent}%`;
+    return progressPercent;
+}
+
+// Function to programmatically set the value of the club select dropdown
+export function setClubSelectValue(clubKey) {
+    if (clubSelect) {
+        clubSelect.value = clubKey;
+        console.log(`UI: Set club select dropdown to ${clubKey}`);
+    } else {
+        console.warn("UI: Club select element not found, couldn't set value.");
+    }
+}
 
 // --- Event Listener Setup ---
 // We export functions to attach listeners from main.js
