@@ -1,6 +1,7 @@
 import * as ui from './ui.js';
-import * as logic from './gameLogic.js'; // Assuming setShotType will be added here
+import * as logic from './gameLogic.js'; // Game state and actions
 import * as visuals from './visuals.js';
+import * as inputHandler from './inputHandler.js'; // Import the new input handler
 import * as closestToFlag from './modes/closestToFlag.js'; // Import the new mode logic
 
 // --- Game Modes ---
@@ -118,15 +119,15 @@ document.getElementById('mode-btn-closest')?.addEventListener('click', () => set
 document.getElementById('mode-btn-hole')?.addEventListener('click', () => setGameMode(GAME_MODES.PLAY_HOLE));
 
 
-// Add global key listeners that call logic handlers
+// Add global key listeners that call the input handler
 document.addEventListener('keydown', (event) => {
-    console.log(`main.js keydown: ${event.key} (code: ${event.code})`); // Log listener firing
-    logic.handleKeyDown(event);
+    // console.log(`main.js keydown: ${event.key} (code: ${event.code})`); // Log listener firing (optional)
+    inputHandler.handleKeyDown(event); // Call the input handler
 });
 
 document.addEventListener('keyup', (event) => {
-    console.log(`main.js keyup: ${event.key} (code: ${event.code})`); // Log listener firing
-    logic.handleKeyUp(event);
+    // console.log(`main.js keyup: ${event.key} (code: ${event.code})`); // Log listener firing (optional)
+    inputHandler.handleKeyUp(event); // Call the input handler
 });
 
 console.log("Main script loaded, event listeners attached.");
