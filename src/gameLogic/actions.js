@@ -13,7 +13,7 @@ import {
     stopPuttDownswingAnimation, stopAllAnimations // Import animation controls
 } from './animations.js';
 import {
-    updateStatus, resetUIForNewShot, updateDebugTimingInfo // Import UI functions
+    updateStatus, resetUIForNewShot, updateDebugTimingInfo // Import UI functions (resetUIForNewShot is already imported)
 } from '../ui.js';
 // Import calculation functions directly
 import { calculateFullSwingShot, calculateChipShot, calculatePuttShot } from './calculations.js';
@@ -21,7 +21,7 @@ import { calculateFullSwingShot, calculateChipShot, calculatePuttShot } from './
 import { getDebugTimingData } from './utils.js';
 import { getCurrentGameMode } from '../main.js'; // Import mode checker
 import { getCurrentBallPosition as getPlayHoleBallPosition } from '../modes/playHole.js'; // Import position getter for playHole
-import { getActiveCameraMode, setCameraBehindBall, snapFollowCameraToBall, CameraMode } from '../visuals/core.js'; // Import camera functions
+import { getActiveCameraMode, setCameraBehindBall, snapFollowCameraToBall, CameraMode, removeTrajectoryLine } from '../visuals/core.js'; // Import camera functions and line removal
 
 // --- Action Functions for Input Handler ---
 
@@ -233,7 +233,12 @@ export function resetSwing() {
 export function prepareNextShot() {
     console.log("Action: Preparing next shot (resetting variables only).");
     stopAllAnimations(); // Stop any running animations
+
+    // *** ADD THIS LINE ***
+    removeTrajectoryLine(); // Remove the visual trajectory line
+
     resetSwingVariablesOnly(); // Calls the variable-only reset in state.js
+    resetUIForNewShot(); // Reset timing bars and other relevant UI elements
     updateStatus("Ready for next shot..."); // Update status explicitly
 
     // --- Update Camera Position for PlayHole Mode ---

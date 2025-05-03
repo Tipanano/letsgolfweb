@@ -211,6 +211,16 @@ function updateCamera(timestamp) {
     // camera.updateProjectionMatrix(); // Usually only needed if FOV, aspect, near/far change
 }
 
+// --- Trajectory Line Removal ---
+export function removeTrajectoryLine() {
+    if (trajectoryLine && scene) { // Check if scene also exists
+        scene.remove(trajectoryLine);
+        trajectoryLine.geometry.dispose();
+        trajectoryLine.material.dispose();
+        trajectoryLine = null;
+        console.log("Trajectory line removed.");
+    }
+}
 
 // --- Ball Visibility ---
 export function showBallAtAddress() {

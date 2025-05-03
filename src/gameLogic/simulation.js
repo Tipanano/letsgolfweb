@@ -118,8 +118,11 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club) 
     console.log(`Sim: Final Velocity (y): ${finalVel.y.toFixed(2)}, Horizontal Vel: ${horizontalVelMag.toFixed(2)}, Landing Angle: ${(landingAngleRadians * 180 / Math.PI).toFixed(1)} deg`);
 
 
-    // Calculate carry based on X/Z distance from origin at landing
-    const carryDistanceMeters = Math.sqrt(landingPosition.x**2 + landingPosition.z**2);
+    // Calculate carry based on X/Z distance between initialPos and landingPosition
+    const dx = landingPosition.x - initialPos.x;
+    const dz = landingPosition.z - initialPos.z;
+    const carryDistanceMeters = Math.sqrt(dx*dx + dz*dz);
+    console.log(`Sim: Carry Distance (m): ${carryDistanceMeters.toFixed(2)} (dx=${dx.toFixed(2)}, dz=${dz.toFixed(2)})`);
 
     return {
         landingPosition: landingPosition,
