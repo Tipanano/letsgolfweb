@@ -441,6 +441,52 @@ export function setCameraGreenFocus(greenCenter, greenRadius) {
     console.log(`Camera set to: Green Focus (looking at ${greenCenter.z.toFixed(1)})`);
 }
 
+// Sets camera to a static view behind a specific target position, mimicking chip/putt/range views
+export function setCameraBehindBall(targetPosition, viewType = 'range') {
+    if (!camera || !targetPosition) return;
+
+    let camPos = new THREE.Vector3();
+    let lookAtPos = new THREE.Vector3().copy(targetPosition); // Look directly at the ball
+
+    // Determine offset based on view type (similar to existing static views but relative)
+    switch (viewType) {
+        case 'chip':
+        case 'putt': // Use same offset for chip/putt for now
+            // Offset: Slightly behind and above the ball, looking slightly past it
+            camPos.set(targetPosition.x + 0, targetPosition.y + 4, targetPosition.z - 8);
+            lookAtPos.set(targetPosition.x + 0, targetPosition.y + 0, targetPosition.z + 12); // Look a bit further than the ball
+            currentStaticView = viewType;
+            break;
+        case 'range': // Default 'behind ball' view for full shots
+        default:
+             // Offset: Further behind and higher, looking down towards the ball/target line
+            camPos.set(targetPosition.x + 0, targetPosition.y + 18, targetPosition.z - 25);
+            lookAtPos.set(targetPosition.x + 0, targetPosition.y + 0, targetPosition.z + 55); // Look further down
+            currentStaticView = 'range'; // Or maybe a new 'behindBall' type? Let's use range for now.
+            break;
+    }
+
+    camera.position.copy(camPos);
+    camera.lookAt(lookAtPos);
+    setActiveCameraMode(CameraMode.STATIC); // Ensure mode is static
+
+    console.log(`Static camera set behind ball at (${targetPosition.x.toFixed(1)}, ${targetPosition.z.toFixed(1)}) with view type: ${currentStaticView}`);
+}
+
+// Snaps the follow camera instantly to its starting offset relative to a target position
+export function snapFollowCameraToBall(targetPosition) {
+    if (!camera || !targetPosition || activeCameraMode !== CameraMode.FOLLOW_BALL) return;
+
+    console.log("Snapping follow ball camera position.");
+    const offset = new THREE.Vector3(0, 3, -6); // Standard follow offset
+    const camPos = new THREE.Vector3().copy(targetPosition).add(offset);
+    const lookAtPos = new THREE.Vector3().copy(targetPosition);
+
+    camera.position.copy(camPos); // Snap position
+    camera.lookAt(lookAtPos);      // Snap lookAt
+}
+
+
 // --- Getters ---
 export function getActiveCameraMode() {
     return activeCameraMode;

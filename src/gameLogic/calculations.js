@@ -15,6 +15,9 @@ import { calculatePuttImpact } from '../puttPhysics.js';
 import { simulateFlightStepByStep } from './simulation.js';
 import { calculateTrajectoryPoints, calculatePuttTrajectoryPoints } from './trajectory.js';
 import { clamp } from './utils.js';
+import { getCurrentGameMode } from '../main.js'; // Import mode checker
+import { getCurrentBallPosition as getPlayHoleBallPosition } from '../modes/playHole.js'; // Import position getter
+import { BALL_RADIUS } from '../visuals/core.js'; // Import BALL_RADIUS for default position
 
 // --- Calculation Functions ---
 
@@ -91,8 +94,22 @@ export function calculateFullSwingShot() {
     const initialVelX = initialVelHorizontalMag * Math.sin(launchDirectionAngleRad); // Positive angle = positive X (right)
     const initialVelZ = initialVelHorizontalMag * Math.cos(launchDirectionAngleRad); // Positive Z = forward
     const initialVelocity = { x: initialVelX, y: initialVelY, z: initialVelZ };
-    const initialPosition = { x: 0, y: 0.1, z: 0 }; // Start slightly above ground
     const spinVectorRPM = { x: backSpin, y: sideSpin, z: 0 };
+
+    // --- Determine Initial Position based on Game Mode ---
+    let initialPosition;
+    const currentMode = getCurrentGameMode();
+    if (currentMode === 'play-hole') {
+        initialPosition = getPlayHoleBallPosition();
+        console.log('the new positions in playHole are', initialPosition);
+        // Ensure y is at least BALL_RADIUS
+        initialPosition.y = Math.max(BALL_RADIUS, initialPosition.y);
+        console.log(`Calc (Full): Using PlayHole initial position: x=${initialPosition.x.toFixed(2)}, y=${initialPosition.y.toFixed(2)}, z=${initialPosition.z.toFixed(2)}`);
+    } else {
+        initialPosition = { x: 0, y: BALL_RADIUS, z: 0 }; // Default tee position for other modes
+        console.log(`Calc (Full): Using default initial position: x=${initialPosition.x.toFixed(2)}, y=${initialPosition.y.toFixed(2)}, z=${initialPosition.z.toFixed(2)}`);
+    }
+
 
     // --- Run Simulation ---
     const simulationResult = simulateFlightStepByStep(initialPosition, initialVelocity, spinVectorRPM, selectedClub);
@@ -172,7 +189,7 @@ export function calculateFullSwingShot() {
         timeOfFlight: visualTimeOfFlight,
         trajectory: null,
         sideDistance: 0,
-        finalPosition: initialPosition // Default final position
+        finalPosition: { ...initialPosition } // Default final position (use determined initial pos)
     };
 
     // --- Calculate Trajectory Points ---
@@ -268,8 +285,20 @@ export function calculateChipShot() {
     const initialVelX = initialVelHorizontalMag * Math.sin(launchDirectionAngleRad);
     const initialVelZ = initialVelHorizontalMag * Math.cos(launchDirectionAngleRad);
     const initialVelocity = { x: initialVelX, y: initialVelY, z: initialVelZ };
-    const initialPosition = { x: 0, y: 0.1, z: 0 };
     const spinVectorRPM = { x: backSpin, y: sideSpin, z: 0 };
+
+    // --- Determine Initial Position based on Game Mode ---
+    let initialPosition;
+    const currentMode = getCurrentGameMode();
+    if (currentMode === 'play-hole') {
+        initialPosition = getPlayHoleBallPosition();
+        // Ensure y is at least BALL_RADIUS
+        initialPosition.y = Math.max(BALL_RADIUS, initialPosition.y);
+        console.log(`Calc (Chip): Using PlayHole initial position: x=${initialPosition.x.toFixed(2)}, y=${initialPosition.y.toFixed(2)}, z=${initialPosition.z.toFixed(2)}`);
+    } else {
+        initialPosition = { x: 0, y: BALL_RADIUS, z: 0 }; // Default tee position for other modes
+        console.log(`Calc (Chip): Using default initial position: x=${initialPosition.x.toFixed(2)}, y=${initialPosition.y.toFixed(2)}, z=${initialPosition.z.toFixed(2)}`);
+    }
 
     // --- Run Simulation ---
     const simulationResult = simulateFlightStepByStep(initialPosition, initialVelocity, spinVectorRPM, selectedClub);
@@ -332,7 +361,7 @@ export function calculateChipShot() {
         timeOfFlight: visualTimeOfFlight,
         trajectory: null,
         sideDistance: 0,
-        finalPosition: initialPosition // Default final position
+        finalPosition: { ...initialPosition } // Default final position (use determined initial pos)
     };
 
     // --- Calculate Trajectory Points ---
@@ -438,16 +467,35 @@ export function calculatePuttShot() {
         timeOfFlight: 0,
         trajectory: null,
         sideDistance: sideDistance,
-        finalPosition: { x: 0, y: 0.1, z: 0 } // Default final position
+        finalPosition: null // Will be calculated below
     };
 
+    // --- Determine Initial Position based on Game Mode ---
+    let initialPosition;
+    const currentMode = getCurrentGameMode();
+    if (currentMode === 'play-hole') {
+        initialPosition = getPlayHoleBallPosition();
+        // Ensure y is at least BALL_RADIUS
+        initialPosition.y = Math.max(BALL_RADIUS, initialPosition.y);
+        console.log(`Calc (Putt): Using PlayHole initial position: x=${initialPosition.x.toFixed(2)}, y=${initialPosition.y.toFixed(2)}, z=${initialPosition.z.toFixed(2)}`);
+    } else {
+        initialPosition = { x: 0, y: BALL_RADIUS, z: 0 }; // Default tee position for other modes
+        console.log(`Calc (Putt): Using default initial position: x=${initialPosition.x.toFixed(2)}, y=${initialPosition.y.toFixed(2)}, z=${initialPosition.z.toFixed(2)}`);
+    }
+
     // --- Calculate Trajectory Points (Simple Straight Line for Putt) ---
-    const trajectoryPoints = calculatePuttTrajectoryPoints(shotData); // Use putt-specific trajectory calc
+    // Pass initialPosition to the trajectory calculator
+    const trajectoryPoints = calculatePuttTrajectoryPoints(shotData, initialPosition);
     shotData.trajectory = trajectoryPoints;
 
-    // Set final position from trajectory
+    // Set final position from trajectory (which now starts from the correct initialPosition)
     if (trajectoryPoints && trajectoryPoints.length > 0) {
         shotData.finalPosition = trajectoryPoints[trajectoryPoints.length - 1];
+        console.log(`Calc (Putt): Final Position: x=${shotData.finalPosition.x.toFixed(2)}, y=${shotData.finalPosition.y.toFixed(2)}, z=${shotData.finalPosition.z.toFixed(2)}`);
+    } else {
+        // Fallback if trajectory calculation fails
+        shotData.finalPosition = { ...initialPosition };
+        console.warn("Calc (Putt): Trajectory calculation failed, using initial position as final.");
     }
 
     // Update internal state

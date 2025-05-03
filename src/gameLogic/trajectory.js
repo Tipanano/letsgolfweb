@@ -100,8 +100,8 @@ export function calculateTrajectoryPoints(shotData) {
 }
 
 // --- Trajectory Calculation (Simplified for Putt) ---
-// Generates a straight line trajectory for putts based on total distance and side distance.
-export function calculatePuttTrajectoryPoints(shotData) {
+// Generates a straight line trajectory for putts based on total distance and side distance, starting from initialPosition.
+export function calculatePuttTrajectoryPoints(shotData, initialPosition = { x: 0, y: 0.1, z: 0 }) {
     const puttPoints = [];
     const puttSteps = 10;
     const totalDistance = shotData.totalDistance || 0; // Yards
@@ -125,15 +125,21 @@ export function calculatePuttTrajectoryPoints(shotData) {
         endX = sideDistanceMeters > 0 ? totalDistanceMeters : -totalDistanceMeters;
     }
 
-    puttPoints.push({ x: 0, y: 0.1, z: 0 }); // Start point
+    // Start point is the provided initialPosition
+    const startX = initialPosition.x;
+    const startY = initialPosition.y; // Use the y from initial position
+    const startZ = initialPosition.z;
+    puttPoints.push({ x: startX, y: startY, z: startZ });
+
     for (let i = 1; i <= puttSteps; i++) {
         const progress = i / puttSteps;
         puttPoints.push({
-            x: endX * progress,
-            y: 0.1, // Stays on ground
-            z: endZ * progress
+            x: startX + endX * progress, // Add delta to start position
+            y: startY, // Stays at the initial ground level
+            z: startZ + endZ * progress  // Add delta to start position
         });
     }
-    console.log(`Trajectory (Putt): Generated ${puttPoints.length} points. End: (${endX.toFixed(1)}, 0.1, ${endZ.toFixed(1)})m`);
+    const finalPoint = puttPoints[puttPoints.length - 1] || initialPosition;
+    console.log(`Trajectory (Putt): Generated ${puttPoints.length} points. Start: (${startX.toFixed(1)}, ${startY.toFixed(1)}, ${startZ.toFixed(1)})m, End: (${finalPoint.x.toFixed(1)}, ${finalPoint.y.toFixed(1)}, ${finalPoint.z.toFixed(1)})m`);
     return puttPoints;
 }

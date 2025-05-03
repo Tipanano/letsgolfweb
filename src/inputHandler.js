@@ -12,7 +12,10 @@ import {
     showKeyPressMarker,
     // Timing bar updates are likely handled within GameLogic's animation loops now
 } from './ui.js';
-
+// Assume main.js exports a function to get the current mode
+//import { getCurrentGameMode } from '../../main.js';
+import { getCurrentGameMode } from './main.js'; // Import the function to get the current game mode
+import { prepareNextShot } from './gameLogic/actions.js';
 // --- Event Handlers ---
 
 export function handleKeyDown(event) {
@@ -87,9 +90,18 @@ function handleFullSwingKeyDown(event, gameState, swingSpeed) {
         GameLogic.startBackswing(); // Call action function in GameLogic
     }
 
-    // Reset with 'n'
+    // Reset with 'n' - behavior depends on game mode
     if (event.key === 'n' && gameState === 'result') {
-        GameLogic.resetSwing(); // Call action function in GameLogic
+        const currentMode = getCurrentGameMode(); // Get current mode
+        console.log(`InputHandler: Resetting for mode: ${currentMode}`);
+        if (currentMode === 'play-hole') {
+            prepareNextShot(); // Call action function
+            //GameLogic.prepareNextShot(); // Prepare for next shot without resetting ball position
+            console.log("InputHandler: Preparing next shot for playHole mode.");
+        } else {
+            GameLogic.resetSwing(); // Full reset for other modes (e.g., range)
+            console.log("InputHandler: Performing full reset.");
+        }
     }
 
     // Capture 'a' during backswing (early rotation)
@@ -153,9 +165,17 @@ function handleChipKeyDown(event, gameState) {
         GameLogic.startBackswing();
     }
 
-    // Reset with 'n'
+    // Reset with 'n' - behavior depends on game mode
     if (event.key === 'n' && gameState === 'result') {
-        GameLogic.resetSwing();
+        const currentMode = getCurrentGameMode(); // Get current mode
+        if (currentMode === 'play-hole') {
+            prepareNextShot()
+            //GameLogic.prepareNextShot();
+            console.log("InputHandler: Preparing next shot for playHole mode.");
+        } else {
+            GameLogic.resetSwing();
+            console.log("InputHandler: Performing full reset.");
+        }
     }
 
     // Capture chip downswing keys ('a', then 'i')
@@ -189,9 +209,17 @@ function handlePuttKeyDown(event, gameState) {
         GameLogic.startBackswing();
     }
 
-    // Reset with 'n'
+    // Reset with 'n' - behavior depends on game mode
     if (event.key === 'n' && gameState === 'result') {
-        GameLogic.resetSwing();
+        const currentMode = getCurrentGameMode(); // Get current mode
+        if (currentMode === 'play-hole') {
+            prepareNextShot();
+            //GameLogic.prepareNextShot();
+            console.log("InputHandler: Preparing next shot for playHole mode.");
+        } else {
+            GameLogic.resetSwing();
+            console.log("InputHandler: Performing full reset.");
+        }
     }
 
     // Capture putt hit key ('i')

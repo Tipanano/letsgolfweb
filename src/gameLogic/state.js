@@ -189,10 +189,11 @@ export function setShotType(type) {
     }
 
     // Reset swing state when changing type
-    resetSwingState(); // Call the local reset function
+    //resetSwingState(); // Call the full reset function
 }
 
-export function resetSwingState() {
+// This function performs the full reset including UI/Visuals
+export function resetSwingState() { // Added 'export' keyword here
     gameState = 'ready';
     backswingStartTime = null;
     backswingEndTime = null;
@@ -209,10 +210,6 @@ export function resetSwingState() {
     // Stop animations if still running (Need to handle cancellation logic elsewhere now)
     // This function should only reset the state variables.
     // Animation cancellation will be handled in the actions/animations modules.
-    // if (backswingAnimationFrameId) cancelAnimationFrame(backswingAnimationFrameId);
-    // if (fullDownswingAnimationFrameId) cancelAnimationFrame(fullDownswingAnimationFrameId);
-    // if (chipDownswingAnimationFrameId) cancelAnimationFrame(chipDownswingAnimationFrameId);
-    // if (puttDownswingAnimationFrameId) cancelAnimationFrame(puttDownswingAnimationFrameId);
     backswingAnimationFrameId = null;
     fullDownswingAnimationFrameId = null;
     chipDownswingAnimationFrameId = null;
@@ -221,13 +218,44 @@ export function resetSwingState() {
 
     resetUIForNewShot(); // Use the new reset function that preserves ball position
     visuals.resetVisuals(); // Reset visuals (e.g., ball position)
-    console.log("Logic State: Swing state variables reset (preserving ball position).");
+    console.log("Logic State: Full swing state reset (including visuals).");
 }
+
+// Resets only the core swing timing/state variables and animation IDs
+export function resetSwingVariablesOnly() { // Added 'export' keyword here
+    gameState = 'ready';
+    backswingStartTime = null;
+    backswingEndTime = null;
+    backswingDuration = null;
+    rotationInitiationTime = null;
+    armsStartTime = null; // Full swing
+    wristsStartTime = null; // Full swing
+    rotationStartTime = null; // Full swing
+    hipInitiationTime = null; // Full swing reset
+    chipRotationStartTime = null; // Chip reset
+    chipWristsStartTime = null; // Chip reset
+    puttHitTime = null; // Putt reset
+
+    // Stop animations if still running (Need to handle cancellation logic elsewhere now)
+    // This function should only reset the state variables.
+    // Animation cancellation will be handled in the actions/animations modules.
+    backswingAnimationFrameId = null;
+    fullDownswingAnimationFrameId = null;
+    chipDownswingAnimationFrameId = null;
+    puttDownswingAnimationFrameId = null;
+    downswingPhaseStartTime = null;
+
+    // NOTE: This version does NOT reset UI or Visuals
+    console.log("Logic State: Swing variables reset.");
+}
+
 
 // --- Getters for State Variables (Exported for other modules) ---
 // No need to export individual getters if modules import the 'let' variables directly.
 // However, exporting getters can be safer if we want to prevent direct modification
 // from outside this module (except via the setters). Let's export getters for now.
+
+// resetSwingState and resetSwingVariablesOnly are now exported directly above
 
 export const getGameState = () => gameState;
 export const getCurrentShotType = () => currentShotType;

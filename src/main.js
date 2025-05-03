@@ -51,6 +51,11 @@ function setGameMode(newMode) {
     // visuals.resetVisuals(); // Might be redundant if mode init handles it
 }
 
+// Function to get the current game mode (needed by inputHandler)
+export function getCurrentGameMode() {
+    return currentMode;
+}
+
 // --- Initial Setup ---
 
 // Get initial values from UI (slider) and set them in logic

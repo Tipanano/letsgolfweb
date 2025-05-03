@@ -5,7 +5,7 @@ import {
     setGameState, setBackswingStartTime, setBackswingEndTime, setRotationInitiationTime,
     setHipInitiationTime, setDownswingPhaseStartTime, setArmsStartTime, setWristsStartTime,
     setRotationStartTime, setChipRotationStartTime, setChipWristsStartTime, setPuttHitTime,
-    resetSwingState // Import the state reset function
+    resetSwingState, resetSwingVariablesOnly // Import both reset functions
 } from './state.js';
 import {
     startBackswingAnimation, stopBackswingAnimation, startFullDownswingAnimation,
@@ -19,6 +19,9 @@ import {
 import { calculateFullSwingShot, calculateChipShot, calculatePuttShot } from './calculations.js';
 // Import debug data getter directly
 import { getDebugTimingData } from './utils.js';
+import { getCurrentGameMode } from '../main.js'; // Import mode checker
+import { getCurrentBallPosition as getPlayHoleBallPosition } from '../modes/playHole.js'; // Import position getter for playHole
+import { getActiveCameraMode, setCameraBehindBall, snapFollowCameraToBall, CameraMode } from '../visuals/core.js'; // Import camera functions
 
 // --- Action Functions for Input Handler ---
 
@@ -217,10 +220,50 @@ export function triggerPuttCalc() {
 }
 
 // --- Reset Function ---
-// This function is exported for use by UI or input handler to reset the swing.
+// This function performs a FULL reset, including visual ball position. Used for range mode, etc.
 export function resetSwing() {
-    console.log("Action: Initiating swing reset.");
+    console.log("Action: Initiating FULL swing reset (including visuals).");
     stopAllAnimations(); // Stop any running animations
-    resetSwingState();   // Reset all state variables
-    // UI reset is called within resetSwingState
+    resetSwingState();   // Calls the full reset in state.js
+    // UI/Visual reset is called within resetSwingState
+}
+
+// This function resets only the logic/timing for the next shot, keeping the ball visually where it is. Used for playHole mode.
+// It also updates the camera position based on the new ball location and current camera mode.
+export function prepareNextShot() {
+    console.log("Action: Preparing next shot (resetting variables only).");
+    stopAllAnimations(); // Stop any running animations
+    resetSwingVariablesOnly(); // Calls the variable-only reset in state.js
+    updateStatus("Ready for next shot..."); // Update status explicitly
+
+    // --- Update Camera Position for PlayHole Mode ---
+    const currentMode = getCurrentGameMode(); // Need to import this if not already available
+    if (currentMode === 'play-hole') {
+        const ballPos = getPlayHoleBallPosition(); // Get the new ball position
+        const activeCamMode = getActiveCameraMode();
+        const shotType = getCurrentShotType(); // Get current shot type ('full', 'chip', 'putt')
+
+        console.log(`Action: Updating camera for next shot. BallPos: (${ballPos.x.toFixed(1)}, ${ballPos.z.toFixed(1)}), CamMode: ${activeCamMode}, ShotType: ${shotType}`);
+
+        if (activeCamMode === CameraMode.STATIC || activeCamMode === CameraMode.FOLLOW_BALL) {
+            // If static or follow, update based on mode
+            if (activeCamMode === CameraMode.STATIC) {
+                // Determine view type based on shot type
+                let viewType = 'range'; // Default for full swing
+                if (shotType === 'chip') viewType = 'chip';
+                else if (shotType === 'putt') viewType = 'putt';
+                setCameraBehindBall(ballPos, viewType);
+            } else { // Follow Ball
+                snapFollowCameraToBall(ballPos); // Snap follow cam to new position
+            }
+        } else if (activeCamMode === CameraMode.REVERSE_ANGLE || activeCamMode === CameraMode.GREEN_FOCUS) {
+            // If reverse or green view, switch to static behind ball
+            console.log(`Action: Switching from ${activeCamMode} to static behind ball view.`);
+            let viewType = 'range'; // Default for full swing
+            if (shotType === 'chip') viewType = 'chip';
+            else if (shotType === 'putt') viewType = 'putt';
+            setCameraBehindBall(ballPos, viewType); // This function also sets mode to STATIC
+        }
+    }
+    // Does NOT call visuals.resetVisuals()
 }

@@ -120,3 +120,8 @@ export function getCurrentScore() {
 export function getIsHoledOut() {
     return isHoledOut;
 }
+
+export function getCurrentBallPosition() {
+    // Return a copy to prevent accidental modification
+    return { ...currentBallPosition };
+}
