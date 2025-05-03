@@ -36,8 +36,8 @@ export function initializeMode() {
     ui.resetPlayHoleDisplay(); // Need to add this UI function
     ui.updatePlayHoleInfo(currentHoleLayout.par, currentHoleLayout.lengthYards, score); // Need to add this UI function
 
-    // 4. Set initial camera view (e.g., tee view)
-    visuals.setCameraView('tee'); // Need to add a 'tee' view or use 'range'
+    // 4. Set initial camera view to behind the ball looking at the hole
+    visuals.activateHoleViewCamera(); // Sets the 'hole' view
 
     // 5. Ensure ball is at the tee position visually
     visuals.resetVisuals(); // This should place the ball at the origin (0, BALL_RADIUS, 0)

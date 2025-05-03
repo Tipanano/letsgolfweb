@@ -5,7 +5,8 @@ import {
     getDownswingPhaseStartTime, getChipRotationStartTime, getChipWristsStartTime,
     getPuttHitTime, getOnShotCompleteCallback, setGameState,
     getBackswingStartTime, // <-- Added missing import
-    getShotDirectionAngle, // <-- Import aiming angle getter
+    getShotDirectionAngle, // <-- Gets RELATIVE angle
+    getCurrentTargetLineAngle, // <-- Gets ABSOLUTE target line angle
     IDEAL_BACKSWING_DURATION_MS, PUTT_DISTANCE_FACTOR // Import constants from state
 } from './state.js';
 import { stopFullDownswingAnimation, stopChipDownswingAnimation /* Putt stopped in actions */ } from './animations.js';
@@ -91,11 +92,13 @@ export function calculateFullSwingShot() {
     const launchAngleRad = launchAngle * Math.PI / 180;
     const initialVelY = ballSpeedMPS * Math.sin(launchAngleRad);
     const initialVelHorizontalMag = ballSpeedMPS * Math.cos(launchAngleRad);
-    // Combine absolute face angle with the player's aim angle
-    const aimAngleRad = getShotDirectionAngle() * Math.PI / 180;
-    const baseLaunchDirectionRad = impactResult.absoluteFaceAngle * Math.PI / 180; // Base direction from face
-    const finalLaunchDirectionRad = baseLaunchDirectionRad + aimAngleRad; // Add aim adjustment
-    console.log(`Calc (Full): Aim Angle=${getShotDirectionAngle().toFixed(1)}deg, Face Angle=${impactResult.absoluteFaceAngle.toFixed(1)}deg, Final Launch Dir=${(finalLaunchDirectionRad * 180 / Math.PI).toFixed(1)}deg`);
+    // Get target line, physics deviation, and relative aim adjustment angles
+    const targetLineAngleRad = getCurrentTargetLineAngle() * Math.PI / 180;
+    const physicsDeviationRad = impactResult.absoluteFaceAngle * Math.PI / 180; // Deviation relative to target line
+    const relativeAimAngleRad = getShotDirectionAngle() * Math.PI / 180; // Player's fine-tuning relative to target line
+    // Calculate final absolute launch direction
+    const finalLaunchDirectionRad = targetLineAngleRad + physicsDeviationRad + relativeAimAngleRad;
+    console.log(`Calc (Full): TargetLine=${getCurrentTargetLineAngle().toFixed(1)}deg, PhysicsDev=${impactResult.absoluteFaceAngle.toFixed(1)}deg, RelativeAim=${getShotDirectionAngle().toFixed(1)}deg, FinalLaunchDir=${(finalLaunchDirectionRad * 180 / Math.PI).toFixed(1)}deg`);
     const initialVelX = initialVelHorizontalMag * Math.sin(finalLaunchDirectionRad); // Positive angle = positive X (right)
     const initialVelZ = initialVelHorizontalMag * Math.cos(finalLaunchDirectionRad); // Positive Z = forward
     const initialVelocity = { x: initialVelX, y: initialVelY, z: initialVelZ };
@@ -288,11 +291,13 @@ export function calculateChipShot() {
     const launchAngleRad = launchAngle * Math.PI / 180;
     const initialVelY = ballSpeedMPS * Math.sin(launchAngleRad);
     const initialVelHorizontalMag = ballSpeedMPS * Math.cos(launchAngleRad);
-    // Combine absolute face angle with the player's aim angle
-    const aimAngleRad = getShotDirectionAngle() * Math.PI / 180;
-    const baseLaunchDirectionRad = impactResult.absoluteFaceAngle * Math.PI / 180; // Base direction from face
-    const finalLaunchDirectionRad = baseLaunchDirectionRad + aimAngleRad; // Add aim adjustment
-    console.log(`Calc (Chip): Aim Angle=${getShotDirectionAngle().toFixed(1)}deg, Face Angle=${impactResult.absoluteFaceAngle.toFixed(1)}deg, Final Launch Dir=${(finalLaunchDirectionRad * 180 / Math.PI).toFixed(1)}deg`);
+    // Get target line, physics deviation, and relative aim adjustment angles
+    const targetLineAngleRad = getCurrentTargetLineAngle() * Math.PI / 180;
+    const physicsDeviationRad = impactResult.absoluteFaceAngle * Math.PI / 180; // Deviation relative to target line
+    const relativeAimAngleRad = getShotDirectionAngle() * Math.PI / 180; // Player's fine-tuning relative to target line
+    // Calculate final absolute launch direction
+    const finalLaunchDirectionRad = targetLineAngleRad + physicsDeviationRad + relativeAimAngleRad;
+    console.log(`Calc (Chip): TargetLine=${getCurrentTargetLineAngle().toFixed(1)}deg, PhysicsDev=${impactResult.absoluteFaceAngle.toFixed(1)}deg, RelativeAim=${getShotDirectionAngle().toFixed(1)}deg, FinalLaunchDir=${(finalLaunchDirectionRad * 180 / Math.PI).toFixed(1)}deg`);
     const initialVelX = initialVelHorizontalMag * Math.sin(finalLaunchDirectionRad);
     const initialVelZ = initialVelHorizontalMag * Math.cos(finalLaunchDirectionRad);
     const initialVelocity = { x: initialVelX, y: initialVelY, z: initialVelZ };
@@ -440,11 +445,13 @@ export function calculatePuttShot() {
     let totalDistance = ballSpeed * PUTT_DISTANCE_FACTOR; // Simple scaling factor
     totalDistance = Math.max(0.1, totalDistance); // Ensure minimum distance
 
-    // Combine horizontal launch angle with the player's aim angle
-    const aimAngleRad = getShotDirectionAngle() * Math.PI / 180;
-    const baseHorizontalLaunchAngleRad = horizontalLaunchAngle * Math.PI / 180;
-    const finalHorizontalLaunchAngleRad = baseHorizontalLaunchAngleRad + aimAngleRad;
-    console.log(`Calc (Putt): Aim Angle=${getShotDirectionAngle().toFixed(1)}deg, Base Horiz Angle=${horizontalLaunchAngle.toFixed(1)}deg, Final Horiz Angle=${(finalHorizontalLaunchAngleRad * 180 / Math.PI).toFixed(1)}deg`);
+    // Get target line, physics deviation, and relative aim adjustment angles
+    const targetLineAngleRad = getCurrentTargetLineAngle() * Math.PI / 180;
+    const physicsDeviationRad = horizontalLaunchAngle * Math.PI / 180; // Deviation relative to target line
+    const relativeAimAngleRad = getShotDirectionAngle() * Math.PI / 180; // Player's fine-tuning relative to target line
+    // Calculate final absolute launch direction
+    const finalHorizontalLaunchAngleRad = targetLineAngleRad + physicsDeviationRad + relativeAimAngleRad;
+    console.log(`Calc (Putt): TargetLine=${getCurrentTargetLineAngle().toFixed(1)}deg, PhysicsDev=${horizontalLaunchAngle.toFixed(1)}deg, RelativeAim=${getShotDirectionAngle().toFixed(1)}deg, FinalHorizAngle=${(finalHorizontalLaunchAngleRad * 180 / Math.PI).toFixed(1)}deg`);
 
     // Calculate side distance based on the *final* horizontal launch angle and total distance
     let sideDistance = totalDistance * Math.tan(finalHorizontalLaunchAngleRad);

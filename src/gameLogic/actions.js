@@ -22,7 +22,8 @@ import { getDebugTimingData } from './utils.js';
 import { getCurrentGameMode } from '../main.js'; // Import mode checker
 import { getCurrentBallPosition as getPlayHoleBallPosition } from '../modes/playHole.js'; // Import position getter for playHole ball
 import { getFlagPosition } from '../visuals/holeView.js'; // Import flag position getter
-import { getActiveCameraMode, setCameraBehindBall, snapFollowCameraToBall, CameraMode, removeTrajectoryLine, applyAimAngleToCamera } from '../visuals/core.js'; // Import camera functions, line removal, and aim application
+import { getActiveCameraMode, setCameraBehindBall, snapFollowCameraToBall, CameraMode, removeTrajectoryLine, applyAimAngleToCamera, setCameraBehindBallLookingAtTarget } from '../visuals/core.js'; // Import camera functions, line removal, and aim application
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js'; // Need THREE for Vector3
 
 // --- Action Functions for Input Handler ---
 
@@ -245,10 +246,13 @@ export function prepareNextShot() {
     // --- Update Camera Position and Aim for PlayHole Mode ---
     const currentMode = getCurrentGameMode(); // Need to import this if not already available
     if (currentMode === 'play-hole') {
-        const ballPos = getPlayHoleBallPosition(); // Get the new ball position (meters {x, y, z})
+        const ballPosData = getPlayHoleBallPosition(); // Get the new ball position (meters {x, y, z})
         const targetPos = getFlagPosition(); // Get the flag position (meters THREE.Vector3)
         const activeCamMode = getActiveCameraMode();
         const shotType = getCurrentShotType(); // Get current shot type ('full', 'chip', 'putt')
+
+        // Ensure ballPos is a Vector3 for calculations
+        const ballPos = ballPosData ? new THREE.Vector3(ballPosData.x, ballPosData.y, ballPosData.z) : null;
 
         // --- Set Default Aim Angle ---
         if (ballPos && targetPos) {
@@ -261,34 +265,30 @@ export function prepareNextShot() {
             const angleDeg = angleRad * (180 / Math.PI);
             setShotDirectionAngle(angleDeg);
             console.log(`Action: Setting default aim angle to hole: ${angleDeg.toFixed(1)} degrees`);
-            // REMOVED: applyAimAngleToCamera(); - This was causing the reset. The angle is applied within setCameraBehindBall below.
         } else {
             setShotDirectionAngle(0); // Default to 0 if positions are missing
             console.warn("Action: Could not get ball/target position for default aim. Setting angle to 0.");
-            // REMOVED: applyAimAngleToCamera(); - Angle applied below.
         }
 
-        // The aim angle set above will be automatically used by setCameraBehindBall / snapFollowCameraToBall
+        // The aim angle set above will be automatically used by the camera setting functions
         console.log(`Action: Updating camera for next shot. BallPos: (${ballPos?.x.toFixed(1)}, ${ballPos?.z.toFixed(1)}), CamMode: ${activeCamMode}, ShotType: ${shotType}`);
 
-        if (activeCamMode === CameraMode.STATIC || activeCamMode === CameraMode.FOLLOW_BALL) {
-            // If static or follow, update based on mode
+        if (ballPos && targetPos) { // Ensure we have positions before setting camera
+            const distance = ballPos.distanceTo(targetPos);
             if (activeCamMode === CameraMode.STATIC) {
-                // Determine view type based on shot type
-                let viewType = 'range'; // Default for full swing
-                if (shotType === 'chip') viewType = 'chip';
-                else if (shotType === 'putt') viewType = 'putt';
-                setCameraBehindBall(ballPos, viewType);
-            } else { // Follow Ball
+                // Re-apply the specific 'hole' view using the correct function
+                setCameraBehindBallLookingAtTarget(ballPos, targetPos, distance);
+            } else if (activeCamMode === CameraMode.FOLLOW_BALL) {
                 snapFollowCameraToBall(ballPos); // Snap follow cam to new position
+            } else if (activeCamMode === CameraMode.REVERSE_ANGLE || activeCamMode === CameraMode.GREEN_FOCUS) {
+                // If reverse or green view, switch back to the standard 'hole' static view
+                console.log(`Action: Switching from ${activeCamMode} to static hole view.`);
+                setCameraBehindBallLookingAtTarget(ballPos, targetPos, distance);
             }
-        } else if (activeCamMode === CameraMode.REVERSE_ANGLE || activeCamMode === CameraMode.GREEN_FOCUS) {
-            // If reverse or green view, switch to static behind ball
-            console.log(`Action: Switching from ${activeCamMode} to static behind ball view.`);
-            let viewType = 'range'; // Default for full swing
-            if (shotType === 'chip') viewType = 'chip';
-            else if (shotType === 'putt') viewType = 'putt';
-            setCameraBehindBall(ballPos, viewType); // This function also sets mode to STATIC
+        } else {
+             console.warn("Action: Cannot update camera position for next shot, missing ball or target position.");
+             // Optionally reset to a default view if positions are missing
+             // CoreVisuals.resetCameraPosition(); // Example fallback
         }
     }
     // Does NOT call visuals.resetVisuals()

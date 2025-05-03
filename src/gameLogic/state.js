@@ -16,7 +16,8 @@ export let gameState = 'ready'; // ready, backswing, backswingPausedAtTop, downs
 export let currentShotType = 'full'; // 'full', 'chip', 'putt'
 export let swingSpeed = 1.0; // Base speed factor (0.3 to 1.0) - Only for 'full' swing
 export let selectedClub = clubs['7I']; // Default club
-export let shotDirectionAngle = 0; // Angle in degrees relative to forward (0 = straight, negative = left, positive = right)
+export let currentTargetLineAngle = 0; // Absolute angle (degrees) of the intended target line relative to Z-axis
+export let shotDirectionAngle = 0; // Angle in degrees RELATIVE to currentTargetLineAngle (player's fine-tuning adjustment)
 
 // --- Timing Variables ---
 export let backswingStartTime = null;
@@ -53,11 +54,22 @@ export function setGameState(newState) {
 }
 
 export function setShotDirectionAngle(angle) {
+    console.log('set direction angle:', angle);
     // Clamp the angle if needed, or let it wrap? For now, let it be any value.
-    // Consider normalization later if required (e.g., to -180 to 180)
-    shotDirectionAngle = angle;
-    // console.log(`Logic State: Shot Direction Angle set to: ${angle.toFixed(1)} degrees`); // Optional logging
+    // This function now sets the ABSOLUTE target line angle.
+    // The relative adjustment (shotDirectionAngle) is handled separately or defaults to 0.
+    currentTargetLineAngle = angle;
+    shotDirectionAngle = 0; // Reset relative adjustment when target changes
+    console.log(`Logic State: Target Line Angle set to: ${angle.toFixed(1)} degrees. Relative angle reset to 0.`);
 }
+
+// Function to set the RELATIVE adjustment angle
+export function setRelativeShotDirectionAngle(relativeAngle) {
+    // Clamp or normalize as needed
+    shotDirectionAngle = relativeAngle;
+    console.log(`Logic State: Relative Shot Direction Angle set to: ${relativeAngle.toFixed(1)} degrees`);
+}
+
 
 export function setBackswingStartTime(time) {
     backswingStartTime = time;
@@ -176,14 +188,14 @@ export function setShotType(type) {
     // Update visibility of timing bars based on shot type
     updateTimingBarVisibility(type);
 
-    // Update camera position and potentially select club
+    // Update club selection for putt
     switch (type) {
         case 'chip':
-            setCameraForChipView();
+            // Camera is no longer changed here
             // Optionally force a wedge? Or leave club selection open? For now, leave open.
             break;
         case 'putt':
-            setCameraForPuttView();
+            // Camera is no longer changed here
             // Automatically select the Putter internally
             setSelectedClub('PT'); // Assuming 'PT' is the key for the Putter
             // Update the UI dropdown to reflect this change
@@ -191,8 +203,8 @@ export function setShotType(type) {
             break;
         case 'full':
         default:
+            // Camera is no longer changed here
             // If switching *back* from putt, maybe re-select a default iron? Or leave as is?
-            resetCameraPosition(); // Use default range view camera
             break;
     }
 
@@ -223,7 +235,8 @@ export function resetSwingState() { // Added 'export' keyword here
     chipDownswingAnimationFrameId = null;
     puttDownswingAnimationFrameId = null;
     downswingPhaseStartTime = null;
-    shotDirectionAngle = 0; // Reset direction on full state reset
+    shotDirectionAngle = 0; // Reset relative adjustment
+    currentTargetLineAngle = 0; // Reset target line angle
 
     resetUIForNewShot(); // Use the new reset function that preserves ball position
     visuals.resetVisuals(); // Reset visuals (e.g., ball position)
@@ -253,7 +266,9 @@ export function resetSwingVariablesOnly() { // Added 'export' keyword here
     chipDownswingAnimationFrameId = null;
     puttDownswingAnimationFrameId = null;
     downswingPhaseStartTime = null;
-    // shotDirectionAngle = 0; // Should we reset direction here too? Maybe not, allow aiming adjustments between attempts.
+    // Don't reset angles here to allow aiming adjustments between attempts
+    // shotDirectionAngle = 0;
+    // currentTargetLineAngle = 0;
 
     // NOTE: This version does NOT reset UI or Visuals
     console.log("Logic State: Swing variables reset.");
@@ -288,4 +303,5 @@ export const getChipDownswingAnimationFrameId = () => chipDownswingAnimationFram
 export const getPuttDownswingAnimationFrameId = () => puttDownswingAnimationFrameId;
 export const getDownswingPhaseStartTime = () => downswingPhaseStartTime;
 export const getOnShotCompleteCallback = () => onShotCompleteCallback; // Getter for the callback
-export const getShotDirectionAngle = () => shotDirectionAngle;
+export const getShotDirectionAngle = () => shotDirectionAngle; // Gets the RELATIVE adjustment angle
+export const getCurrentTargetLineAngle = () => currentTargetLineAngle; // Gets the ABSOLUTE target line angle

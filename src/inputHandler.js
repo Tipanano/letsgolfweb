@@ -2,9 +2,10 @@
 
 import * as GameLogic from './gameLogic.js'; // Import game logic functions/getters
 // Import specific state functions needed for aiming
-import { getGameState, getCurrentShotType, getShotDirectionAngle, setShotDirectionAngle } from './gameLogic/state.js';
+import { getGameState, getCurrentShotType, getShotDirectionAngle, setShotDirectionAngle, setRelativeShotDirectionAngle, getCurrentTargetLineAngle } from './gameLogic/state.js'; // Added new state functions
 import * as Visuals from './visuals.js'; // Import high-level visuals functions
-import { applyAimAngleToCamera } from './visuals/core.js'; // Import specific core camera function for aiming
+// Import specific core camera functions
+import { applyAimAngleToCamera, zoomCameraIn, zoomCameraOut, YARDS_TO_METERS } from './visuals/core.js';
 // Import specific UI functions needed for input feedback (markers, status updates)
 import {
     adjustBallPosition,
@@ -17,6 +18,7 @@ import {
 } from './ui.js';
 import { getCurrentGameMode } from './main.js'; // Import the function to get the current game mode
 import { prepareNextShot } from './gameLogic/actions.js';
+import { getCurrentBallPosition, getCurrentHoleLayout } from './modes/playHole.js'; // Import playHole getters (Adjusted path)
 // --- Constants for Aiming ---
 const AIM_INCREMENT_FULL = 0.5; // Degrees per key press
 const AIM_INCREMENT_CHIP = 0.2; // Degrees per key press
@@ -53,6 +55,15 @@ export function handleKeyDown(event) {
         return; // Consume event
     }
 
+    // --- Camera Zoom Controls ---
+    if (event.key === '=' || event.key === '+') { // Handle both '=' and '+' for zoom in
+        zoomCameraIn();
+        return; // Consume event
+    } else if (event.key === '-') {
+        zoomCameraOut();
+        return; // Consume event
+    }
+
     // --- Ball Position Adjustment (Only when ready) ---
     if (gameState === 'ready') {
         if (event.key === 'ArrowUp') {
@@ -72,9 +83,10 @@ export function handleKeyDown(event) {
             if (currentShotType === 'full') increment = AIM_INCREMENT_FULL;
             else if (currentShotType === 'chip') increment = AIM_INCREMENT_CHIP;
             else if (currentShotType === 'putt') increment = AIM_INCREMENT_PUTT;
-            setShotDirectionAngle(currentAngle - increment);
+            // Adjust the RELATIVE angle
+            setRelativeShotDirectionAngle(currentAngle - increment);
             applyAimAngleToCamera(); // Update camera view (using direct import)
-            console.log(`Aim Left: New Angle = ${getShotDirectionAngle().toFixed(1)}`);
+            console.log(`Aim Left: New Relative Angle = ${getShotDirectionAngle().toFixed(1)}`);
             return;
         } else if (event.key === 'ArrowRight') {
             event.preventDefault();
@@ -83,10 +95,48 @@ export function handleKeyDown(event) {
             if (currentShotType === 'full') increment = AIM_INCREMENT_FULL;
             else if (currentShotType === 'chip') increment = AIM_INCREMENT_CHIP;
             else if (currentShotType === 'putt') increment = AIM_INCREMENT_PUTT;
-            setShotDirectionAngle(currentAngle + increment);
+            // Adjust the RELATIVE angle
+            setRelativeShotDirectionAngle(currentAngle + increment);
             applyAimAngleToCamera(); // Update camera view (using direct import)
-            console.log(`Aim Right: New Angle = ${getShotDirectionAngle().toFixed(1)}`);
+            console.log(`Aim Right: New Relative Angle = ${getShotDirectionAngle().toFixed(1)}`);
             return;
+        }
+        // --- Aim Reset to Hole (Only when ready and in play-hole mode) ---
+        else if (event.key === 'h') {
+            event.preventDefault();
+            const currentMode = getCurrentGameMode();
+            if (currentMode !== 'play-hole') return; // Only in play hole mode
+
+            const ballPos = getCurrentBallPosition(); // {x, y, z} in meters
+            const layout = getCurrentHoleLayout();
+            if (!ballPos || !layout) {
+                console.warn("Aim Reset (H): Could not get ball/layout info.");
+                return; // Safety check
+            }
+            const flagPosLayout = layout.flagPosition; // {x, z} in yards
+
+            // Convert flag position to meters
+            const flagPosMeters = { x: flagPosLayout.x * YARDS_TO_METERS, z: flagPosLayout.z * YARDS_TO_METERS };
+
+            // Calculate the direction vector (target - source) on the XZ plane
+            const dx = flagPosMeters.x - ballPos.x;
+            const dz = flagPosMeters.z - ballPos.z;
+
+            // Calculate the angle using Math.atan2(dx, dz)
+            // atan2 gives angle relative to +Z axis (North), where East (+X) is +90 deg
+            const angleRadians = Math.atan2(dx, dz);
+
+            // Convert to degrees
+            const angleDegrees = angleRadians * (180 / Math.PI);
+
+            // Update the state
+            setShotDirectionAngle(angleDegrees);
+
+            // Update the camera view
+            applyAimAngleToCamera();
+
+            console.log(`Aim Reset (H): Angle set to ${angleDegrees.toFixed(1)} degrees`);
+            return; // Consume event
         }
     }
 

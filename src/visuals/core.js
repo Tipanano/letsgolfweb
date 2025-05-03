@@ -1,5 +1,6 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
-import { getShotDirectionAngle } from '../gameLogic/state.js'; // Import for aiming
+// Import both relative and target line angles
+import { getShotDirectionAngle, getCurrentTargetLineAngle } from '../gameLogic/state.js';
 // Import position getters needed for re-applying hole view camera
 import { getCurrentBallPosition as getPlayHoleBallPosition } from '../modes/playHole.js';
 import { getFlagPosition } from './holeView.js';
@@ -29,7 +30,7 @@ const BALL_PIVOT_POINT = new THREE.Vector3(0, BALL_RADIUS, 0); // Define pivot f
 // --- Helper Function for Rotation ---
 // Rotates a point (Vector3) around a pivot (Vector3) on the XZ plane by an angle in degrees
 function rotatePointAroundPivot(point, pivot, angleDegrees) {
-    const angleRad = THREE.MathUtils.degToRad(angleDegrees);
+    const angleRad = THREE.MathUtils.degToRad(-angleDegrees); // Negate the angle (Keep negation for reversed controls)
     const cos = Math.cos(angleRad);
     const sin = Math.sin(angleRad);
 
@@ -142,9 +143,6 @@ function animate(timestamp) {
             const nextPointIndex = Math.min(pointIndex + 1, currentTrajectoryPoints.length - 1);
             const segmentProgress = (progress * (currentTrajectoryPoints.length - 1)) - pointIndex; // Progress within the current segment
 
-            // const nextPointIndex = Math.min(pointIndex + 1, currentTrajectoryPoints.length - 1); // Already declared above
-            // const segmentProgress = (progress * (currentTrajectoryPoints.length - 1)) - pointIndex; // Already declared above
-
             const currentPoint = currentTrajectoryPoints[pointIndex];
             const nextPoint = currentTrajectoryPoints[nextPointIndex]; // Use the already declared nextPointIndex
 
@@ -208,13 +206,15 @@ let cameraLookAtTarget = new THREE.Vector3(); // For smooth lookAt lerping
 function updateCamera(timestamp) {
     if (!camera || !ball) return;
 
-    const aimAngle = getShotDirectionAngle(); // Get current aim angle
+    // Calculate the total absolute aim angle for camera rotation during animation
+    const totalAimAngle = getCurrentTargetLineAngle() + getShotDirectionAngle();
 
     if (activeCameraMode === CameraMode.FOLLOW_BALL && isBallAnimating) {
         // Base offset (behind and above)
         const baseOffset = new THREE.Vector3(0, 3, -6);
-        // Rotate the offset based on the aim angle around the Y-axis using applyAxisAngle
-        const rotatedOffset = baseOffset.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(aimAngle));
+        // Rotate the offset based on the TOTAL aim angle around the Y-axis using applyAxisAngle
+        // Keep negation for reversed controls
+        const rotatedOffset = baseOffset.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(-totalAimAngle));
 
         // Calculate target camera position relative to the moving ball
         const targetPosition = new THREE.Vector3().copy(ball.position).add(rotatedOffset);
@@ -230,7 +230,6 @@ function updateCamera(timestamp) {
         // Static camera position is set by the setCamera... functions.
         // Aiming adjustments for static cameras are applied *when aiming* via applyAimAngleToCamera,
         // not continuously in the update loop. No per-frame update needed here unless adding transitions.
-        // unless we add smooth transitions *between* static views later.
     } else if (activeCameraMode === CameraMode.REVERSE_ANGLE) {
         // Position is set once by setCameraReverseAngle, no per-frame update needed.
     } else if (activeCameraMode === CameraMode.GREEN_FOCUS) {
@@ -243,52 +242,56 @@ function updateCamera(timestamp) {
 // --- Function to Apply Aim Angle (Called by Input Handler) ---
 export function applyAimAngleToCamera() {
     if (!camera) return;
-    const aimAngle = getShotDirectionAngle(); // Get the latest angle
-    console.log(`Visuals: Applying aim angle ${aimAngle.toFixed(1)} to camera mode ${activeCameraMode}, static view: ${currentStaticView}`);
+    // Calculate the total absolute aim angle for camera rotation
+    const totalAimAngle = getCurrentTargetLineAngle() + getShotDirectionAngle();
+    console.log(`Visuals: Applying total aim angle ${totalAimAngle.toFixed(1)} (Target: ${getCurrentTargetLineAngle().toFixed(1)}, Relative: ${getShotDirectionAngle().toFixed(1)}) to camera mode ${activeCameraMode}, static view: ${currentStaticView}`);
 
     if (activeCameraMode === CameraMode.STATIC) {
         // Re-apply the current static view using its dedicated setter function.
-        // These setters already read the latest aimAngle internally.
+        // Pass the TOTAL angle now.
         switch (currentStaticView) {
             case 'range':
-                resetCameraPosition(); // Applies aim angle internally
+                resetCameraPosition(totalAimAngle); // Pass total angle
                 break;
             case 'chip':
-                setCameraForChipView(); // Applies aim angle internally
+                setCameraForChipView(totalAimAngle); // Pass total angle
                 break;
             case 'putt':
-                setCameraForPuttView(); // Applies aim angle internally
+                setCameraForPuttView(totalAimAngle); // Pass total angle
                 break;
             case 'target':
                 // Need the stored targetZ distance for this one
                 if (currentTargetZ !== undefined) {
-                    setCameraForTargetView(currentTargetZ); // Applies aim angle internally
+                    setCameraForTargetView(currentTargetZ, totalAimAngle); // Pass total angle
                 } else {
                      console.warn("applyAimAngleToCamera: Cannot re-apply target view, currentTargetZ is undefined. Resetting to range.");
-                     resetCameraPosition();
+                     resetCameraPosition(0); // Reset with 0 angle
                 }
                 break;
             case 'tee': // Tee view might also need its length parameter? For now, just call it.
-                 setCameraForHoleTeeView(); // Applies aim angle internally
+                 setCameraForHoleTeeView(undefined, totalAimAngle); // Pass total angle (undefined for length)
                  break;
             case 'hole':
                 // This is the specific view set by setCameraBehindBallLookingAtTarget.
                 // Re-setting requires current ball/target positions.
                 const ballPos = getPlayHoleBallPosition();
                 const targetPos = getFlagPosition();
+                // --- DEBUG LOGGING ---
+                console.log(`applyAimAngleToCamera (case 'hole'): ballPos=`, ballPos, `targetPos=`, targetPos);
+                // --- END DEBUG LOGGING ---
                 if (ballPos && targetPos) {
                     const ballPosVec3 = ballPos instanceof THREE.Vector3 ? ballPos : new THREE.Vector3(ballPos.x, ballPos.y, ballPos.z);
                     const distance = ballPosVec3.distanceTo(targetPos);
                     // Re-apply the specific hole view function with current positions and the new angle
-                    setCameraBehindBallLookingAtTarget(ballPosVec3, targetPos, distance);
+                    setCameraBehindBallLookingAtTarget(ballPosVec3, targetPos, distance, totalAimAngle); // Pass total angle
                 } else {
                     console.warn("applyAimAngleToCamera: Could not get ball/target position for hole view update. Resetting to range.");
-                    resetCameraPosition(); // Fallback if positions unavailable
+                    resetCameraPosition(0); // Fallback if positions unavailable (reset with 0 angle)
                 }
                 break;
             default:
                  console.warn(`applyAimAngleToCamera: Unknown currentStaticView '${currentStaticView}'. Resetting to range.`);
-                 resetCameraPosition();
+                 resetCameraPosition(0); // Reset with 0 angle
                  break;
         }
     } else if (activeCameraMode === CameraMode.FOLLOW_BALL) {
@@ -299,8 +302,8 @@ export function applyAimAngleToCamera() {
 
         // Base offset (behind and above)
         const baseOffset = new THREE.Vector3(0, 3, -6);
-        // Rotate the offset
-        const rotatedOffset = baseOffset.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(aimAngle));
+        // Rotate the offset using the TOTAL angle (keep negation for reversed controls)
+        const rotatedOffset = baseOffset.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(-totalAimAngle));
         // Calculate position relative to the pivot point
         const targetPosition = pivot.clone().add(rotatedOffset);
         // Look at the pivot point (or slightly ahead based on angle?)
@@ -419,10 +422,12 @@ export function setActiveCameraMode(mode) {
     if (mode === CameraMode.FOLLOW_BALL && camera && ball) {
         if (currentStaticView !== 'hole') { // Check if not pre-positioned for hole view
             console.log("Setting default initial follow ball camera position.");
-            const targetPosition = new THREE.Vector3().copy(ball.position).add(new THREE.Vector3(0, 3, -6)); // Default offset from ball
-            const lookAtPosition = new THREE.Vector3().copy(ball.position); // Look at ball
-            camera.position.copy(targetPosition); // Snap position
-            camera.lookAt(lookAtPosition);      // Snap lookAt
+            // Use snapFollowCameraToBall to ensure consistent aiming logic
+            snapFollowCameraToBall(ball.position);
+            // const targetPosition = new THREE.Vector3().copy(ball.position).add(new THREE.Vector3(0, 3, -6)); // Default offset from ball
+            // const lookAtPosition = new THREE.Vector3().copy(ball.position); // Look at ball
+            // camera.position.copy(targetPosition); // Snap position
+            // camera.lookAt(lookAtPosition);      // Snap lookAt
         } else {
              console.log("Skipping default follow ball setup; using pre-positioned hole view.");
              // Reset currentStaticView so subsequent static camera calls work correctly
@@ -442,73 +447,82 @@ export function applyStaticCameraView(viewType = null) {
     console.log(`Applying static camera view: ${viewToApply}`);
     activeCameraMode = CameraMode.STATIC; // Ensure mode is static
 
+    // Calculate the total angle to apply for the static view
+    const totalAimAngle = getCurrentTargetLineAngle() + getShotDirectionAngle();
+
     switch (viewToApply) {
         case 'target':
             // Re-apply the target view using the stored Z distance
             if (currentTargetZ !== undefined) {
-                setCameraForTargetView(currentTargetZ); // Call the setter with the stored value
+                setCameraForTargetView(currentTargetZ, totalAimAngle); // Pass total angle
             } else {
                 console.error("applyStaticCameraView: Cannot apply target view, currentTargetZ is undefined.");
-                // Fallback to range view?
-                resetCameraPosition();
+                resetCameraPosition(0); // Reset with 0 angle
             }
             break;
         case 'chip':
-            setCameraForChipView();
+            setCameraForChipView(totalAimAngle); // Pass total angle
             break;
         case 'putt':
-            setCameraForPuttView();
+            setCameraForPuttView(totalAimAngle); // Pass total angle
             break;
         case 'tee': // Add case for the hole tee view (overview)
-            setCameraForHoleTeeView();
+            setCameraForHoleTeeView(undefined, totalAimAngle); // Pass total angle
             break;
         case 'hole': // Add case for the behind-ball hole view
             // This view is set dynamically by setCameraBehindBallLookingAtTarget,
             // This case should ideally not be hit directly when aiming anymore,
             // as applyAimAngleToCamera handles it. But keep the warning just in case.
-            console.warn("applyStaticCameraView('hole') called. This view should be set via setCameraBehindBallLookingAtTarget.");
-            // Avoid resetting to range here if called during aiming adjustment.
-            // The logic in applyAimAngleToCamera should handle re-applying the view correctly.
-            // If we reach here some other way, maybe a different fallback is needed?
-            // For now, let's just log the warning and do nothing to prevent the jump.
-            // resetCameraPosition(); // Avoid resetting to range
+            console.warn("applyStaticCameraView('hole') called. This view should be set via setCameraBehindBallLookingAtTarget or applyAimAngleToCamera.");
+            // Attempt to re-apply using current ball/target if possible
+            const ballPos = getPlayHoleBallPosition();
+            const targetPos = getFlagPosition();
+            if (ballPos && targetPos) {
+                const ballPosVec3 = ballPos instanceof THREE.Vector3 ? ballPos : new THREE.Vector3(ballPos.x, ballPos.y, ballPos.z);
+                const distance = ballPosVec3.distanceTo(targetPos);
+                setCameraBehindBallLookingAtTarget(ballPosVec3, targetPos, distance, totalAimAngle); // Pass total angle
+            } else {
+                 console.warn("applyStaticCameraView: Could not get ball/target position for hole view update. Resetting to range.");
+                 resetCameraPosition(0); // Fallback if positions unavailable
+            }
             break;
         case 'range':
         default:
-            resetCameraPosition(); // Default to range view
+            resetCameraPosition(totalAimAngle); // Pass total angle
             break;
     }
 }
 
 
 // --- Specific Camera Setters ---
+// Modified to accept angleToUse parameter
 
 // Sets camera to default Range view
-export function resetCameraPosition() { // Renamed slightly for clarity (was default view)
+export function resetCameraPosition(angleToUse = 0) { // Accept angle parameter
     if (!camera) return;
-    const aimAngle = getShotDirectionAngle();
+    // const aimAngle = getShotDirectionAngle(); // REMOVED - Use parameter
     const pivot = BALL_PIVOT_POINT;
 
     // Base position and lookAt relative to pivot (0,0,0) before rotation
     const baseCamPos = new THREE.Vector3(0, 18, -25);
     const baseLookAt = new THREE.Vector3(0, 0, 80);
 
-    // Rotate points around the pivot
-    const rotatedCamPos = rotatePointAroundPivot(baseCamPos.add(pivot), pivot, aimAngle);
-    const rotatedLookAt = rotatePointAroundPivot(baseLookAt.add(pivot), pivot, aimAngle);
+    // Rotate points around the pivot using the provided angle
+    const rotatedCamPos = rotatePointAroundPivot(baseCamPos.add(pivot), pivot, angleToUse);
+    const rotatedLookAt = rotatePointAroundPivot(baseLookAt.add(pivot), pivot, angleToUse);
 
     camera.position.copy(rotatedCamPos);
     camera.lookAt(rotatedLookAt);
     currentStaticView = 'range'; // Update stored static view type
-    console.log(`Static camera set to: Range View (Angle: ${aimAngle.toFixed(1)})`);
+    console.log(`Static camera set to: Range View (Angle: ${angleToUse.toFixed(1)})`);
 }
 
 // Sets camera for Target view
 let currentTargetZ = 150; // Store target Z for potential re-application
-export function setCameraForTargetView(targetZ = 150) {
+export function setCameraForTargetView(targetZ = 150, angleToUse = 0) { // Accept angle parameter
     if (!camera) return;
     currentTargetZ = targetZ; // Store the Z distance
-    const aimAngle = getShotDirectionAngle();
+    // const aimAngle = getShotDirectionAngle(); // REMOVED - Use parameter
     const pivot = BALL_PIVOT_POINT; // Assume aiming relative to the ball at the tee
 
     // Base position and lookAt relative to pivot (0,0,0) before rotation
@@ -517,60 +531,60 @@ export function setCameraForTargetView(targetZ = 150) {
     const baseCamPos = new THREE.Vector3(0, cameraHeight, targetZ - cameraDistBack);
     const baseLookAt = new THREE.Vector3(0, 0, targetZ / 1.5); // Look towards target Z
 
-    // Rotate points around the pivot
-    const rotatedCamPos = rotatePointAroundPivot(baseCamPos.add(pivot), pivot, aimAngle);
-    const rotatedLookAt = rotatePointAroundPivot(baseLookAt.add(pivot), pivot, aimAngle);
+    // Rotate points around the pivot using the provided angle
+    const rotatedCamPos = rotatePointAroundPivot(baseCamPos.add(pivot), pivot, angleToUse);
+    const rotatedLookAt = rotatePointAroundPivot(baseLookAt.add(pivot), pivot, angleToUse);
 
     camera.position.copy(rotatedCamPos);
     camera.lookAt(rotatedLookAt);
     currentStaticView = 'target'; // Update stored static view type
-    console.log(`Static camera set to: Target View (Z=${targetZ.toFixed(1)}, Angle: ${aimAngle.toFixed(1)})`);
+    console.log(`Static camera set to: Target View (Z=${targetZ.toFixed(1)}, Angle: ${angleToUse.toFixed(1)})`);
 }
 
 // Sets camera for Chip view
-export function setCameraForChipView() {
+export function setCameraForChipView(angleToUse = 0) { // Accept angle parameter
     if (!camera) return;
-    const aimAngle = getShotDirectionAngle();
+    // const aimAngle = getShotDirectionAngle(); // REMOVED - Use parameter
     const pivot = ball ? ball.position.clone() : BALL_PIVOT_POINT.clone(); // Pivot around current ball pos if available
 
     // Base position and lookAt relative to pivot before rotation
     const baseCamPos = new THREE.Vector3(0, 4, -8);
     const baseLookAt = new THREE.Vector3(0, 0, 20);
 
-    // Rotate points around the pivot
-    const rotatedCamPos = rotatePointAroundPivot(baseCamPos.add(pivot), pivot, aimAngle);
-    const rotatedLookAt = rotatePointAroundPivot(baseLookAt.add(pivot), pivot, aimAngle);
+    // Rotate points around the pivot using the provided angle
+    const rotatedCamPos = rotatePointAroundPivot(baseCamPos.add(pivot), pivot, angleToUse);
+    const rotatedLookAt = rotatePointAroundPivot(baseLookAt.add(pivot), pivot, angleToUse);
 
     camera.position.copy(rotatedCamPos);
     camera.lookAt(rotatedLookAt);
     currentStaticView = 'chip'; // Update stored static view type
-    console.log(`Static camera set to: Chip View (Angle: ${aimAngle.toFixed(1)})`);
+    console.log(`Static camera set to: Chip View (Angle: ${angleToUse.toFixed(1)})`);
 }
 
 // Sets camera for Putt view
-export function setCameraForPuttView() {
+export function setCameraForPuttView(angleToUse = 0) { // Accept angle parameter
     if (!camera) return;
-    const aimAngle = getShotDirectionAngle();
+    // const aimAngle = getShotDirectionAngle(); // REMOVED - Use parameter
     const pivot = ball ? ball.position.clone() : BALL_PIVOT_POINT.clone(); // Pivot around current ball pos if available
 
     // Use chip view settings for now
     const baseCamPos = new THREE.Vector3(0, 4, -8);
     const baseLookAt = new THREE.Vector3(0, 0, 20);
 
-    // Rotate points around the pivot
-    const rotatedCamPos = rotatePointAroundPivot(baseCamPos.add(pivot), pivot, aimAngle);
-    const rotatedLookAt = rotatePointAroundPivot(baseLookAt.add(pivot), pivot, aimAngle);
+    // Rotate points around the pivot using the provided angle
+    const rotatedCamPos = rotatePointAroundPivot(baseCamPos.add(pivot), pivot, angleToUse);
+    const rotatedLookAt = rotatePointAroundPivot(baseLookAt.add(pivot), pivot, angleToUse);
 
     camera.position.copy(rotatedCamPos);
     camera.lookAt(rotatedLookAt);
     currentStaticView = 'putt'; // Update stored static view type
-    console.log(`Static camera set to: Putt View (Angle: ${aimAngle.toFixed(1)})`);
+    console.log(`Static camera set to: Putt View (Angle: ${angleToUse.toFixed(1)})`);
 }
 
 // Sets camera for Hole Tee view (overview)
-export function setCameraForHoleTeeView(holeLengthYards = 400) {
+export function setCameraForHoleTeeView(holeLengthYards = 400, angleToUse = 0) { // Accept angle parameter
     if (!camera) return;
-    const aimAngle = getShotDirectionAngle(); // Allow aiming from tee view? Maybe not needed, but include for consistency.
+    // const aimAngle = getShotDirectionAngle(); // REMOVED - Use parameter
     const pivot = BALL_PIVOT_POINT; // Pivot around tee box
 
     const holeLengthMeters = holeLengthYards * YARDS_TO_METERS;
@@ -578,72 +592,59 @@ export function setCameraForHoleTeeView(holeLengthYards = 400) {
     const baseCamPos = new THREE.Vector3(0, 30, -40);
     const baseLookAt = new THREE.Vector3(0, 5, holeLengthMeters * 0.6);
 
-    // Rotate points around the pivot
-    const rotatedCamPos = rotatePointAroundPivot(baseCamPos.add(pivot), pivot, aimAngle);
-    const rotatedLookAt = rotatePointAroundPivot(baseLookAt.add(pivot), pivot, aimAngle);
+    // Rotate points around the pivot using the provided angle
+    const rotatedCamPos = rotatePointAroundPivot(baseCamPos.add(pivot), pivot, angleToUse);
+    const rotatedLookAt = rotatePointAroundPivot(baseLookAt.add(pivot), pivot, angleToUse);
 
     camera.position.copy(rotatedCamPos);
     camera.lookAt(rotatedLookAt);
     currentStaticView = 'tee'; // Update stored static view type
-    console.log(`Static camera set to: Hole Tee View (Angle: ${aimAngle.toFixed(1)}, looking towards Z=${(holeLengthMeters * 0.6).toFixed(1)})`);
+    console.log(`Static camera set to: Hole Tee View (Angle: ${angleToUse.toFixed(1)}, looking towards Z=${(holeLengthMeters * 0.6).toFixed(1)})`);
 }
 
 // Sets camera behind the ball, looking directly at a target, adjusting distance based on proximity
-// This function ALREADY calculates position relative to ball/target, so we just need to apply the aim angle rotation *around the ballPosition* at the end.
-export function setCameraBehindBallLookingAtTarget(ballPosition, targetPosition, distanceToTarget) {
+export function setCameraBehindBallLookingAtTarget(ballPosition, targetPosition, distanceToTarget, angleToUse = 0) { // Accept angle parameter
     if (!camera || !ballPosition || !targetPosition || distanceToTarget === undefined) return;
 
-    const aimAngle = getShotDirectionAngle();
+    // const aimAngle = getShotDirectionAngle(); // REMOVED - Use parameter
     const pivot = ballPosition.clone(); // Pivot around the current ball position
 
     // --- Calculate Base Position and LookAt (as before) ---
-    // Define min/max values for interpolation
-    const maxDist = 50; // Distance at which interpolation starts/ends
-    const minDistBehind = 8; // Distance behind ball at 0m distance (like chip)
-    const maxDistBehind = 25; // Distance behind ball at maxDist or greater
-    const minHeight = 4;    // Height at 0m distance (like chip)
-    const maxHeight = 18;   // Height at maxDist or greater
-
-    // Clamp distance and calculate interpolation factor (0 = close, 1 = far)
+    const maxDist = 50;
+    const minDistBehind = 8;
+    const maxDistBehind = 25;
+    const minHeight = 4;
+    const maxHeight = 18;
     const clampedDistance = Math.min(distanceToTarget, maxDist);
-    const interpFactor = clampedDistance / maxDist; // Goes from 0 to 1 as distance increases
-
-    // Interpolate distanceBehind and cameraHeight
+    const interpFactor = clampedDistance / maxDist;
     const distanceBehind = THREE.MathUtils.lerp(minDistBehind, maxDistBehind, interpFactor);
     const cameraHeight = THREE.MathUtils.lerp(minHeight, maxHeight, interpFactor);
-
     console.log(`Distance: ${distanceToTarget.toFixed(1)}m, Interp: ${interpFactor.toFixed(2)}, DistBehind: ${distanceBehind.toFixed(1)}, Height: ${cameraHeight.toFixed(1)}`);
-
-    // Calculate direction from target to ball (ignoring y for direction calculation)
     const direction = new THREE.Vector3(ballPosition.x - targetPosition.x, 0, ballPosition.z - targetPosition.z).normalize();
-
-    // Calculate base camera position (before rotation)
     const baseCamPos = new THREE.Vector3()
         .copy(ballPosition)
-        .addScaledVector(direction, distanceBehind) // Move back along the direction vector
-        .add(new THREE.Vector3(0, cameraHeight, 0)); // Add height
-
-    // Base lookAt is the target position (before rotation)
+        .addScaledVector(direction, distanceBehind)
+        .add(new THREE.Vector3(0, cameraHeight, 0));
     const baseLookAt = targetPosition.clone();
 
-    // --- Rotate Position and LookAt around the ball (pivot) ---
-    const rotatedCamPos = rotatePointAroundPivot(baseCamPos, pivot, aimAngle);
-    const rotatedLookAt = rotatePointAroundPivot(baseLookAt, pivot, aimAngle); // Rotate the lookAt target as well
+    // --- Rotate Position and LookAt around the ball (pivot) using the provided angle ---
+    const rotatedCamPos = rotatePointAroundPivot(baseCamPos, pivot, angleToUse);
+    const rotatedLookAt = rotatePointAroundPivot(baseLookAt, pivot, angleToUse); // Rotate the lookAt target as well
 
     camera.position.copy(rotatedCamPos);
     camera.lookAt(rotatedLookAt); // Look at the rotated target point
     currentStaticView = 'hole'; // Update stored static view type
     setActiveCameraMode(CameraMode.STATIC); // Ensure mode is static
 
-    console.log(`Static camera set to: Hole View (Angle: ${aimAngle.toFixed(1)}, behind ball at ${ballPosition.z.toFixed(1)}, looking towards ${targetPosition.z.toFixed(1)})`);
+    console.log(`Static camera set to: Hole View (Angle: ${angleToUse.toFixed(1)}, behind ball at ${ballPosition.z.toFixed(1)}, looking towards ${targetPosition.z.toFixed(1)})`);
 }
 
 // Sets the initial position and lookAt for the follow camera, aiming at a target
-// This should also incorporate the aim angle.
 export function setInitialFollowCameraLookingAtTarget(ballPosition, targetPosition) {
     if (!camera || !ballPosition || !targetPosition) return;
 
-    const aimAngle = getShotDirectionAngle();
+    // Calculate the total angle here
+    const totalAimAngle = getCurrentTargetLineAngle() + getShotDirectionAngle();
     const pivot = ballPosition.clone(); // Pivot around the ball
 
     const distanceBehind = 6; // How far behind the ball
@@ -661,16 +662,16 @@ export function setInitialFollowCameraLookingAtTarget(ballPosition, targetPositi
     // Base lookAt is the target position (before rotation)
     const baseLookAt = targetPosition.clone();
 
-    // --- Rotate Position and LookAt around the ball (pivot) ---
-    const rotatedCamPos = rotatePointAroundPivot(baseCamPos, pivot, aimAngle);
-    const rotatedLookAt = rotatePointAroundPivot(baseLookAt, pivot, aimAngle);
+    // --- Rotate Position and LookAt around the ball (pivot) using the total angle ---
+    const rotatedCamPos = rotatePointAroundPivot(baseCamPos, pivot, totalAimAngle);
+    const rotatedLookAt = rotatePointAroundPivot(baseLookAt, pivot, totalAimAngle);
 
     camera.position.copy(rotatedCamPos);   // Set initial position
     camera.lookAt(rotatedLookAt); // Set initial lookAt
     currentStaticView = 'hole'; // Set flag to indicate pre-positioning
 
     // DO NOT change activeCameraMode here, let the calling function do that
-    console.log(`Initial follow camera position set (Angle: ${aimAngle.toFixed(1)}) behind ball at ${ballPosition.z.toFixed(1)}, looking towards ${targetPosition.z.toFixed(1)}`);
+    console.log(`Initial follow camera position set (Total Angle: ${totalAimAngle.toFixed(1)}) behind ball at ${ballPosition.z.toFixed(1)}, looking towards ${targetPosition.z.toFixed(1)}`);
 }
 
 // Sets camera for Reverse Angle view - Aiming likely not applicable here
@@ -702,15 +703,15 @@ export function setCameraGreenFocus(greenCenter, greenRadius) {
 }
 
 // Sets camera to a static view behind a specific target position, mimicking chip/putt/range views
-// This function is likely superseded by setCameraBehindBallLookingAtTarget or the specific view setters,
-// but let's update it for aiming consistency.
-export function setCameraBehindBall(targetPosition, viewType = 'range') {
+export function setCameraBehindBall(targetPosition, viewType = 'range') { // Keep original signature for now
     if (!camera || !targetPosition) return;
+
+    // Calculate total angle internally for this specific function
+    const totalAimAngle = getCurrentTargetLineAngle() + getShotDirectionAngle();
 
     // Ensure targetPosition is a THREE.Vector3
     const targetPosVec3 = targetPosition instanceof THREE.Vector3 ? targetPosition : new THREE.Vector3(targetPosition.x, targetPosition.y, targetPosition.z);
 
-    const aimAngle = getShotDirectionAngle();
     const pivot = targetPosVec3.clone(); // Pivot around the target position (ball) - Use Vector3
 
     let baseCamPos = new THREE.Vector3();
@@ -732,32 +733,33 @@ export function setCameraBehindBall(targetPosition, viewType = 'range') {
             break;
     }
 
-    // Rotate points around the pivot
-    const rotatedCamPos = rotatePointAroundPivot(baseCamPos.add(pivot), pivot, aimAngle); // baseCamPos is relative, add pivot before rotating
-    const rotatedLookAt = rotatePointAroundPivot(baseLookAtPos.add(pivot), pivot, aimAngle); // baseLookAtPos is relative, add pivot before rotating
+    // Rotate points around the pivot using the total angle
+    const rotatedCamPos = rotatePointAroundPivot(baseCamPos.add(pivot), pivot, totalAimAngle); // baseCamPos is relative, add pivot before rotating
+    const rotatedLookAt = rotatePointAroundPivot(baseLookAtPos.add(pivot), pivot, totalAimAngle); // baseLookAtPos is relative, add pivot before rotating
 
     camera.position.copy(rotatedCamPos);
     camera.lookAt(rotatedLookAt);
     setActiveCameraMode(CameraMode.STATIC); // Ensure mode is static
 
-    console.log(`Static camera set behind ball (Angle: ${aimAngle.toFixed(1)}) at (${targetPosVec3.x.toFixed(1)}, ${targetPosVec3.z.toFixed(1)}) with view type: ${currentStaticView}`);
+    console.log(`Static camera set behind ball (Total Angle: ${totalAimAngle.toFixed(1)}) at (${targetPosVec3.x.toFixed(1)}, ${targetPosVec3.z.toFixed(1)}) with view type: ${currentStaticView}`);
 }
 
 // Snaps the follow camera instantly to its starting offset relative to a target position
-// This should also incorporate the aim angle.
-export function snapFollowCameraToBall(targetPosition) {
+export function snapFollowCameraToBall(targetPosition) { // Keep original signature
     if (!camera || !targetPosition || activeCameraMode !== CameraMode.FOLLOW_BALL) return;
+
+     // Calculate total angle internally
+    const totalAimAngle = getCurrentTargetLineAngle() + getShotDirectionAngle();
 
      // Ensure targetPosition is a THREE.Vector3
     const targetPosVec3 = targetPosition instanceof THREE.Vector3 ? targetPosition : new THREE.Vector3(targetPosition.x, targetPosition.y, targetPosition.z);
 
-    const aimAngle = getShotDirectionAngle();
     const pivot = targetPosVec3.clone(); // Pivot around the target position - Use Vector3
 
-    console.log(`Snapping follow ball camera position (Angle: ${aimAngle.toFixed(1)}).`);
+    console.log(`Snapping follow ball camera position (Total Angle: ${totalAimAngle.toFixed(1)}).`);
     const baseOffset = new THREE.Vector3(0, 3, -6); // Standard follow offset
-    // Rotate the offset
-    const rotatedOffset = baseOffset.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(aimAngle));
+    // Rotate the offset using the total angle (keep negation for reversed controls)
+    const rotatedOffset = baseOffset.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(-totalAimAngle));
     // Calculate position relative to the pivot
     const camPos = pivot.clone().add(rotatedOffset);
     const lookAtPos = pivot; // Look at the ball
@@ -766,6 +768,24 @@ export function snapFollowCameraToBall(targetPosition) {
     camera.lookAt(lookAtPos);      // Snap lookAt
 }
 
+// --- Zoom Functions ---
+const MIN_FOV = 10; // Minimum Field of View (Zoom In Limit)
+const MAX_FOV = 90; // Maximum Field of View (Zoom Out Limit)
+const ZOOM_STEP = 5;  // How much FOV changes per step
+
+export function zoomCameraIn() {
+    if (!camera) return;
+    camera.fov = Math.max(MIN_FOV, camera.fov - ZOOM_STEP);
+    camera.updateProjectionMatrix();
+    console.log(`Zoom In: FOV = ${camera.fov}`);
+}
+
+export function zoomCameraOut() {
+    if (!camera) return;
+    camera.fov = Math.min(MAX_FOV, camera.fov + ZOOM_STEP);
+    camera.updateProjectionMatrix();
+    console.log(`Zoom Out: FOV = ${camera.fov}`);
+}
 
 // --- Getters ---
 export function getActiveCameraMode() {
