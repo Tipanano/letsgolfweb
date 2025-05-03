@@ -8,7 +8,7 @@ import { YARDS_TO_METERS, BALL_RADIUS } from '../visuals/core.js'; // For calcul
 let currentHoleLayout = null;
 let shotsTaken = 0;
 let score = 0; // Could be relative to par later
-let currentBallPosition = { x: 0, y: BALL_RADIUS, z: 0 }; // Start at origin (tee) in meters
+let currentBallPosition = null; // Initialize later in initializeMode
 let isHoledOut = false;
 let currentModeActive = false;
 
@@ -22,7 +22,8 @@ export function initializeMode() {
     shotsTaken = 0;
     score = 0;
     isHoledOut = false;
-    currentBallPosition = { x: 0, y: BALL_RADIUS, z: 0 }; // Reset ball to tee
+    // Set initial ball position here, where BALL_RADIUS is definitely available
+    currentBallPosition = { x: 0, y: BALL_RADIUS, z: 0 };
 
     // 1. Generate the hole layout
     currentHoleLayout = holeGenerator.generateBasicHole();

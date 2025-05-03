@@ -16,6 +16,7 @@ export let gameState = 'ready'; // ready, backswing, backswingPausedAtTop, downs
 export let currentShotType = 'full'; // 'full', 'chip', 'putt'
 export let swingSpeed = 1.0; // Base speed factor (0.3 to 1.0) - Only for 'full' swing
 export let selectedClub = clubs['7I']; // Default club
+export let shotDirectionAngle = 0; // Angle in degrees relative to forward (0 = straight, negative = left, positive = right)
 
 // --- Timing Variables ---
 export let backswingStartTime = null;
@@ -49,6 +50,13 @@ export let onShotCompleteCallback = null;
 
 export function setGameState(newState) {
     gameState = newState;
+}
+
+export function setShotDirectionAngle(angle) {
+    // Clamp the angle if needed, or let it wrap? For now, let it be any value.
+    // Consider normalization later if required (e.g., to -180 to 180)
+    shotDirectionAngle = angle;
+    // console.log(`Logic State: Shot Direction Angle set to: ${angle.toFixed(1)} degrees`); // Optional logging
 }
 
 export function setBackswingStartTime(time) {
@@ -215,6 +223,7 @@ export function resetSwingState() { // Added 'export' keyword here
     chipDownswingAnimationFrameId = null;
     puttDownswingAnimationFrameId = null;
     downswingPhaseStartTime = null;
+    shotDirectionAngle = 0; // Reset direction on full state reset
 
     resetUIForNewShot(); // Use the new reset function that preserves ball position
     visuals.resetVisuals(); // Reset visuals (e.g., ball position)
@@ -244,6 +253,7 @@ export function resetSwingVariablesOnly() { // Added 'export' keyword here
     chipDownswingAnimationFrameId = null;
     puttDownswingAnimationFrameId = null;
     downswingPhaseStartTime = null;
+    // shotDirectionAngle = 0; // Should we reset direction here too? Maybe not, allow aiming adjustments between attempts.
 
     // NOTE: This version does NOT reset UI or Visuals
     console.log("Logic State: Swing variables reset.");
@@ -278,3 +288,4 @@ export const getChipDownswingAnimationFrameId = () => chipDownswingAnimationFram
 export const getPuttDownswingAnimationFrameId = () => puttDownswingAnimationFrameId;
 export const getDownswingPhaseStartTime = () => downswingPhaseStartTime;
 export const getOnShotCompleteCallback = () => onShotCompleteCallback; // Getter for the callback
+export const getShotDirectionAngle = () => shotDirectionAngle;

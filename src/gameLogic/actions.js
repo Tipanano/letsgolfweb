@@ -5,7 +5,7 @@ import {
     setGameState, setBackswingStartTime, setBackswingEndTime, setRotationInitiationTime,
     setHipInitiationTime, setDownswingPhaseStartTime, setArmsStartTime, setWristsStartTime,
     setRotationStartTime, setChipRotationStartTime, setChipWristsStartTime, setPuttHitTime,
-    resetSwingState, resetSwingVariablesOnly // Import both reset functions
+    resetSwingState, resetSwingVariablesOnly, setShotDirectionAngle // Import both reset functions and angle setter
 } from './state.js';
 import {
     startBackswingAnimation, stopBackswingAnimation, startFullDownswingAnimation,
@@ -20,8 +20,9 @@ import { calculateFullSwingShot, calculateChipShot, calculatePuttShot } from './
 // Import debug data getter directly
 import { getDebugTimingData } from './utils.js';
 import { getCurrentGameMode } from '../main.js'; // Import mode checker
-import { getCurrentBallPosition as getPlayHoleBallPosition } from '../modes/playHole.js'; // Import position getter for playHole
-import { getActiveCameraMode, setCameraBehindBall, snapFollowCameraToBall, CameraMode, removeTrajectoryLine } from '../visuals/core.js'; // Import camera functions and line removal
+import { getCurrentBallPosition as getPlayHoleBallPosition } from '../modes/playHole.js'; // Import position getter for playHole ball
+import { getFlagPosition } from '../visuals/holeView.js'; // Import flag position getter
+import { getActiveCameraMode, setCameraBehindBall, snapFollowCameraToBall, CameraMode, removeTrajectoryLine, applyAimAngleToCamera } from '../visuals/core.js'; // Import camera functions, line removal, and aim application
 
 // --- Action Functions for Input Handler ---
 
@@ -241,14 +242,34 @@ export function prepareNextShot() {
     resetUIForNewShot(); // Reset timing bars and other relevant UI elements
     updateStatus("Ready for next shot..."); // Update status explicitly
 
-    // --- Update Camera Position for PlayHole Mode ---
+    // --- Update Camera Position and Aim for PlayHole Mode ---
     const currentMode = getCurrentGameMode(); // Need to import this if not already available
     if (currentMode === 'play-hole') {
-        const ballPos = getPlayHoleBallPosition(); // Get the new ball position
+        const ballPos = getPlayHoleBallPosition(); // Get the new ball position (meters {x, y, z})
+        const targetPos = getFlagPosition(); // Get the flag position (meters THREE.Vector3)
         const activeCamMode = getActiveCameraMode();
         const shotType = getCurrentShotType(); // Get current shot type ('full', 'chip', 'putt')
 
-        console.log(`Action: Updating camera for next shot. BallPos: (${ballPos.x.toFixed(1)}, ${ballPos.z.toFixed(1)}), CamMode: ${activeCamMode}, ShotType: ${shotType}`);
+        // --- Set Default Aim Angle ---
+        if (ballPos && targetPos) {
+            const dx = targetPos.x - ballPos.x;
+            const dz = targetPos.z - ballPos.z;
+            // Calculate angle relative to positive Z-axis (0 degrees)
+            // atan2 gives angle in radians from -PI to PI
+            const angleRad = Math.atan2(dx, dz);
+            // Convert to degrees (0-360 or -180 to 180, doesn't matter as long as consistent)
+            const angleDeg = angleRad * (180 / Math.PI);
+            setShotDirectionAngle(angleDeg);
+            console.log(`Action: Setting default aim angle to hole: ${angleDeg.toFixed(1)} degrees`);
+            // REMOVED: applyAimAngleToCamera(); - This was causing the reset. The angle is applied within setCameraBehindBall below.
+        } else {
+            setShotDirectionAngle(0); // Default to 0 if positions are missing
+            console.warn("Action: Could not get ball/target position for default aim. Setting angle to 0.");
+            // REMOVED: applyAimAngleToCamera(); - Angle applied below.
+        }
+
+        // The aim angle set above will be automatically used by setCameraBehindBall / snapFollowCameraToBall
+        console.log(`Action: Updating camera for next shot. BallPos: (${ballPos?.x.toFixed(1)}, ${ballPos?.z.toFixed(1)}), CamMode: ${activeCamMode}, ShotType: ${shotType}`);
 
         if (activeCamMode === CameraMode.STATIC || activeCamMode === CameraMode.FOLLOW_BALL) {
             // If static or follow, update based on mode

@@ -1,9 +1,10 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
-import * as CoreVisuals from './visuals/core.js'; // Includes CameraMode enum and camera functions
+import * as CoreVisuals from './visuals/core.js'; // Includes CameraMode enum, camera functions, and ball object
 import * as RangeVisuals from './visuals/range.js';
 import * as TargetVisuals from './visuals/targetView.js'; // Includes green getters
-import * as HoleVisuals from './visuals/holeView.js'; // Import the new hole view module
+import * as HoleVisuals from './visuals/holeView.js'; // Import the new hole view module (includes getFlagPosition)
 import { getCurrentShotType } from './gameLogic.js'; // Import shot type getter
+import { getCurrentGameMode } from './main.js'; // Import game mode getter
 
 // Store references from core visuals if needed
 let coreScene;
@@ -264,22 +265,68 @@ export function switchToStaticCamera() {
             break;
         case 'full':
         default:
-            // For full swing, decide between range and target based on visual mode
+            // For full swing, decide based on visual mode
             if (currentVisualMode === VISUAL_MODES.TARGET) {
                 viewType = 'target';
+            } else if (currentVisualMode === VISUAL_MODES.HOLE) {
+                // If in HOLE mode and switching to full swing static view,
+                // re-activate the distance-adjusted hole camera instead of applying a generic view.
+                console.log("Switching to static camera for full swing in HOLE mode, re-activating hole view.");
+                activateHoleViewCamera();
+                return; // Exit early as activateHoleViewCamera handles setting the mode/view
             } else {
                 viewType = 'range'; // Default full swing view is range
             }
             break;
     }
 
+    // Only apply core static view if we didn't handle it specially above (like for HOLE mode)
     console.log(`Switching to static camera view: ${viewType} (ShotType: ${shotType}, VisualMode: ${currentVisualMode})`);
     CoreVisuals.applyStaticCameraView(viewType);
 }
 
+// Activate the static hole view camera (behind ball, looking at flag/target, distance adjusted)
+export function activateHoleViewCamera() {
+    console.log("Activating Hole View Camera (Static, Distance Adjusted)");
+    const ballPosition = CoreVisuals.ball?.position; // Get current ball position
+    const targetPosition = HoleVisuals.getFlagPosition(); // Get flag position as target
+
+    if (ballPosition && targetPosition) {
+        // Calculate distance for camera adjustment
+        const distance = ballPosition.distanceTo(targetPosition);
+        // Note: distanceTo includes Y difference, which is usually small.
+        // If precise XZ distance is needed later, use:
+        // const distanceXZ = new THREE.Vector2(ballPosition.x, ballPosition.z)
+        //    .distanceTo(new THREE.Vector2(targetPosition.x, targetPosition.z));
+
+        CoreVisuals.setCameraBehindBallLookingAtTarget(ballPosition, targetPosition, distance);
+    } else {
+        console.warn("Could not activate hole view camera: Missing ball or target position.");
+        // Fallback to default static view?
+        switchToStaticCamera();
+    }
+}
+
+
 // Activate the follow ball camera mode
 export function activateFollowBallCamera() {
     console.log("Activating Follow Ball Camera");
+    const currentMode = getCurrentGameMode();
+
+    if (currentMode === 'play-hole') {
+        console.log("Setting initial follow camera for play-hole mode.");
+        const ballPosition = CoreVisuals.ball?.position;
+        const targetPosition = HoleVisuals.getFlagPosition(); // Use flag as initial target
+
+        if (ballPosition && targetPosition) {
+            // Set the initial camera position and lookAt *before* activating follow mode
+            CoreVisuals.setInitialFollowCameraLookingAtTarget(ballPosition, targetPosition);
+        } else {
+            console.warn("Could not set initial follow camera for hole: Missing ball or target position. Using default.");
+        }
+    }
+
+    // Activate the follow mode (will use the position set above if in play-hole, or default otherwise)
     CoreVisuals.setActiveCameraMode(CoreVisuals.CameraMode.FOLLOW_BALL);
 }
 
@@ -298,22 +345,31 @@ export function activateReverseCamera() {
     CoreVisuals.setCameraReverseAngle(positionZ);
 }
 
-// Activate the green focus camera (only works in Target mode)
+// Activate the green focus camera (works in Target and Hole modes)
 export function activateGreenCamera() {
     console.log("Attempting to activate Green Focus Camera");
-    if (currentVisualMode !== VISUAL_MODES.TARGET) {
-        console.warn("Green Focus camera only available in Target mode.");
+
+    let greenCenter = null;
+    let greenRadius = null;
+
+    if (currentVisualMode === VISUAL_MODES.TARGET) {
+        console.log("Getting green data from TargetVisuals");
+        greenCenter = TargetVisuals.getGreenCenter();
+        greenRadius = TargetVisuals.getGreenRadius();
+    } else if (currentVisualMode === VISUAL_MODES.HOLE) {
+        console.log("Getting green data from HoleVisuals");
+        greenCenter = HoleVisuals.getGreenCenter();
+        greenRadius = HoleVisuals.getGreenRadius();
+    } else {
+        console.warn(`Green Focus camera not available in current visual mode: ${currentVisualMode}`);
         return;
     }
 
-    const greenCenter = TargetVisuals.getGreenCenter();
-    const greenRadius = TargetVisuals.getGreenRadius();
-
-    if (greenCenter && greenRadius) {
+    if (greenCenter && greenRadius !== null) { // Check radius against null explicitly
         console.log(`Found green data: Center Z=${greenCenter.z.toFixed(1)}, Radius=${greenRadius.toFixed(1)}`);
         CoreVisuals.setCameraGreenFocus(greenCenter, greenRadius);
     } else {
-        console.error("Could not get green position or radius from TargetVisuals.");
+        console.error(`Could not get green position or radius for mode: ${currentVisualMode}`);
     }
 }
 

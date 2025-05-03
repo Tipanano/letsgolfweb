@@ -3,6 +3,9 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.m
 import { scene, YARDS_TO_METERS } from './core.js'; // Import scene and conversion factor
 
 let currentHoleObjects = []; // To keep track of objects added for the hole
+let currentFlagPosition = null; // Store the flag position in meters (Vector3)
+let currentGreenCenter = null; // Store the green center position in meters (Vector3)
+let currentGreenRadius = null; // Store the green radius in meters (Number)
 
 /**
  * Clears any previously drawn hole objects from the scene.
@@ -29,6 +32,9 @@ export function drawHoleLayout(holeLayout) {
     }
 
     clearHoleLayout(); // Clear previous layout first
+    currentFlagPosition = null; // Reset flag position on new draw
+    currentGreenCenter = null; // Reset green data
+    currentGreenRadius = null;
     console.log("Drawing hole layout:", holeLayout);
 
     const scale = YARDS_TO_METERS; // Use the conversion factor
@@ -121,6 +127,11 @@ export function drawHoleLayout(holeLayout) {
         greenMesh.receiveShadow = true;
         scene.add(greenMesh);
         currentHoleObjects.push(greenMesh);
+
+        // Store green data
+        currentGreenCenter = new THREE.Vector3(greenCenterX, 0.02, greenCenterZ); // Store the mesh position
+        currentGreenRadius = greenRadiusMeters;
+        console.log(`Stored green data: Center=${currentGreenCenter.z.toFixed(1)}, Radius=${currentGreenRadius.toFixed(1)}`);
     }
 
      // --- Draw Tee Box --- (Simple rectangle for now)
@@ -161,6 +172,15 @@ export function drawHoleLayout(holeLayout) {
         scene.add(flagstick);
         currentHoleObjects.push(flagstick);
 
+        // Store the flag position (base of the stick)
+        currentFlagPosition = new THREE.Vector3(
+            holeLayout.flagPosition.x * scale,
+            0, // Assuming flag base is at y=0
+            holeLayout.flagPosition.z * scale
+        );
+        console.log("Stored flag position (meters):", currentFlagPosition);
+
+
         // Optional: Add a little flag cloth
         const flagClothGeometry = new THREE.PlaneGeometry(0.5, 0.3);
         const flagClothMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000, side: THREE.DoubleSide }); // Red flag
@@ -175,4 +195,28 @@ export function drawHoleLayout(holeLayout) {
     }
 
     console.log("Finished drawing hole layout. Added objects:", currentHoleObjects.length);
+}
+
+/**
+ * Returns the stored position of the flagstick base in world coordinates (meters).
+ * @returns {THREE.Vector3 | null} The flag position or null if not set.
+ */
+export function getFlagPosition() {
+    return currentFlagPosition;
+}
+
+/**
+ * Returns the stored center position of the green in world coordinates (meters).
+ * @returns {THREE.Vector3 | null} The green center position or null if not set.
+ */
+export function getGreenCenter() {
+    return currentGreenCenter;
+}
+
+/**
+ * Returns the stored radius of the green in meters.
+ * @returns {number | null} The green radius or null if not set.
+ */
+export function getGreenRadius() {
+    return currentGreenRadius;
 }

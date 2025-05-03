@@ -1,7 +1,10 @@
 // Handles keyboard input events and translates them into game logic actions or visual changes.
 
 import * as GameLogic from './gameLogic.js'; // Import game logic functions/getters
-import * as Visuals from './visuals.js'; // Import visuals for camera controls later
+// Import specific state functions needed for aiming
+import { getGameState, getCurrentShotType, getShotDirectionAngle, setShotDirectionAngle } from './gameLogic/state.js';
+import * as Visuals from './visuals.js'; // Import high-level visuals functions
+import { applyAimAngleToCamera } from './visuals/core.js'; // Import specific core camera function for aiming
 // Import specific UI functions needed for input feedback (markers, status updates)
 import {
     adjustBallPosition,
@@ -12,25 +15,34 @@ import {
     showKeyPressMarker,
     // Timing bar updates are likely handled within GameLogic's animation loops now
 } from './ui.js';
-// Assume main.js exports a function to get the current mode
-//import { getCurrentGameMode } from '../../main.js';
 import { getCurrentGameMode } from './main.js'; // Import the function to get the current game mode
 import { prepareNextShot } from './gameLogic/actions.js';
+// --- Constants for Aiming ---
+const AIM_INCREMENT_FULL = 0.5; // Degrees per key press
+const AIM_INCREMENT_CHIP = 0.2; // Degrees per key press
+const AIM_INCREMENT_PUTT = 0.1; // Degrees per key press
+
 // --- Event Handlers ---
 
 export function handleKeyDown(event) {
-    // Get current state from GameLogic
-    const gameState = GameLogic.getGameState();
-    const currentShotType = GameLogic.getCurrentShotType();
-    const swingSpeed = GameLogic.getSwingSpeed(); // Needed for marker placement
+    // Get current state from GameLogic state module
+    const gameState = getGameState();
+    const currentShotType = getCurrentShotType();
+    // const swingSpeed = GameLogic.getSwingSpeed(); // Moved swingSpeed retrieval into handleFullSwingKeyDown
 
     console.log(`inputHandler keydown: Key='${event.key}', State='${gameState}', ShotType='${currentShotType}'`);
 
-    // --- Camera Controls (Independent of game state) ---
+    // --- Camera Controls (Mode-dependent for '1') ---
     if (event.key === '1') {
-        Visuals.switchToStaticCamera();
+        const currentMode = getCurrentGameMode();
+        if (currentMode === 'play-hole') {
+            Visuals.activateHoleViewCamera(); // Use the new hole-specific static camera
+        } else {
+            Visuals.switchToStaticCamera(); // Use the default static camera logic
+        }
         return; // Consume event
     } else if (event.key === '2') {
+        // activateFollowBallCamera in visuals.js now handles mode switching internally
         Visuals.activateFollowBallCamera();
         return; // Consume event
     } else if (event.key === '3') {
@@ -52,11 +64,35 @@ export function handleKeyDown(event) {
             adjustBallPosition(-1); // Directly calls UI function
             return;
         }
+        // --- Aiming Adjustment (Only when ready) ---
+        else if (event.key === 'ArrowLeft') {
+            event.preventDefault();
+            const currentAngle = getShotDirectionAngle();
+            let increment = 0;
+            if (currentShotType === 'full') increment = AIM_INCREMENT_FULL;
+            else if (currentShotType === 'chip') increment = AIM_INCREMENT_CHIP;
+            else if (currentShotType === 'putt') increment = AIM_INCREMENT_PUTT;
+            setShotDirectionAngle(currentAngle - increment);
+            applyAimAngleToCamera(); // Update camera view (using direct import)
+            console.log(`Aim Left: New Angle = ${getShotDirectionAngle().toFixed(1)}`);
+            return;
+        } else if (event.key === 'ArrowRight') {
+            event.preventDefault();
+            const currentAngle = getShotDirectionAngle();
+            let increment = 0;
+            if (currentShotType === 'full') increment = AIM_INCREMENT_FULL;
+            else if (currentShotType === 'chip') increment = AIM_INCREMENT_CHIP;
+            else if (currentShotType === 'putt') increment = AIM_INCREMENT_PUTT;
+            setShotDirectionAngle(currentAngle + increment);
+            applyAimAngleToCamera(); // Update camera view (using direct import)
+            console.log(`Aim Right: New Angle = ${getShotDirectionAngle().toFixed(1)}`);
+            return;
+        }
     }
 
     // --- Shot Type Specific Logic ---
     if (currentShotType === 'full') {
-        handleFullSwingKeyDown(event, gameState, swingSpeed);
+        handleFullSwingKeyDown(event, gameState); // Removed swingSpeed argument
     } else if (currentShotType === 'chip') {
         handleChipKeyDown(event, gameState);
     } else if (currentShotType === 'putt') {
@@ -84,7 +120,8 @@ export function handleKeyUp(event) {
 
 // --- Helper Functions for KeyDown by Shot Type ---
 
-function handleFullSwingKeyDown(event, gameState, swingSpeed) {
+function handleFullSwingKeyDown(event, gameState) {
+    const swingSpeed = GameLogic.getSwingSpeed(); // Get swing speed here as it's only needed for full swing markers
     // Start Backswing with 'w'
     if (event.key === 'w' && gameState === 'ready') {
         GameLogic.startBackswing(); // Call action function in GameLogic

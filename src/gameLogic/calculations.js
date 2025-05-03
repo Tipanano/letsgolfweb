@@ -5,6 +5,7 @@ import {
     getDownswingPhaseStartTime, getChipRotationStartTime, getChipWristsStartTime,
     getPuttHitTime, getOnShotCompleteCallback, setGameState,
     getBackswingStartTime, // <-- Added missing import
+    getShotDirectionAngle, // <-- Import aiming angle getter
     IDEAL_BACKSWING_DURATION_MS, PUTT_DISTANCE_FACTOR // Import constants from state
 } from './state.js';
 import { stopFullDownswingAnimation, stopChipDownswingAnimation /* Putt stopped in actions */ } from './animations.js';
@@ -13,7 +14,7 @@ import { calculateImpactPhysics } from '../swingPhysics.js';
 import { calculateChipImpact } from '../chipPhysics.js';
 import { calculatePuttImpact } from '../puttPhysics.js';
 import { simulateFlightStepByStep } from './simulation.js';
-import { calculateTrajectoryPoints, calculatePuttTrajectoryPoints } from './trajectory.js';
+import { calculatePuttTrajectoryPoints } from './trajectory.js'; // Removed calculateTrajectoryPoints import
 import { clamp } from './utils.js';
 import { getCurrentGameMode } from '../main.js'; // Import mode checker
 import { getCurrentBallPosition as getPlayHoleBallPosition } from '../modes/playHole.js'; // Import position getter
@@ -90,9 +91,13 @@ export function calculateFullSwingShot() {
     const launchAngleRad = launchAngle * Math.PI / 180;
     const initialVelY = ballSpeedMPS * Math.sin(launchAngleRad);
     const initialVelHorizontalMag = ballSpeedMPS * Math.cos(launchAngleRad);
-    const launchDirectionAngleRad = impactResult.absoluteFaceAngle * Math.PI / 180; // Convert face angle to radians
-    const initialVelX = initialVelHorizontalMag * Math.sin(launchDirectionAngleRad); // Positive angle = positive X (right)
-    const initialVelZ = initialVelHorizontalMag * Math.cos(launchDirectionAngleRad); // Positive Z = forward
+    // Combine absolute face angle with the player's aim angle
+    const aimAngleRad = getShotDirectionAngle() * Math.PI / 180;
+    const baseLaunchDirectionRad = impactResult.absoluteFaceAngle * Math.PI / 180; // Base direction from face
+    const finalLaunchDirectionRad = baseLaunchDirectionRad + aimAngleRad; // Add aim adjustment
+    console.log(`Calc (Full): Aim Angle=${getShotDirectionAngle().toFixed(1)}deg, Face Angle=${impactResult.absoluteFaceAngle.toFixed(1)}deg, Final Launch Dir=${(finalLaunchDirectionRad * 180 / Math.PI).toFixed(1)}deg`);
+    const initialVelX = initialVelHorizontalMag * Math.sin(finalLaunchDirectionRad); // Positive angle = positive X (right)
+    const initialVelZ = initialVelHorizontalMag * Math.cos(finalLaunchDirectionRad); // Positive Z = forward
     const initialVelocity = { x: initialVelX, y: initialVelY, z: initialVelZ };
     const spinVectorRPM = { x: backSpin, y: sideSpin, z: 0 };
 
@@ -192,17 +197,19 @@ export function calculateFullSwingShot() {
         finalPosition: { ...initialPosition } // Default final position (use determined initial pos)
     };
 
-    // --- Calculate Trajectory Points ---
-    const trajectoryPoints = calculateTrajectoryPoints(shotData);
-    shotData.trajectory = trajectoryPoints;
+    // --- Use Simulation Trajectory Points ---
+    // Optional: Downsample simulationResult.trajectoryPoints if needed for performance
+    // const simplifiedTrajectory = downsamplePoints(simulationResult.trajectoryPoints, 5); // Example: keep every 5th point
+    // shotData.trajectory = simplifiedTrajectory;
+    shotData.trajectory = simulationResult.trajectoryPoints; // Use full simulation points for now
 
-    // Calculate final side distance and position
-    if (trajectoryPoints && trajectoryPoints.length > 0) {
-        const finalPoint = trajectoryPoints[trajectoryPoints.length - 1];
-        shotData.sideDistance = finalPoint.x * 1.09361; // Convert meters to yards
-        shotData.finalPosition = finalPoint;
-        console.log(`Calc (Full): Calculated Side Distance: ${shotData.sideDistance.toFixed(1)} yards (based on final X: ${finalPoint.x.toFixed(1)}m)`);
-    }
+    // Calculate final side distance and position using simulation's landing position
+    // (simulationResult.landingPosition already accounts for initialPosition)
+    shotData.finalPosition = simulationResult.landingPosition;
+    // Calculate side distance relative to initial position's X
+    shotData.sideDistance = (simulationResult.landingPosition.x - initialPosition.x) * 1.09361; // Convert meters to yards
+    console.log(`Calc (Full): Final Position: (${shotData.finalPosition.x.toFixed(1)}, ${shotData.finalPosition.y.toFixed(1)}, ${shotData.finalPosition.z.toFixed(1)})m`);
+    console.log(`Calc (Full): Calculated Side Distance: ${shotData.sideDistance.toFixed(1)} yards (relative to start X: ${initialPosition.x.toFixed(1)}m)`);
 
     // Update internal state
     setGameState('result');
@@ -281,9 +288,13 @@ export function calculateChipShot() {
     const launchAngleRad = launchAngle * Math.PI / 180;
     const initialVelY = ballSpeedMPS * Math.sin(launchAngleRad);
     const initialVelHorizontalMag = ballSpeedMPS * Math.cos(launchAngleRad);
-    const launchDirectionAngleRad = impactResult.absoluteFaceAngle * Math.PI / 180;
-    const initialVelX = initialVelHorizontalMag * Math.sin(launchDirectionAngleRad);
-    const initialVelZ = initialVelHorizontalMag * Math.cos(launchDirectionAngleRad);
+    // Combine absolute face angle with the player's aim angle
+    const aimAngleRad = getShotDirectionAngle() * Math.PI / 180;
+    const baseLaunchDirectionRad = impactResult.absoluteFaceAngle * Math.PI / 180; // Base direction from face
+    const finalLaunchDirectionRad = baseLaunchDirectionRad + aimAngleRad; // Add aim adjustment
+    console.log(`Calc (Chip): Aim Angle=${getShotDirectionAngle().toFixed(1)}deg, Face Angle=${impactResult.absoluteFaceAngle.toFixed(1)}deg, Final Launch Dir=${(finalLaunchDirectionRad * 180 / Math.PI).toFixed(1)}deg`);
+    const initialVelX = initialVelHorizontalMag * Math.sin(finalLaunchDirectionRad);
+    const initialVelZ = initialVelHorizontalMag * Math.cos(finalLaunchDirectionRad);
     const initialVelocity = { x: initialVelX, y: initialVelY, z: initialVelZ };
     const spinVectorRPM = { x: backSpin, y: sideSpin, z: 0 };
 
@@ -364,17 +375,15 @@ export function calculateChipShot() {
         finalPosition: { ...initialPosition } // Default final position (use determined initial pos)
     };
 
-    // --- Calculate Trajectory Points ---
-    const trajectoryPoints = calculateTrajectoryPoints(shotData); // Use the same function as full swing
-    shotData.trajectory = trajectoryPoints;
+    // --- Use Simulation Trajectory Points ---
+    shotData.trajectory = simulationResult.trajectoryPoints; // Use simulation points
 
-    // Calculate final side distance and position
-    if (trajectoryPoints && trajectoryPoints.length > 0) {
-        const finalPoint = trajectoryPoints[trajectoryPoints.length - 1];
-        shotData.sideDistance = finalPoint.x * 1.09361; // Convert meters to yards
-        shotData.finalPosition = finalPoint;
-        console.log(`Calc (Chip): Calculated Side Distance: ${shotData.sideDistance.toFixed(1)} yards (based on final X: ${finalPoint.x.toFixed(1)}m)`);
-    }
+    // Calculate final side distance and position using simulation's landing position
+    shotData.finalPosition = simulationResult.landingPosition;
+    // Calculate side distance relative to initial position's X
+    shotData.sideDistance = (simulationResult.landingPosition.x - initialPosition.x) * 1.09361; // Convert meters to yards
+    console.log(`Calc (Chip): Final Position: (${shotData.finalPosition.x.toFixed(1)}, ${shotData.finalPosition.y.toFixed(1)}, ${shotData.finalPosition.z.toFixed(1)})m`);
+    console.log(`Calc (Chip): Calculated Side Distance: ${shotData.sideDistance.toFixed(1)} yards (relative to start X: ${initialPosition.x.toFixed(1)}m)`);
 
     // Update internal state
     setGameState('result');
@@ -431,11 +440,16 @@ export function calculatePuttShot() {
     let totalDistance = ballSpeed * PUTT_DISTANCE_FACTOR; // Simple scaling factor
     totalDistance = Math.max(0.1, totalDistance); // Ensure minimum distance
 
-    // Calculate side distance based on horizontal launch angle and total distance
-    const horizontalLaunchAngleRad = horizontalLaunchAngle * Math.PI / 180;
-    let sideDistance = totalDistance * Math.tan(horizontalLaunchAngleRad);
+    // Combine horizontal launch angle with the player's aim angle
+    const aimAngleRad = getShotDirectionAngle() * Math.PI / 180;
+    const baseHorizontalLaunchAngleRad = horizontalLaunchAngle * Math.PI / 180;
+    const finalHorizontalLaunchAngleRad = baseHorizontalLaunchAngleRad + aimAngleRad;
+    console.log(`Calc (Putt): Aim Angle=${getShotDirectionAngle().toFixed(1)}deg, Base Horiz Angle=${horizontalLaunchAngle.toFixed(1)}deg, Final Horiz Angle=${(finalHorizontalLaunchAngleRad * 180 / Math.PI).toFixed(1)}deg`);
 
-    console.log(`Calc (Putt): BallSpeed=${ballSpeed.toFixed(1)}mph, HorizAngle=${horizontalLaunchAngle.toFixed(1)}deg`);
+    // Calculate side distance based on the *final* horizontal launch angle and total distance
+    let sideDistance = totalDistance * Math.tan(finalHorizontalLaunchAngleRad);
+
+    console.log(`Calc (Putt): BallSpeed=${ballSpeed.toFixed(1)}mph, Final HorizAngle=${(finalHorizontalLaunchAngleRad * 180 / Math.PI).toFixed(1)}deg`);
     console.log(`Calc (Putt): Calculated Total Distance: ${totalDistance.toFixed(1)} yd, Side Distance: ${sideDistance.toFixed(1)} yd`);
 
     // --- Prepare Shot Data Object ---
@@ -449,7 +463,7 @@ export function calculatePuttShot() {
         clubHeadSpeed: 0,
         ballSpeed: impactResult.ballSpeed,
         launchAngle: impactResult.launchAngle, // Vertical (fixed at 0)
-        horizontalLaunchAngle: impactResult.horizontalLaunchAngle, // Horizontal
+        horizontalLaunchAngle: finalHorizontalLaunchAngleRad * 180 / Math.PI, // Store the FINAL angle in degrees
         attackAngle: 0,
         backSpin: impactResult.backSpin,
         sideSpin: impactResult.sideSpin, // Should be 0
