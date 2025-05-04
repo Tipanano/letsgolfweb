@@ -228,34 +228,56 @@ export function drawHoleLayout(holeLayout) {
         currentHoleObjects.push(fairwayMesh);
     }
 
-    // --- Draw Green ---
-    if (holeLayout.green && holeLayout.green.center && holeLayout.green.radius && holeLayout.green.surface) {
-        const greenRadiusMeters = holeLayout.green.radius * scale;
-        const greenCenterX = holeLayout.green.center.x * scale;
-        const greenCenterZ = holeLayout.green.center.z * scale;
+    // --- Draw Green --- (Now uses polygon logic)
+    if (holeLayout.green && holeLayout.green.type === 'polygon' && holeLayout.green.vertices && holeLayout.green.vertices.length >= 3 && holeLayout.green.surface) {
         const greenHeight = holeLayout.green.surface.height ?? 0.02; // Use defined height or fallback
 
-        const greenGeometry = new THREE.CircleGeometry(greenRadiusMeters, 64);
-        const greenMaterial = new THREE.MeshLambertMaterial({ // Use Lambert
+        const greenShape = new THREE.Shape();
+        const firstPoint = holeLayout.green.vertices[0];
+        greenShape.moveTo(firstPoint.x * scale, firstPoint.z * scale);
+        for (let i = 1; i < holeLayout.green.vertices.length; i++) {
+            const point = holeLayout.green.vertices[i];
+            greenShape.lineTo(point.x * scale, point.z * scale);
+        }
+        greenShape.closePath();
+
+        const greenGeometry = new THREE.ShapeGeometry(greenShape);
+        const greenMaterial = new THREE.MeshLambertMaterial({
             color: holeLayout.green.surface.color,
             side: THREE.DoubleSide
         });
         const greenMesh = new THREE.Mesh(greenGeometry, greenMaterial);
-        greenMesh.renderOrder = 0; // Ensure green is drawn first (default)
-        greenMesh.position.set(
-            greenCenterX,
-            greenHeight, // Use defined height
-            greenCenterZ
-        );
-        greenMesh.rotation.x = -Math.PI / 2;
+        greenMesh.rotation.x = Math.PI / 2; // Rotate polygon to lay flat like fairway/rough
+        greenMesh.position.set(0, greenHeight, 0); // Position mesh using surface height
         greenMesh.receiveShadow = true;
         scene.add(greenMesh);
         currentHoleObjects.push(greenMesh);
 
-        // Store green data using the actual height
-        currentGreenCenter = new THREE.Vector3(greenCenterX, greenHeight, greenCenterZ); // Store the mesh position
-        currentGreenRadius = greenRadiusMeters;
-        console.log(`Stored green data: Center=${currentGreenCenter.z.toFixed(1)}, Radius=${currentGreenRadius.toFixed(1)}, Height=${greenHeight.toFixed(3)}`);
+        // TODO: Revisit how to store green center/radius for polygon shapes if needed later
+        // For now, reset them as the old circle logic is gone.
+        currentGreenCenter = null;
+        currentGreenRadius = null;
+        console.log(`Drawn polygon green at height ${greenHeight.toFixed(3)}`);
+
+    } else if (holeLayout.green && holeLayout.green.center && holeLayout.green.radius) {
+         // Fallback for old circle definition (optional, can be removed later)
+         console.warn("Drawing green using legacy circle definition.");
+         const greenRadiusMeters = holeLayout.green.radius * scale;
+         const greenCenterX = holeLayout.green.center.x * scale;
+         const greenCenterZ = holeLayout.green.center.z * scale;
+         const greenHeight = holeLayout.green.surface?.height ?? 0.02;
+         const greenGeometry = new THREE.CircleGeometry(greenRadiusMeters, 64);
+         const greenMaterial = new THREE.MeshLambertMaterial({ color: holeLayout.green.surface?.color || '#3A9A3A', side: THREE.DoubleSide });
+         const greenMesh = new THREE.Mesh(greenGeometry, greenMaterial);
+         greenMesh.position.set(greenCenterX, greenHeight, greenCenterZ);
+         greenMesh.rotation.x = -Math.PI / 2;
+         greenMesh.receiveShadow = true;
+         scene.add(greenMesh);
+         currentHoleObjects.push(greenMesh);
+         currentGreenCenter = new THREE.Vector3(greenCenterX, greenHeight, greenCenterZ);
+         currentGreenRadius = greenRadiusMeters;
+    } else {
+        console.warn("Green definition is missing or invalid.");
     }
 
      // --- Draw Tee Box --- (Simple rectangle for now)
