@@ -162,8 +162,8 @@ export function calculateFullSwingShot() {
             landingVelocity.z * initialRollSpeedFactor
         );
 
-        // Pass the backSpin value (from impactResult) to the ground roll simulation
-        const groundRollResult = simulateGroundRoll(rollStartPosition, rollStartVelocity, surfaceType, backSpin);
+        // Pass the backSpin and sideSpin values (from impactResult) to the ground roll simulation
+        const groundRollResult = simulateGroundRoll(rollStartPosition, rollStartVelocity, surfaceType, backSpin, sideSpin);
         finalPosition = groundRollResult.finalPosition; // Vector3
         isHoledOut = groundRollResult.isHoledOut;
         // Combine trajectories
@@ -384,8 +384,8 @@ export function calculateChipShot() {
             landingVelocity.z * initialRollSpeedFactor
         );
 
-        // Pass the backSpin value (from impactResult) to the ground roll simulation
-        const groundRollResult = simulateGroundRoll(rollStartPosition, rollStartVelocity, surfaceType, backSpin);
+        // Pass the backSpin and sideSpin values (from impactResult) to the ground roll simulation
+        const groundRollResult = simulateGroundRoll(rollStartPosition, rollStartVelocity, surfaceType, backSpin, sideSpin);
         finalPosition = groundRollResult.finalPosition;
         isHoledOut = groundRollResult.isHoledOut;
         // Combine trajectories

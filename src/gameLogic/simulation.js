@@ -12,35 +12,65 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club) 
     let peakHeight = initialPos.y;
 
     // --- Simulation Constants (Tunable) ---
-    const Cd = 0.38; // Drag coefficient (placeholder)
-    const Cl = 0.01; // Lift coefficient (placeholder, related to spin). Reduced from 0.1, still higher than original 0.002.
+    const Cd = 0.32; // Drag coefficient (placeholder)
+    // const Cl = 0.03; // Lift coefficient (placeholder, related to spin). Reduced from 0.1, still higher than original 0.002. // Replaced by separate Cl values
+    const Cl_backspin = 0.01; // Controls vertical lift (tune for height)
+    const Cl_sidespin = 0.1; // Controls side force (tune for curve)
     const airDensity = 1.225; // kg/m^3 (standard air density)
     const ballArea = Math.PI * (0.04267 / 2) * (0.04267 / 2); // Cross-sectional area of golf ball (m^2)
     const ballMass = 0.04593; // kg (standard golf ball mass)
     // Pre-calculate constant part of drag/lift force calculation
     const dragConst = -0.5 * airDensity * ballArea * Cd / ballMass;
-    const liftConst = 0.5 * airDensity * ballArea * Cl / ballMass;
+    // const liftConst = 0.5 * airDensity * ballArea * Cl / ballMass; // Replaced by separate lift constants
+    const liftConst_backspin = 0.5 * airDensity * ballArea * Cl_backspin / ballMass;
+    const liftConst_sidespin = 0.5 * airDensity * ballArea * Cl_sidespin / ballMass;
+    // Air Spin Decay Constants (Tunable)
+    const AIR_BACKSPIN_DECAY_RATE_RPM_PER_SECOND = 500; // RPM per second - Needs tuning!
+    const AIR_SIDESPIN_DECAY_RATE_RPM_PER_SECOND = 400; // RPM per second - Needs tuning!
+    const MIN_AIR_SPIN_EFFECT_RPM = 50; // Spin below this has no effect (avoids tiny calculations)
     // --- End Constants ---
 
     console.log("Sim: Starting step-by-step simulation...");
     console.log(`Sim: Initial Vel: (${velocity.x.toFixed(2)}, ${velocity.y.toFixed(2)}, ${velocity.z.toFixed(2)}) m/s`);
     console.log(`Sim: Spin Vec (RPM): (${spinVec.x.toFixed(0)}, ${spinVec.y.toFixed(0)}, ${spinVec.z.toFixed(0)})`);
 
-    // Convert spin from RPM to rad/s
+    // Convert spin from RPM to rad/s - Use 'let' to allow decay
     // Assuming side spin is around Y axis, back spin around X axis relative to path
     // This needs refinement based on how side/back spin are defined relative to world coords
-    const spinRadPerSec = {
+    let spinRadPerSec = {
         x: -(spinVec.x || 0) * (2 * Math.PI / 60), // Backspin around X (Negated to produce upward lift)
         y: (spinVec.y || 0) * (2 * Math.PI / 60), // Sidespin around Y
         z: (spinVec.z || 0) * (2 * Math.PI / 60)  // Rifle spin? (Assume 0 for now)
     };
-     console.log(`Sim: Spin rad/s: (${spinRadPerSec.x.toFixed(2)}, ${spinRadPerSec.y.toFixed(2)}, ${spinRadPerSec.z.toFixed(2)})`);
+     console.log(`Sim: Initial Spin rad/s: (${spinRadPerSec.x.toFixed(2)}, ${spinRadPerSec.y.toFixed(2)}, ${spinRadPerSec.z.toFixed(2)})`);
 
 
     while (position.y > 0.01 || time === 0) { // Loop until ball is near/below ground (allow at least one step)
         // 1. Calculate Velocity Magnitude
         const velMag = Math.sqrt(velocity.x**2 + velocity.y**2 + velocity.z**2);
         if (velMag < 0.01) break; // Stop if ball stops mid-air
+
+        // --- Air Spin Decay ---
+        const decayFactor = dt; // Decay is per second, applied over dt
+        const backspinDecayRad = (AIR_BACKSPIN_DECAY_RATE_RPM_PER_SECOND * (2 * Math.PI / 60)) * decayFactor;
+        const sidespinDecayRad = (AIR_SIDESPIN_DECAY_RATE_RPM_PER_SECOND * (2 * Math.PI / 60)) * decayFactor;
+        const minSpinRad = (MIN_AIR_SPIN_EFFECT_RPM * (2 * Math.PI / 60));
+
+        // Decay backspin (spinRadPerSec.x) towards zero
+        if (Math.abs(spinRadPerSec.x) > minSpinRad) {
+            const decayAmount = Math.min(Math.abs(spinRadPerSec.x), backspinDecayRad);
+            spinRadPerSec.x -= decayAmount * Math.sign(spinRadPerSec.x);
+        } else {
+            spinRadPerSec.x = 0;
+        }
+        // Decay sidespin (spinRadPerSec.y) towards zero
+        if (Math.abs(spinRadPerSec.y) > minSpinRad) {
+            const decayAmount = Math.min(Math.abs(spinRadPerSec.y), sidespinDecayRad);
+            spinRadPerSec.y -= decayAmount * Math.sign(spinRadPerSec.y);
+        } else {
+            spinRadPerSec.y = 0;
+        }
+        // We are ignoring rifle spin decay (spinRadPerSec.z) for now
 
         // 2. Calculate Forces (as accelerations)
         const accel_gravity = { x: 0, y: -gravity, z: 0 };
@@ -59,10 +89,11 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club) 
             y: spinRadPerSec.z * velocity.x - spinRadPerSec.x * velocity.z,
             z: spinRadPerSec.x * velocity.y - spinRadPerSec.y * velocity.x
         };
+        // Lift (Magnus) Force: Split calculation using separate constants
         const accel_lift = {
-            x: liftConst * crossProd.x,
-            y: liftConst * crossProd.y,
-            z: liftConst * crossProd.z
+            x: liftConst_sidespin * crossProd.x, // Horizontal force primarily from sidespin (crossProd.x involves spin.y)
+            y: liftConst_backspin * crossProd.y, // Vertical force primarily from backspin (crossProd.y involves spin.x)
+            z: liftConst_backspin * (spinRadPerSec.x * velocity.y) - liftConst_sidespin * (spinRadPerSec.y * velocity.x) // Apply respective constants to z-components
         };
 
         // Additive "cheat" lift based on club's liftFactor
@@ -149,28 +180,42 @@ export const HOLE_RADIUS_METERS = 0.108 / 2; // Regulation hole diameter is 4.25
 const MAX_HOLE_ENTRY_SPEED = 1.5; // m/s - Max speed to fall into the hole (needs tuning)
 // Spin influence on roll
 const NEUTRAL_BACKSPIN_RPM = 2500; // RPM at which spin has minimal effect on roll distance
-const SPIN_FRICTION_FACTOR = 0.00008; // How much friction changes per RPM deviation (Increased, needs tuning!)
+const SPIN_FRICTION_FACTOR = 0.00008; // How much friction changes per RPM deviation (Increased, needs tuning!) // KEEPING THIS FOR NOW, might remove later
+
+// --- New Spin Physics Constants (Tunable) ---
+const BACKSPIN_ACCELERATION_FACTOR = 0.000005; // Acceleration per RPM (m/s^2 / RPM) - Needs tuning!
+const SIDESPIN_ACCELERATION_FACTOR = 0.000004; // Acceleration per RPM (m/s^2 / RPM) - Needs tuning!
+const BACKSPIN_DECAY_RATE_PER_SECOND = 1500; // RPM decay per second - Needs tuning!
+const SIDESPIN_DECAY_RATE_PER_SECOND = 2000; // RPM decay per second - Needs tuning!
+const MIN_SPIN_EFFECT_RPM = 200; // Spin below this RPM has no acceleration effect
 
 /**
- * Simulates the ball rolling on the ground with friction, influenced by backspin.
+ * Simulates the ball rolling on the ground with friction and spin effects (backspin and sidespin).
  *
  * @param {THREE.Vector3} initialPosition - Starting position of the ball (meters).
  * @param {THREE.Vector3} initialVelocity - Starting velocity of the ball (m/s).
  * @param {string} surfaceType - The type of surface the ball is on ('green', 'fairway', 'rough', etc.).
  * @param {number} initialBackspinRPM - Initial backspin in RPM.
- * @returns {object} Result containing finalPosition (THREE.Vector3) and isHoledOut (boolean).
+ * @param {number} [initialSideSpinRPM=0] - Initial sidespin in RPM.
+ * @returns {object} Result containing finalPosition (THREE.Vector3), isHoledOut (boolean), and rollTrajectoryPoints (array of THREE.Vector3).
  */
-export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType, initialBackspinRPM = 0) {
-    console.log(`Sim (Roll): Starting ground roll. Surface: ${surfaceType}, Backspin: ${initialBackspinRPM.toFixed(0)} RPM`);
+export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType, initialBackspinRPM = 0, initialSideSpinRPM = 0) {
+    console.log(`Sim (Roll): Starting ground roll. Surface: ${surfaceType}, Backspin: ${initialBackspinRPM.toFixed(0)} RPM, Sidespin: ${initialSideSpinRPM.toFixed(0)} RPM`);
     console.log(`Sim (Roll): Initial Pos: (${initialPosition.x.toFixed(2)}, ${initialPosition.y.toFixed(2)}, ${initialPosition.z.toFixed(2)})`);
     console.log(`Sim (Roll): Initial Vel: (${initialVelocity.x.toFixed(2)}, ${initialVelocity.y.toFixed(2)}, ${initialVelocity.z.toFixed(2)})`);
 
     let position = initialPosition.clone();
     let velocity = initialVelocity.clone();
+    // Store initial horizontal velocity direction for backspin force
+    const initialHorizontalVelocityDir = velocity.clone().setY(0).normalize();
     // Ensure ball starts exactly on the ground visually for roll simulation
     position.y = BALL_RADIUS;
     // We only care about horizontal velocity for rolling friction
     velocity.y = 0;
+
+    // Track current spin amounts
+    let currentBackspinRPM = initialBackspinRPM;
+    let currentSideSpinRPM = initialSideSpinRPM;
 
     const surfaceProps = getSurfaceProperties(surfaceType);
     const baseFrictionCoefficient = surfaceProps?.friction || 0.1; // Base friction from surface
@@ -186,9 +231,9 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
     // Let's remove the upper clamp for now to see the full effect of high spin
     // effectiveFrictionCoefficient = Math.min(baseFrictionCoefficient * 3.0, effectiveFrictionCoefficient); // Optional: Cap max friction increase
 
-    // Calculate deceleration magnitude using the *effective* friction
-    const decelerationMagnitude = effectiveFrictionCoefficient * gravity;
-    console.log(`Sim (Roll): Surface='${surfaceType}', BaseFriction=${baseFrictionCoefficient.toFixed(3)}, SpinDev=${spinDeviation.toFixed(0)}, EffectiveFriction=${effectiveFrictionCoefficient.toFixed(3)}, DecelMag=${decelerationMagnitude.toFixed(2)} m/s^2`);
+    // Calculate base friction deceleration magnitude (we might remove the spin effect on friction later)
+    const frictionDecelerationMagnitude = effectiveFrictionCoefficient * gravity;
+    console.log(`Sim (Roll): Surface='${surfaceType}', BaseFriction=${baseFrictionCoefficient.toFixed(3)}, SpinDev=${spinDeviation.toFixed(0)}, EffectiveFriction=${effectiveFrictionCoefficient.toFixed(3)}, FrictionDecelMag=${frictionDecelerationMagnitude.toFixed(2)} m/s^2`);
 
     let time = 0;
     const dt = GROUND_FRICTION_TIME_STEP;
@@ -228,17 +273,81 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
             break; // Exit simulation loop
         }
 
-        // --- Friction Calculation & Velocity Update ---
-        // const speed = velocity.length(); // This was the redeclaration - removed. Use 'speed' from loop start.
-        const decelerationAmount = decelerationMagnitude * dt;
+        // --- Spin Decay ---
+        const spinDecayFactor = dt; // Decay is per second, applied over dt
+        currentBackspinRPM -= BACKSPIN_DECAY_RATE_PER_SECOND * spinDecayFactor * Math.sign(currentBackspinRPM);
+        currentSideSpinRPM -= SIDESPIN_DECAY_RATE_PER_SECOND * spinDecayFactor * Math.sign(currentSideSpinRPM);
+        // Prevent spin from going past zero due to decay
+        if (Math.abs(currentBackspinRPM) < MIN_SPIN_EFFECT_RPM) currentBackspinRPM = 0;
+        if (Math.abs(currentSideSpinRPM) < MIN_SPIN_EFFECT_RPM) currentSideSpinRPM = 0;
 
-        if (speed <= decelerationAmount) {
-            // If deceleration would stop or reverse the ball, just stop it.
+
+        // --- Calculate Acceleration Vectors ---
+        const netAccelerationVec = new THREE.Vector3(0, 0, 0);
+        const currentVelocityDir = velocity.clone().normalize();
+
+        // 1. Friction Acceleration (Opposite current velocity)
+        if (speed > 0.01) { // Only apply friction if moving
+             const frictionAccel = currentVelocityDir.clone().multiplyScalar(-frictionDecelerationMagnitude);
+             netAccelerationVec.add(frictionAccel);
+        }
+
+        // 2. Backspin Acceleration (Opposite initial velocity direction)
+        if (Math.abs(currentBackspinRPM) >= MIN_SPIN_EFFECT_RPM) {
+            // Positive backspin creates force opposite initial direction (slows down faster or pulls back)
+            // Negative backspin (topspin) creates force *along* initial direction (less slowing)
+            const backspinAccelMag = currentBackspinRPM * BACKSPIN_ACCELERATION_FACTOR; // Magnitude can be negative for topspin
+            const backspinAccel = initialHorizontalVelocityDir.clone().multiplyScalar(-backspinAccelMag); // Negate mag to align force correctly
+            netAccelerationVec.add(backspinAccel);
+        }
+
+        // 3. Sidespin Acceleration (Perpendicular to current velocity)
+        if (Math.abs(currentSideSpinRPM) >= MIN_SPIN_EFFECT_RPM && speed > 0.01) {
+            const sidespinAccelMag = Math.abs(currentSideSpinRPM) * SIDESPIN_ACCELERATION_FACTOR;
+            // Rotate current velocity direction 90 degrees around Y axis
+            // Positive sidespin (slice) -> force to the right (negative X relative to Z dir) -> rotate -90 deg
+            // Negative sidespin (hook) -> force to the left (positive X relative to Z dir) -> rotate +90 deg
+            const rotationAngle = (currentSideSpinRPM > 0 ? -Math.PI / 2 : Math.PI / 2);
+            const sidespinAccelDir = currentVelocityDir.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), rotationAngle);
+            const sidespinAccel = sidespinAccelDir.multiplyScalar(sidespinAccelMag);
+            netAccelerationVec.add(sidespinAccel);
+        }
+
+        // --- Update Velocity (with refined stop check v3) ---
+        let shouldStop = false;
+        if (speed > 0.01) {
+            // Calculate deceleration from friction (always opposes current velocity)
+            const frictionDecelMagnitude = frictionDecelerationMagnitude; // Already calculated
+
+            // Calculate the component of backspin acceleration opposing the *current* velocity
+            let opposingBackspinMagnitude = 0;
+            if (Math.abs(currentBackspinRPM) >= MIN_SPIN_EFFECT_RPM) {
+                const backspinAccelMag = currentBackspinRPM * BACKSPIN_ACCELERATION_FACTOR;
+                const backspinAccelVec = initialHorizontalVelocityDir.clone().multiplyScalar(-backspinAccelMag);
+                // Project backspin accel onto the negative current velocity direction
+                opposingBackspinMagnitude = -backspinAccelVec.dot(currentVelocityDir);
+                opposingBackspinMagnitude = Math.max(0, opposingBackspinMagnitude); // Ensure non-negative
+            }
+
+            // Total deceleration magnitude purely opposing the current direction of motion
+            const totalOpposingDecelMagnitude = frictionDecelMagnitude + opposingBackspinMagnitude;
+            const stoppingDecelerationAmount = totalOpposingDecelMagnitude * dt;
+
+            if (speed <= stoppingDecelerationAmount) {
+                console.log(`Sim (Roll): Stopping ball. Speed (${speed.toFixed(3)}) <= Total Opposing Decel Amount (${stoppingDecelerationAmount.toFixed(3)})`);
+                shouldStop = true;
+            }
+        } else {
+             // If speed is already very low, consider stopping
+             shouldStop = true;
+        }
+
+
+        if (shouldStop) {
             velocity.set(0, 0, 0);
         } else {
-            // Otherwise, apply deceleration normally.
-            const decelerationVec = velocity.clone().normalize().multiplyScalar(-decelerationMagnitude);
-            velocity.addScaledVector(decelerationVec, dt);
+            // Apply the full net acceleration (friction + all spin forces)
+            velocity.addScaledVector(netAccelerationVec, dt);
         }
 
         // Update position using the potentially modified velocity
