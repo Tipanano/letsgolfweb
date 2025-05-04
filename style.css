@@ -41,8 +41,11 @@ h1, h2 {
     background-color: #fff;
     border: 1px solid #ddd;
     padding: 15px;
-    margin-bottom: 15px;
+    /* margin-bottom: 15px; */ /* Removed default margin */
     border-radius: 5px;
+    /* Assuming parent (#game-interface) will constrain width */
+    box-sizing: border-box; /* Include padding in width calculation */
+    margin-bottom: 10px; /* Add some space below the bars */
 }
 
 .timing-bar-container {
@@ -110,9 +113,17 @@ h1, h2 {
     /* Left position will be set by JS */
 }
 
+/* --- Main Layout Container --- */
+#main-layout {
+    display: flex;
+    gap: 15px; /* Space between visual area and ball position */
+    margin-bottom: 15px; /* Space below the main layout */
+}
+
 /* --- Visuals Container --- */
 #visuals-container {
-    margin-top: 20px;
+    /* margin-top: 20px; */ /* Removed margin, handled by parent */
+    flex-grow: 1; /* Allow it to take available horizontal space */
     background-color: #ddd; /* Placeholder background */
     border: 1px solid #bbb;
     border-radius: 5px;
@@ -173,29 +184,107 @@ h1, h2 {
     z-index: 1;
 }
 
-/* --- Overlay Elements --- */
-#game-status, #ball-position-control {
-    position: absolute; /* Position relative to #visuals-container */
+/* --- Game Status (Now below main layout) --- */
+#game-status {
+    /* position: absolute; */ /* REMOVED */
     background-color: rgba(255, 255, 255, 0.85); /* Semi-transparent white */
     border: 1px solid #ccc; /* Lighter border */
     padding: 10px;
-    margin-bottom: 0; /* Remove margin */
+    /* margin-bottom: 0; */ /* REMOVED */
     border-radius: 5px;
-    z-index: 10; /* Ensure they are on top */
-    /* Adjust width if needed, e.g., max-width or specific width */
-    /* max-width: 200px; */
+    /* z-index: 10; */ /* REMOVED */
+    width: 100%; /* Take full width of #game-interface */
+    box-sizing: border-box;
+    display: flex; /* Arrange items horizontally */
+    gap: 20px; /* Space between items */
+    align-items: center; /* Vertically align items */
 }
 
-#game-status {
-    top: 10px;
-    left: 10px;
-}
-
+/* --- Ball Position Control (Now side panel) --- */
 #ball-position-control {
-    top: 10px;
-    right: 10px;
-    /* Specific styling for ball position might need tweaks */
+    /* position: absolute; */ /* REMOVED */
+    background-color: rgba(255, 255, 255, 0.85); /* Semi-transparent white */
+    border: 1px solid #ccc; /* Lighter border */
+    padding: 10px;
+    /* margin-bottom: 0; */ /* REMOVED */
+    border-radius: 5px;
+    /* z-index: 10; */ /* REMOVED */
+    flex-basis: 200px; /* Set fixed width */
+    flex-shrink: 0; /* Prevent shrinking */
+    box-sizing: border-box;
+    /* top: 10px; */ /* REMOVED */
+    /* right: 10px; */ /* REMOVED */
 }
+
+/* --- Visual Info Overlay (NEW) --- */
+#visual-info-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none; /* Allow clicks to pass through to canvas */
+    z-index: 5; /* Position above canvas */
+    padding: 10px;
+    box-sizing: border-box;
+    color: white; /* Example text color */
+    text-shadow: 1px 1px 2px black; /* Make text readable */
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between; /* Push elements to top/bottom */
+    align-items: stretch; /* Make children stretch full width */
+    font-size: 1.1em; /* Slightly larger font for overlay */
+}
+
+/* Positioning for overlay elements */
+.overlay-top, .overlay-bottom {
+    display: flex;
+    justify-content: space-between; /* Space out main left/right blocks */
+    width: 100%;
+}
+
+/* Align text within the corner blocks */
+.overlay-top-left, .overlay-bottom-left {
+    text-align: left;
+}
+
+.overlay-top-right {
+    text-align: right;
+}
+
+/* Add some spacing between lines within blocks if needed */
+.overlay-top-left div, .overlay-top-right div, .overlay-bottom-left div {
+    margin-bottom: 2px; /* Small space between lines */
+}
+
+/* --- Overlay Mode Visibility --- */
+/* Hide all mode-specific overlay sections by default */
+#visual-info-overlay .mode-play-hole,
+#visual-info-overlay .mode-closest-to-flag,
+#visual-info-overlay .mode-range {
+    display: none;
+}
+
+/* Show the correct sections based on body class */
+body.mode-play-hole #visual-info-overlay .mode-play-hole,
+body.mode-closest-to-flag #visual-info-overlay .mode-closest-to-flag,
+body.mode-range #visual-info-overlay .mode-range {
+    display: block; /* Or flex if they are containers */
+}
+/* Adjust display for flex containers if needed */
+body.mode-play-hole #visual-info-overlay .overlay-top-left.mode-play-hole,
+body.mode-closest-to-flag #visual-info-overlay .overlay-top-left.mode-closest-to-flag,
+body.mode-range #visual-info-overlay .overlay-top-left.mode-range,
+body.mode-play-hole #visual-info-overlay .overlay-bottom-left.mode-play-hole {
+     display: block; /* These are divs containing text lines */
+}
+
+
+/* Optional: Add specific alignment if needed */
+/* #overlay-hole-info { text-align: left; } */
+/* #overlay-distance { text-align: right; } */
+/* #overlay-shot-info { text-align: left; } */
+/* #overlay-score-info { text-align: right; } */
 
 /* Adjust text color if needed for contrast */
 #game-status label, #game-status p,
@@ -243,15 +332,5 @@ body:not(.mode-range) #instructions {
     /* border-radius: 5px; */ /* Handled by .mode-info-panel */
 }
 body.mode-closest-to-flag #closest-to-flag-info {
-    display: block; /* Show only in this mode */
-}
-
-/* Play Hole UI visibility */
-#play-hole-info {
-    /* display: none; /* Hidden by default via .mode-info-panel */
-    background-color: #e8f8e8; /* Light green background */
-    border: 1px solid #b8e8b8;
-}
-body.mode-play-hole #play-hole-info {
     display: block; /* Show only in this mode */
 }

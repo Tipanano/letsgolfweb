@@ -1,4 +1,5 @@
 import { clubs } from './clubs.js'; // Import club data for populating dropdown
+import { YARDS_TO_METERS } from './visuals/core.js'; // Import conversion constant (Corrected Path)
 
 // --- DOM Element References ---
 const statusText = document.getElementById('status-text');
@@ -61,11 +62,27 @@ const ctfShotsTakenText = document.getElementById('ctf-shots-taken');
 const ctfLastDistanceText = document.getElementById('ctf-last-distance');
 const ctfBestDistanceText = document.getElementById('ctf-best-distance');
 
-// Play Hole UI Elements (Need corresponding HTML elements)
-const phParText = document.getElementById('ph-par');
-const phLengthText = document.getElementById('ph-length');
-const phScoreText = document.getElementById('ph-score');
-const phHoleOutMessage = document.getElementById('ph-hole-out-message'); // A div/span to show the message
+// Play Hole UI Elements (REMOVED - Now handled by overlay)
+// const phParText = document.getElementById('ph-par');
+// const phLengthText = document.getElementById('ph-length');
+// const phScoreText = document.getElementById('ph-score');
+// const phHoleOutMessage = document.getElementById('ph-hole-out-message');
+
+// NEW Visual Overlay Elements
+const overlayHoleNumSpan = document.getElementById('overlay-hole-num');
+const overlayParSpan = document.getElementById('overlay-par');
+const overlayShotNumSpan = document.getElementById('overlay-shot-num');
+const overlayForScoreTextSpan = document.getElementById('overlay-for-score-text'); // Added
+const overlayDistFlagSpan = document.getElementById('overlay-dist-flag');
+const overlayWindSpan = document.getElementById('overlay-wind'); // Added
+const overlayLieSpan = document.getElementById('overlay-lie'); // Added
+const overlayPlayerNameSpan = document.getElementById('overlay-player-name'); // Added
+const overlayTotalScoreSpan = document.getElementById('overlay-total-score'); // Added
+const overlayPositionSpan = document.getElementById('overlay-position'); // Added
+// Range specific elements
+const overlayLastShotDistSpan = document.getElementById('overlay-last-shot-dist'); // Added
+const overlayBackSpinSpan = document.getElementById('overlay-back-spin'); // Added
+const overlaySideSpinSpan = document.getElementById('overlay-side-spin'); // Added
 
 
 // --- Constants from gameLogic (will be passed in or imported if needed) ---
@@ -535,6 +552,90 @@ export function setInitialSwingSpeedDisplay(percentage) {
 updateBallPositionDisplay();
 
 
+// --- NEW Visual Overlay UI Function ---
+
+/**
+ * Updates the text content of the elements within the visual info overlay.
+ * @param {number | string} holeNum - The current hole number.
+ * @param {number | string} par - The par for the current hole.
+ * @param {number | string} distToFlag - The distance to the flag in yards.
+ * @param {number | string} shotNum - The current shot number for the hole.
+ * @param {number | string} score - The current score relative to par for the hole.
+ * @param {string} [lie='N/A'] - The current lie of the ball.
+ * @param {string} [wind='N/A'] - The current wind conditions.
+ * @param {string} [playerName='Player 1'] - The current player's name.
+ * @param {number | string} [totalScore='N/A'] - The total score for the round (Play Hole).
+ * @param {string} [position='N/A'] - The player's position/rank (Play Hole).
+ * @param {number | string} [lastShotDist='N/A'] - Distance of the last shot (Range).
+ * @param {number | string} [backSpin='N/A'] - Backspin of the last shot (Range).
+ * @param {number | string} [sideSpin='N/A'] - Sidespin of the last shot (Range).
+ */
+export function updateVisualOverlayInfo(mode, { holeNum = 'N/A', par = 'N/A', distToFlag = 'N/A', shotNum = 'N/A', score = 'N/A', lie = 'N/A', wind = 'N/A', playerName = 'Player 1', totalScore = 'N/A', position = 'N/A', lastShotDist = 'N/A', backSpin = 'N/A', sideSpin = 'N/A' } = {}) {
+    const formatNum = (num, digits = 0) => (num !== undefined && num !== null && !isNaN(num)) ? num.toFixed(digits) : 'N/A';
+    const formatScore = (s) => {
+        if (s === null || s === undefined || isNaN(s)) return 'N/A';
+        if (s === 0) return 'E';
+        if (s > 0) return `+${s}`;
+        return String(s); // Already includes '-' sign
+    };
+
+    // --- Update Common Elements ---
+    if (overlayWindSpan) overlayWindSpan.textContent = wind;
+    if (overlayLieSpan) overlayLieSpan.textContent = lie;
+
+    // --- Update Mode-Specific Elements ---
+    if (mode === 'play-hole' || mode === 'closest-to-flag') {
+        // Calculate 'for score' text (only for play-hole, maybe CTF later?)
+        let forScoreText = '';
+        if (mode === 'play-hole' && par !== 'N/A' && shotNum !== 'N/A') {
+            const scoreRelativeToPar = shotNum - par;
+            const distMeters = distToFlag / (1 / YARDS_TO_METERS); // Convert yards back to meters for check
+            if (distMeters <= 50) { // Only show if <= 50 meters
+                if (scoreRelativeToPar < -2) forScoreText = '(for Albatross)';
+                else if (scoreRelativeToPar === -2) forScoreText = '(for Eagle)';
+                else if (scoreRelativeToPar === -1) forScoreText = '(for Birdie)';
+                else if (scoreRelativeToPar === 0) forScoreText = '(for Par)';
+                else if (scoreRelativeToPar === 1) forScoreText = '(for Bogey)';
+                else if (scoreRelativeToPar === 2) forScoreText = '(for Double Bogey)';
+                else if (scoreRelativeToPar > 2) forScoreText = `(for +${scoreRelativeToPar - par})`;
+            }
+        }
+
+        // Update Top Left (Play Hole / CTF)
+        if (overlayHoleNumSpan) overlayHoleNumSpan.textContent = holeNum ?? 'N/A';
+        if (overlayParSpan) overlayParSpan.textContent = par ?? 'N/A';
+        if (overlayShotNumSpan) overlayShotNumSpan.textContent = shotNum ?? 'N/A';
+        if (overlayForScoreTextSpan) overlayForScoreTextSpan.textContent = forScoreText;
+
+        // Update Top Right (Distance to Flag)
+        if (overlayDistFlagSpan) overlayDistFlagSpan.textContent = formatNum(distToFlag, 0);
+
+        // Update Bottom Left (Play Hole)
+        if (mode === 'play-hole') {
+            if (overlayPlayerNameSpan) overlayPlayerNameSpan.textContent = playerName;
+            if (overlayTotalScoreSpan) overlayTotalScoreSpan.textContent = formatScore(totalScore);
+            if (overlayPositionSpan) overlayPositionSpan.textContent = position;
+        }
+
+    } else if (mode === 'range') {
+        // Update Top Left (Range)
+        if (overlayLastShotDistSpan) overlayLastShotDistSpan.textContent = formatNum(lastShotDist, 1);
+        if (overlayBackSpinSpan) overlayBackSpinSpan.textContent = formatNum(backSpin, 0);
+        if (overlaySideSpinSpan) overlaySideSpinSpan.textContent = formatNum(sideSpin, 0);
+
+        // Clear other mode-specific fields (optional, but good practice)
+        if (overlayHoleNumSpan) overlayHoleNumSpan.textContent = 'N/A';
+        if (overlayParSpan) overlayParSpan.textContent = 'N/A';
+        if (overlayShotNumSpan) overlayShotNumSpan.textContent = 'N/A';
+        if (overlayForScoreTextSpan) overlayForScoreTextSpan.textContent = '';
+        if (overlayDistFlagSpan) overlayDistFlagSpan.textContent = 'N/A';
+        if (overlayPlayerNameSpan) overlayPlayerNameSpan.textContent = 'N/A';
+        if (overlayTotalScoreSpan) overlayTotalScoreSpan.textContent = 'N/A';
+        if (overlayPositionSpan) overlayPositionSpan.textContent = 'N/A';
+    }
+}
+
+
 // --- Game Mode UI ---
 
 // Function to update the body class based on the current game mode
@@ -572,38 +673,14 @@ export function resetClosestToFlagDisplay() {
      if (ctfTargetDistanceText) ctfTargetDistanceText.textContent = 'N/A';
      if (ctfShotsTakenText) ctfShotsTakenText.textContent = '0';
      if (ctfLastDistanceText) ctfLastDistanceText.textContent = 'N/A';
-     if (ctfBestDistanceText) ctfBestDistanceText.textContent = 'N/A';
+      if (ctfBestDistanceText) ctfBestDistanceText.textContent = 'N/A';
 }
 
-// --- Play Hole UI Functions ---
+// --- Play Hole UI Functions (REMOVED - Now handled by overlay) ---
 
-// Function to update the hole info display
-export function updatePlayHoleInfo(par, lengthYards, score) {
-    if (phParText) phParText.textContent = par;
-    if (phLengthText) phLengthText.textContent = lengthYards.toFixed(0);
-    if (phScoreText) phScoreText.textContent = score;
-    // Hide hole out message when updating score during play
-    if (phHoleOutMessage) phHoleOutMessage.style.display = 'none';
-}
-
-// Function to reset the Play Hole display
-export function resetPlayHoleDisplay() {
-    if (phParText) phParText.textContent = 'N/A';
-    if (phLengthText) phLengthText.textContent = 'N/A';
-    if (phScoreText) phScoreText.textContent = '0';
-    if (phHoleOutMessage) {
-        phHoleOutMessage.textContent = '';
-        phHoleOutMessage.style.display = 'none';
-    }
-}
-
-// Function to show the hole out message
-export function showHoleOutMessage(score) {
-    if (phHoleOutMessage) {
-        phHoleOutMessage.textContent = `Hole Out! Score: ${score}`;
-        phHoleOutMessage.style.display = 'block';
-    }
-}
+// export function updatePlayHoleInfo(par, lengthYards, score) { ... }
+// export function resetPlayHoleDisplay() { ... }
+// export function showHoleOutMessage(score) { ... }
 
 
 // Remove initial setup calls from here; they will be called explicitly from main.js

@@ -15,7 +15,7 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club) 
     const Cd = 0.32; // Drag coefficient (placeholder)
     // const Cl = 0.03; // Lift coefficient (placeholder, related to spin). Reduced from 0.1, still higher than original 0.002. // Replaced by separate Cl values
     const Cl_backspin = 0.01; // Controls vertical lift (tune for height)
-    const Cl_sidespin = 0.1; // Controls side force (tune for curve)
+    const Cl_sidespin = 0.085; // Controls side force (tune for curve)
     const airDensity = 1.225; // kg/m^3 (standard air density)
     const ballArea = Math.PI * (0.04267 / 2) * (0.04267 / 2); // Cross-sectional area of golf ball (m^2)
     const ballMass = 0.04593; // kg (standard golf ball mass)
@@ -245,7 +245,7 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
     while (true) {
         const speed = velocity.length(); // Current speed (horizontal only as y=0)
 
-        console.log('the speed is:', speed.toFixed(3), 'm/s');
+        //console.log('the speed is:', speed.toFixed(3), 'm/s');
 
         // --- Hole Interaction Check ---
         // Only check if on the green and hole position is known
@@ -255,8 +255,11 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
             const dz = position.z - holePosition.z;
             const distanceToHoleCenter = Math.sqrt(dx*dx + dz*dz);
 
+            console.log('Sim (Roll): Distance to hole center:', distanceToHoleCenter.toFixed(3), 'm');
+
+            console.log('hole out min dist:', (HOLE_RADIUS_METERS).toFixed(3), 'm');
             // Check capture condition
-            if (distanceToHoleCenter < HOLE_RADIUS_METERS - BALL_RADIUS && speed < MAX_HOLE_ENTRY_SPEED) {
+            if (distanceToHoleCenter < HOLE_RADIUS_METERS && speed < MAX_HOLE_ENTRY_SPEED) {
                 console.log(`Sim (Roll): HOLE IN! Dist=${distanceToHoleCenter.toFixed(3)}, Speed=${speed.toFixed(2)}`);
                 isHoledOut = true;
                 position.set(holePosition.x, BALL_RADIUS / 2, holePosition.z); // Center ball in hole, slightly sunk

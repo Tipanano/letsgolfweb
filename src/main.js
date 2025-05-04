@@ -33,15 +33,19 @@ function setGameMode(newMode) {
     currentMode = newMode;
     ui.setGameModeClass(currentMode); // Update UI (body class, etc.)
 
-    // Initialize new mode and switch visuals
+    // Initialize new mode, switch visuals, and reset overlay
     if (currentMode === GAME_MODES.RANGE) {
         visuals.switchToRangeView();
+        // Reset overlay for Range mode (clear hole info, show default range info)
+        ui.updateVisualOverlayInfo('range', { lie: 'Tee', wind: 'Calm' });
     } else if (currentMode === GAME_MODES.CLOSEST_TO_FLAG) {
-        closestToFlag.initializeMode();
+        closestToFlag.initializeMode(); // This should call updateVisualOverlayInfo internally now
         visuals.switchToTargetView(closestToFlag.getTargetDistance()); // Pass target distance
+        // CTF initializeMode should handle its initial overlay update
     } else if (currentMode === GAME_MODES.PLAY_HOLE) {
-        playHole.initializeMode(); // This now calls visuals.drawHole internally
+        playHole.initializeMode(); // This now calls updateVisualOverlayInfo internally
         // No need to call visuals.switchToHoleView here directly
+        // playHole.initializeMode handles its initial overlay update
     }
 
     // Reset basic swing state for the new mode
@@ -175,8 +179,16 @@ function handleShotCompletion(shotData) {
         closestToFlag.handleShotResult(shotData);
     } else if (currentMode === GAME_MODES.PLAY_HOLE) {
         playHole.handleShotResult(shotData);
+    } else if (currentMode === GAME_MODES.RANGE) {
+        // Update overlay specifically for range mode
+        ui.updateVisualOverlayInfo('range', {
+            lastShotDist: shotData.totalDistance,
+            backSpin: shotData.backSpin,
+            sideSpin: shotData.sideSpin,
+            lie: 'Tee', // Assuming range is always off a tee for now
+            wind: 'Calm' // Placeholder
+        });
     }
-    // Range mode doesn't need specific handling here
 
     // 4. Update overall game status (e.g., ready for next shot)
     // Note: gameLogic sets its internal state to 'result' before calling back

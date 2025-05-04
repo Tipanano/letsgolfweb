@@ -32,9 +32,26 @@ export function initializeMode() {
     // 2. Tell visuals system to draw the hole
     visuals.drawHole(currentHoleLayout); // We'll add this function to visuals.js
 
-    // 3. Update UI
-    ui.resetPlayHoleDisplay(); // Need to add this UI function
-    ui.updatePlayHoleInfo(currentHoleLayout.par, currentHoleLayout.lengthYards, score); // Need to add this UI function
+    // 3. Update UI (Only overlay now)
+    // ui.resetPlayHoleDisplay(); // REMOVED
+    // ui.updatePlayHoleInfo(currentHoleLayout.par, currentHoleLayout.lengthYards, score); // REMOVED
+
+    // Update visual overlay
+    const initialDistToFlag = calculateDistanceToFlag(currentBallPosition, currentHoleLayout.flagPosition);
+    // Calculate METERS_TO_YARDS locally
+    const METERS_TO_YARDS = 1 / YARDS_TO_METERS;
+    ui.updateVisualOverlayInfo('play-hole', {
+        holeNum: 1, // Assuming hole 1 for now
+        par: currentHoleLayout.par,
+        distToFlag: initialDistToFlag/* * METERS_TO_YARDS*/, // Use calculated value
+        shotNum: shotsTaken + 1, // Show upcoming shot number (1st shot)
+        // score: currentHoleLayout.par, // Pass par for "for score" calculation - score arg is hole score vs par
+        lie: 'Tee', // placeholder
+        wind: 'Calm', // placeholder
+        playerName: 'Player 1', // placeholder
+        totalScore: 0, // placeholder, relative to par for round
+        position: '1st' // placeholder
+    });
 
     // 4. Set initial camera view to behind the ball looking at the hole
     visuals.activateHoleViewCamera(); // Sets the 'hole' view
@@ -86,7 +103,7 @@ export function handleShotResult(shotData) {
 
     if (isHoledOut) {
         console.log(`HOLE OUT! Score: ${score}`);
-        ui.showHoleOutMessage(score); // Need to add this UI function
+        // ui.showHoleOutMessage(score); // REMOVED (Overlay already shows final score)
         // Potentially disable further input here
     } else {
          // Ball is not holed out, prepare for next shot
@@ -95,9 +112,35 @@ export function handleShotResult(shotData) {
          console.log("Ball is not holed out. Ready for next shot.");
     }
 
-    // Update UI with score
-    ui.updatePlayHoleInfo(currentHoleLayout.par, currentHoleLayout.lengthYards, score);
+    // Update UI with score (Only overlay now)
+    // ui.updatePlayHoleInfo(currentHoleLayout.par, currentHoleLayout.lengthYards, score); // REMOVED
 
+    const distToFlag = calculateDistanceToFlag(currentBallPosition, currentHoleLayout.flagPosition);
+    
+    console.log(`Distance to flag before ui?: ${distToFlag.toFixed(2)} meters`);
+    // Calculate METERS_TO_YARDS locally
+    const METERS_TO_YARDS = 1 / YARDS_TO_METERS;
+    ui.updateVisualOverlayInfo('play-hole', {
+        holeNum: 1, // Assuming hole 1 for now
+        par: currentHoleLayout.par,
+        distToFlag: distToFlag/* * METERS_TO_YARDS*/, // Use calculated value
+        shotNum: isHoledOut ? shotsTaken : shotsTaken + 1, // Show total shots if holed, else next shot#
+        // score: currentHoleLayout.par, // Pass par for "for score" calculation - score arg is hole score vs par
+        lie: 'Fairway', // placeholder - assume fairway after shot
+        wind: 'Calm', // placeholder
+        playerName: 'Player 1', // placeholder
+        totalScore: isHoledOut ? (score - currentHoleLayout.par) : 'N/A', // Only show when holed out
+        position: '1st' // placeholder
+    });
+}
+
+// Helper function to calculate distance to flag
+function calculateDistanceToFlag(ballPos, flagPos) {
+    if (!ballPos || !flagPos) return 0;
+    // Calculate horizontal distance (x, z plane)
+    const dx = flagPos.x - ballPos.x;
+    const dz = flagPos.z - ballPos.z;
+    return Math.sqrt(dx * dx + dz * dz);
 }
 
 // --- Getters (optional) ---
