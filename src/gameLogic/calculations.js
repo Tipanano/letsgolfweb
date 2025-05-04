@@ -7,19 +7,22 @@ import {
     getBackswingStartTime, // <-- Added missing import
     getShotDirectionAngle, // <-- Gets RELATIVE angle
     getCurrentTargetLineAngle, // <-- Gets ABSOLUTE target line angle
-    IDEAL_BACKSWING_DURATION_MS, PUTT_DISTANCE_FACTOR // Import constants from state
+    IDEAL_BACKSWING_DURATION_MS // Removed PUTT_DISTANCE_FACTOR
 } from './state.js';
 import { stopFullDownswingAnimation, stopChipDownswingAnimation /* Putt stopped in actions */ } from './animations.js';
 import { updateStatus, getBallPositionIndex, getBallPositionLevels } from '../ui.js';
 import { calculateImpactPhysics } from '../swingPhysics.js';
 import { calculateChipImpact } from '../chipPhysics.js';
 import { calculatePuttImpact } from '../puttPhysics.js';
-import { simulateFlightStepByStep } from './simulation.js';
-import { calculatePuttTrajectoryPoints } from './trajectory.js'; // Removed calculateTrajectoryPoints import
+// Import both simulation functions and HOLE_RADIUS
+import { simulateFlightStepByStep, simulateGroundRoll, HOLE_RADIUS_METERS } from './simulation.js';
+// Removed Putt Trajectory import as roll simulation handles it
 import { clamp } from './utils.js';
 import { getCurrentGameMode } from '../main.js'; // Import mode checker
 import { getCurrentBallPosition as getPlayHoleBallPosition } from '../modes/playHole.js'; // Import position getter
-import { BALL_RADIUS } from '../visuals/core.js'; // Import BALL_RADIUS for default position
+import { BALL_RADIUS, YARDS_TO_METERS } from '../visuals/core.js'; // Import BALL_RADIUS and conversion
+import { getFlagPosition, getGreenCenter, getGreenRadius } from '../visuals/holeView.js'; // For hole/green checks
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js'; // For Vector3
 
 // --- Calculation Functions ---
 
@@ -39,37 +42,17 @@ export function calculateFullSwingShot() {
     const ballPositionIndex = getBallPositionIndex();
     const ballPositionLevels = getBallPositionLevels();
     const centerIndex = Math.floor(ballPositionLevels / 2);
-    // Calculate ball position factor: -1 (Fwd) to +1 (Back), 0 for Center
     const ballPositionFactor = ballPositionLevels > 1 ? (centerIndex - ballPositionIndex) / centerIndex : 0;
-    console.log(`Calc (Full): Ball Position: Index=${ballPositionIndex}, Factor=${ballPositionFactor.toFixed(2)} (-1=Fwd, 0=Ctr, +1=Back)`);
-
     const backswingDuration = getBackswingDuration();
     const swingSpeed = getSwingSpeed();
-    const backswingStartTime = getBackswingStartTime(); // Need start time for ideal end calc
+    const backswingStartTime = getBackswingStartTime();
     const selectedClub = getSelectedClub();
-
-    // Calculate ideal backswing end time for transition reference
     const scaledIdealBackswingDuration = IDEAL_BACKSWING_DURATION_MS / swingSpeed;
     const idealBackswingEndTime = backswingStartTime ? backswingStartTime + scaledIdealBackswingDuration : null;
-
-    const timingInputs = {
-        backswingDuration: backswingDuration,
-        hipInitiationTime: getHipInitiationTime(),
-        rotationStartTime: getRotationStartTime(),
-        rotationInitiationTime: getRotationInitiationTime(),
-        armsStartTime: getArmsStartTime(),
-        wristsStartTime: getWristsStartTime(),
-        downswingPhaseStartTime: getDownswingPhaseStartTime(), // When the timing bars started
-        idealBackswingEndTime: idealBackswingEndTime, // For transition calculation
-    };
+    const timingInputs = { backswingDuration, hipInitiationTime: getHipInitiationTime(), rotationStartTime: getRotationStartTime(), rotationInitiationTime: getRotationInitiationTime(), armsStartTime: getArmsStartTime(), wristsStartTime: getWristsStartTime(), downswingPhaseStartTime: getDownswingPhaseStartTime(), idealBackswingEndTime };
 
     // --- Call the full swing physics calculation module ---
-    const impactResult = calculateImpactPhysics(
-        timingInputs,
-        selectedClub,
-        swingSpeed,
-        ballPositionFactor
-    );
+    const impactResult = calculateImpactPhysics(timingInputs, selectedClub, swingSpeed, ballPositionFactor);
 
     // --- Use results from impactResult ---
     const ballSpeed = impactResult.ballSpeed;
@@ -79,79 +62,132 @@ export function calculateFullSwingShot() {
     const strikeQuality = impactResult.strikeQuality;
     let peakHeight = 0;
     let carryDistance = 0;
-    let rolloutDistance = 0;
     let totalDistance = 0;
     let resultMessage = "";
+    let isHoledOut = false;
+    let finalPosition = null; // Will be Vector3
 
     // --- Prepare for Simulation ---
     console.log("Calc (Full): --- Preparing Simulation ---");
     console.log(`Calc (Full): Launch Conditions: BallSpeed=${ballSpeed.toFixed(1)}mph, LaunchAngle=${launchAngle.toFixed(1)}deg, BackSpin=${backSpin.toFixed(0)}rpm, SideSpin=${sideSpin.toFixed(0)}rpm`);
 
     // --- Calculate Initial Vectors for Simulation ---
-    const ballSpeedMPS = ballSpeed * 0.44704; // Convert mph to m/s
+    const ballSpeedMPS = ballSpeed * 0.44704;
     const launchAngleRad = launchAngle * Math.PI / 180;
     const initialVelY = ballSpeedMPS * Math.sin(launchAngleRad);
     const initialVelHorizontalMag = ballSpeedMPS * Math.cos(launchAngleRad);
-    // Get target line, physics deviation, and relative aim adjustment angles
     const targetLineAngleRad = getCurrentTargetLineAngle() * Math.PI / 180;
-    const physicsDeviationRad = impactResult.absoluteFaceAngle * Math.PI / 180; // Deviation relative to target line
-    const relativeAimAngleRad = getShotDirectionAngle() * Math.PI / 180; // Player's fine-tuning relative to target line
-    // Calculate final absolute launch direction
+    const physicsDeviationRad = impactResult.absoluteFaceAngle * Math.PI / 180;
+    const relativeAimAngleRad = getShotDirectionAngle() * Math.PI / 180;
     const finalLaunchDirectionRad = targetLineAngleRad + physicsDeviationRad + relativeAimAngleRad;
-    console.log(`Calc (Full): TargetLine=${getCurrentTargetLineAngle().toFixed(1)}deg, PhysicsDev=${impactResult.absoluteFaceAngle.toFixed(1)}deg, RelativeAim=${getShotDirectionAngle().toFixed(1)}deg, FinalLaunchDir=${(finalLaunchDirectionRad * 180 / Math.PI).toFixed(1)}deg`);
-    const initialVelX = initialVelHorizontalMag * Math.sin(finalLaunchDirectionRad); // Positive angle = positive X (right)
-    const initialVelZ = initialVelHorizontalMag * Math.cos(finalLaunchDirectionRad); // Positive Z = forward
-    const initialVelocity = { x: initialVelX, y: initialVelY, z: initialVelZ };
+    const initialVelX = initialVelHorizontalMag * Math.sin(finalLaunchDirectionRad);
+    const initialVelZ = initialVelHorizontalMag * Math.cos(finalLaunchDirectionRad);
+    const initialVelocityObj = { x: initialVelX, y: initialVelY, z: initialVelZ };
     const spinVectorRPM = { x: backSpin, y: sideSpin, z: 0 };
 
     // --- Determine Initial Position based on Game Mode ---
-    let initialPosition;
+    let initialPositionObj;
     const currentMode = getCurrentGameMode();
     if (currentMode === 'play-hole') {
-        initialPosition = getPlayHoleBallPosition();
-        console.log('the new positions in playHole are', initialPosition);
-        // Ensure y is at least BALL_RADIUS
-        initialPosition.y = Math.max(BALL_RADIUS, initialPosition.y);
-        console.log(`Calc (Full): Using PlayHole initial position: x=${initialPosition.x.toFixed(2)}, y=${initialPosition.y.toFixed(2)}, z=${initialPosition.z.toFixed(2)}`);
+        initialPositionObj = getPlayHoleBallPosition();
+        initialPositionObj.y = Math.max(BALL_RADIUS, initialPositionObj.y);
     } else {
-        initialPosition = { x: 0, y: BALL_RADIUS, z: 0 }; // Default tee position for other modes
-        console.log(`Calc (Full): Using default initial position: x=${initialPosition.x.toFixed(2)}, y=${initialPosition.y.toFixed(2)}, z=${initialPosition.z.toFixed(2)}`);
+        initialPositionObj = { x: 0, y: BALL_RADIUS, z: 0 };
+    }
+    console.log(`Calc (Full): Initial position: x=${initialPositionObj.x.toFixed(2)}, y=${initialPositionObj.y.toFixed(2)}, z=${initialPositionObj.z.toFixed(2)}`);
+
+    // --- Run Flight Simulation ---
+    const flightSimulationResult = simulateFlightStepByStep(initialPositionObj, initialVelocityObj, spinVectorRPM, selectedClub);
+
+    // --- Extract Results from Flight Simulation ---
+    carryDistance = flightSimulationResult.carryDistance;
+    peakHeight = flightSimulationResult.peakHeight;
+    const visualTimeOfFlight = Math.max(0.5, Math.min(5.0, flightSimulationResult.timeOfFlight));
+    const landingPositionObj = flightSimulationResult.landingPosition;
+
+    // Landing velocity is now returned directly
+    const landingVelocity = flightSimulationResult.landingVelocity || { x: 0, y: 0, z: 0 }; // Use returned velocity or fallback
+    console.log(`Calc (Full): Landing Pos: (${landingPositionObj.x.toFixed(2)}, ${landingPositionObj.y.toFixed(2)}, ${landingPositionObj.z.toFixed(2)})`);
+    console.log(`Calc (Full): Landing Vel: (${landingVelocity.x.toFixed(2)}, ${landingVelocity.y.toFixed(2)}, ${landingVelocity.z.toFixed(2)})`);
+
+    // --- Check for Slam Dunk ---
+    const holePosition = getFlagPosition();
+    if (currentMode === 'play-hole' && holePosition) {
+        const dxSlam = landingPositionObj.x - holePosition.x;
+        const dzSlam = landingPositionObj.z - holePosition.z;
+        const distToHoleSlam = Math.sqrt(dxSlam*dxSlam + dzSlam*dzSlam);
+        if (distToHoleSlam < HOLE_RADIUS_METERS) {
+            console.log("Calc (Full): SLAM DUNK HOLE IN!");
+            isHoledOut = true;
+            finalPosition = new THREE.Vector3(holePosition.x, BALL_RADIUS / 2, holePosition.z);
+        }
     }
 
+    // --- Run Ground Simulation (if not holed out) ---
+    if (!isHoledOut) {
+        let surfaceType = 'rough'; // Default
+        // TODO: Implement proper surface detection based on holeLayout data
+        if (currentMode === 'play-hole') {
+            const greenCenter = getGreenCenter();
+            const greenRadius = getGreenRadius();
+            if (greenCenter && greenRadius) {
+                const dxGreen = landingPositionObj.x - greenCenter.x;
+                const dzGreen = landingPositionObj.z - greenCenter.z;
+                surfaceType = (Math.sqrt(dxGreen*dxGreen + dzGreen*dzGreen) <= greenRadius) ? 'green' : 'fairway';
+            } else {
+                 surfaceType = 'fairway'; // Fallback
+            }
+        } else {
+            surfaceType = 'fairway'; // Range mode etc.
+        }
+        console.log(`Calc (Full): Determined landing surface: ${surfaceType}`);
 
-    // --- Run Simulation ---
-    const simulationResult = simulateFlightStepByStep(initialPosition, initialVelocity, spinVectorRPM, selectedClub);
+        const rollStartPosition = new THREE.Vector3(landingPositionObj.x, landingPositionObj.y, landingPositionObj.z);
 
-    // --- Extract Results from Simulation ---
-    carryDistance = simulationResult.carryDistance;
-    peakHeight = simulationResult.peakHeight;
-    const landingAngleRadians = simulationResult.landingAngleRadians;
-    const visualTimeOfFlight = Math.max(0.5, Math.min(5.0, simulationResult.timeOfFlight)); // Clamp visual time
+        // Calculate landing angle factor to adjust initial roll speed
+        const landingVelHorizontalMag = Math.sqrt(landingVelocity.x**2 + landingVelocity.z**2);
+        let landingAngleRad = Math.PI / 2; // Default 90 deg
+        if (landingVelHorizontalMag > 0.01) {
+            landingAngleRad = Math.atan2(Math.abs(landingVelocity.y), landingVelHorizontalMag);
+        }
+        // Simple factor: cos(angle). Steeper angle (closer to PI/2) -> lower factor. Shallow angle (closer to 0) -> higher factor.
+        // Add power for more effect? e.g., Math.pow(Math.cos(landingAngleRad), 0.5)
+        const initialRollSpeedFactor = Math.cos(landingAngleRad);
+        console.log(`Calc (Full): Landing Angle: ${(landingAngleRad * 180 / Math.PI).toFixed(1)} deg, RollSpeedFactor: ${initialRollSpeedFactor.toFixed(2)}`);
 
-    console.log(`Calc (Full): Simulated Time of Flight: ${simulationResult.timeOfFlight.toFixed(2)}s`);
-    console.log(`Calc (Full): Simulated Carry: ${carryDistance.toFixed(1)} yd, Peak Height: ${peakHeight.toFixed(1)} yd, Landing Angle: ${(landingAngleRadians * 180 / Math.PI).toFixed(1)} deg`);
+        // Apply factor to horizontal landing velocity components
+        const rollStartVelocity = new THREE.Vector3(
+            landingVelocity.x * initialRollSpeedFactor,
+            0, // Y velocity is zero for roll start
+            landingVelocity.z * initialRollSpeedFactor
+        );
 
-    // --- Calculate Rollout ---
-    let baseRollFactor = 0.06;
-    switch (strikeQuality) {
-        case "Thin": baseRollFactor += 0.08; break;
-        case "Punch": baseRollFactor += 0.04; break;
-        case "Fat": baseRollFactor -= 0.04; break;
-        case "Flip": baseRollFactor -= 0.02; break;
+        // Pass the backSpin value (from impactResult) to the ground roll simulation
+        const groundRollResult = simulateGroundRoll(rollStartPosition, rollStartVelocity, surfaceType, backSpin);
+        finalPosition = groundRollResult.finalPosition; // Vector3
+        isHoledOut = groundRollResult.isHoledOut;
+        // Combine trajectories
+        const fullTrajectory = flightSimulationResult.trajectoryPoints.concat(groundRollResult.rollTrajectoryPoints || []);
+        flightSimulationResult.trajectoryPoints = fullTrajectory; // Overwrite the original trajectory with the combined one
+    } else {
+         console.log("Calc (Full): Skipping ground roll due to slam dunk.");
+         // Ensure trajectoryPoints exists even if roll is skipped
+         if (!flightSimulationResult.trajectoryPoints) flightSimulationResult.trajectoryPoints = [];
     }
-    baseRollFactor = Math.max(0.01, baseRollFactor);
-    const targetSpinForZeroRoll = 7500;
-    const spinSensitivity = 3500;
-    const spinRollFactor = 1 - (backSpin - targetSpinForZeroRoll) / spinSensitivity;
-    const landingAngleFactor = clamp(Math.pow(Math.cos(landingAngleRadians), 0.5), 0.1, 1.5);
-    console.log(`Calc (Full): Rollout Factors: Base=${baseRollFactor.toFixed(2)} (Strike: ${strikeQuality}), SpinFactor=${spinRollFactor.toFixed(2)} (BackSpin: ${backSpin.toFixed(0)}), AngleFactor=${landingAngleFactor.toFixed(2)} (Angle: ${(landingAngleRadians * 180 / Math.PI).toFixed(1)} deg)`);
-    rolloutDistance = carryDistance * baseRollFactor * spinRollFactor * landingAngleFactor;
-    const maxPositiveRollFactor = 0.25;
-    const minNegativeRollFactor = -0.08;
-    rolloutDistance = Math.max(carryDistance * minNegativeRollFactor, rolloutDistance);
-    rolloutDistance = Math.min(carryDistance * maxPositiveRollFactor, rolloutDistance);
-    totalDistance = carryDistance + rolloutDistance;
-    console.log(`Calc (Full): Calculated Rollout: ${rolloutDistance.toFixed(1)} yd, Total Distance: ${totalDistance.toFixed(1)} yd`);
+
+    // Ensure finalPosition is set
+    if (!finalPosition) {
+        console.warn("Calc (Full): finalPosition was not set, using landing position as fallback.");
+        finalPosition = new THREE.Vector3(landingPositionObj.x, landingPositionObj.y, landingPositionObj.z);
+    }
+
+    // Calculate final distances
+    const dxTotal = finalPosition.x - initialPositionObj.x;
+    const dzTotal = finalPosition.z - initialPositionObj.z;
+    totalDistance = Math.sqrt(dxTotal*dxTotal + dzTotal*dzTotal) * (1 / YARDS_TO_METERS);
+    const sideDistance = dxTotal * (1 / YARDS_TO_METERS); // Side distance is just the X difference in yards
+    console.log(`Calc (Full): Final Position: (${finalPosition.x.toFixed(2)}, ${finalPosition.y.toFixed(2)}, ${finalPosition.z.toFixed(2)})m`);
+    console.log(`Calc (Full): Calculated Total Distance: ${totalDistance.toFixed(1)} yd, Side Distance: ${sideDistance.toFixed(1)} yd`);
 
     // --- Determine Result Message ---
     let spinDesc = "";
@@ -164,17 +200,15 @@ export function calculateFullSwingShot() {
     if (impactResult.clubPathAngle > pathThreshold) startDirPrefix = "Push ";
     else if (impactResult.clubPathAngle < -pathThreshold) startDirPrefix = "Pull ";
     resultMessage = `${strikeQuality} ${startDirPrefix}${spinDesc}.`;
-    console.log(`Calc (Full): ResultMessage: Strike=${strikeQuality}, Path=${impactResult.clubPathAngle.toFixed(1)}, SideSpin=${sideSpin.toFixed(0)} => ${resultMessage}`);
+    if (isHoledOut) {
+        resultMessage += " HOLE IN ONE!"; // Adjust later based on shot count
+    }
+    console.log(`Calc (Full): ResultMessage: ${resultMessage}`);
 
     // --- Prepare Shot Data Object ---
     const shotData = {
-        backswingDuration: backswingDuration,
-        timingDeviations: {
-            transition: impactResult.transitionDev,
-            rotation: impactResult.rotationDev,
-            arms: impactResult.armsDev,
-            wrists: impactResult.wristsDev
-        },
+        // ... (copy timingDeviations, ballPositionFactor etc. from impactResult)
+        timingDeviations: { transition: impactResult.transitionDev, rotation: impactResult.rotationDev, arms: impactResult.armsDev, wrists: impactResult.wristsDev },
         ballPositionFactor: ballPositionFactor,
         message: resultMessage,
         clubHeadSpeed: impactResult.actualCHS,
@@ -190,29 +224,16 @@ export function calculateFullSwingShot() {
         potentialCHS: impactResult.potentialCHS,
         dynamicLoft: impactResult.dynamicLoft,
         smashFactor: impactResult.smashFactor,
+        // Simulation results
         peakHeight: peakHeight,
         carryDistance: carryDistance,
-        rolloutDistance: rolloutDistance,
         totalDistance: totalDistance,
         timeOfFlight: visualTimeOfFlight,
-        trajectory: null,
-        sideDistance: 0,
-        finalPosition: { ...initialPosition } // Default final position (use determined initial pos)
+        trajectory: flightSimulationResult.trajectoryPoints, // Now contains combined flight + roll
+        sideDistance: sideDistance,
+        finalPosition: { x: finalPosition.x, y: finalPosition.y, z: finalPosition.z }, // Convert final Vector3 back to object
+        isHoledOut: isHoledOut
     };
-
-    // --- Use Simulation Trajectory Points ---
-    // Optional: Downsample simulationResult.trajectoryPoints if needed for performance
-    // const simplifiedTrajectory = downsamplePoints(simulationResult.trajectoryPoints, 5); // Example: keep every 5th point
-    // shotData.trajectory = simplifiedTrajectory;
-    shotData.trajectory = simulationResult.trajectoryPoints; // Use full simulation points for now
-
-    // Calculate final side distance and position using simulation's landing position
-    // (simulationResult.landingPosition already accounts for initialPosition)
-    shotData.finalPosition = simulationResult.landingPosition;
-    // Calculate side distance relative to initial position's X
-    shotData.sideDistance = (simulationResult.landingPosition.x - initialPosition.x) * 1.09361; // Convert meters to yards
-    console.log(`Calc (Full): Final Position: (${shotData.finalPosition.x.toFixed(1)}, ${shotData.finalPosition.y.toFixed(1)}, ${shotData.finalPosition.z.toFixed(1)})m`);
-    console.log(`Calc (Full): Calculated Side Distance: ${shotData.sideDistance.toFixed(1)} yards (relative to start X: ${initialPosition.x.toFixed(1)}m)`);
 
     // Update internal state
     setGameState('result');
@@ -232,18 +253,14 @@ export function calculateFullSwingShot() {
 export function calculateChipShot() {
     const state = getGameState();
     const shotType = getCurrentShotType();
-    // Check if state is 'calculatingChip' (set in animation timeout or action trigger)
     if (state !== 'calculatingChip' || shotType !== 'chip') return;
 
-    // Stop any chip downswing timeout (already stopped if triggered by key press)
     stopChipDownswingAnimation();
-
-    // Set state to generic 'calculating' now
     setGameState('calculating');
     updateStatus('Calculating Chip...');
     console.log("Calc: Calculating Chip Shot...");
 
-    // --- Prepare Inputs for chipPhysics Module ---
+    // --- Prepare Inputs ---
     const ballPositionIndex = getBallPositionIndex();
     const ballPositionLevels = getBallPositionLevels();
     const centerIndex = Math.floor(ballPositionLevels / 2);
@@ -251,26 +268,15 @@ export function calculateChipShot() {
     const backswingDuration = getBackswingDuration();
     const downswingPhaseStartTime = getDownswingPhaseStartTime();
     const chipRotationStartTime = getChipRotationStartTime();
-    const chipWristsStartTime = getChipWristsStartTime(); // Hit time
+    const chipWristsStartTime = getChipWristsStartTime();
     const selectedClub = getSelectedClub();
-
-    // Calculate chip timing offsets relative to downswingPhaseStartTime
     const rotationOffset = chipRotationStartTime ? chipRotationStartTime - downswingPhaseStartTime : null;
     const hitOffset = chipWristsStartTime ? chipWristsStartTime - downswingPhaseStartTime : null;
 
-    console.log(`Calc (Chip): Inputs: Duration=${backswingDuration?.toFixed(0)}, DownswingStart=${downswingPhaseStartTime?.toFixed(0)}, RotTime=${chipRotationStartTime?.toFixed(0)}, HitTime=${chipWristsStartTime?.toFixed(0)}`);
-    console.log(`Calc (Chip): Inputs: RotationOffset=${rotationOffset?.toFixed(0)}, HitOffset=${hitOffset?.toFixed(0)}, Club=${selectedClub.name}, BallPosFactor=${ballPositionFactor.toFixed(2)}`);
+    // --- Call chip physics ---
+    const impactResult = calculateChipImpact(backswingDuration, rotationOffset, hitOffset, selectedClub, ballPositionFactor);
 
-    // --- Call the chip physics calculation module ---
-    const impactResult = calculateChipImpact(
-        backswingDuration,
-        rotationOffset,
-        hitOffset,
-        selectedClub,
-        ballPositionFactor
-    );
-
-    // --- Use results from impactResult ---
+    // --- Use results ---
     const ballSpeed = impactResult.ballSpeed;
     const launchAngle = impactResult.launchAngle;
     const backSpin = impactResult.backSpin;
@@ -278,83 +284,143 @@ export function calculateChipShot() {
     const strikeQuality = impactResult.strikeQuality;
     let peakHeight = 0;
     let carryDistance = 0;
-    let rolloutDistance = 0;
     let totalDistance = 0;
     let resultMessage = impactResult.message || "Chip Result";
+    let isHoledOut = false;
+    let finalPosition = null; // Will be Vector3
 
     // --- Prepare for Simulation ---
     console.log("Calc (Chip): --- Preparing Simulation ---");
     console.log(`Calc (Chip): Launch Conditions: BallSpeed=${ballSpeed.toFixed(1)}mph, LaunchAngle=${launchAngle.toFixed(1)}deg, BackSpin=${backSpin.toFixed(0)}rpm, SideSpin=${sideSpin.toFixed(0)}rpm`);
 
-    // --- Calculate Initial Vectors for Simulation ---
+    // --- Calculate Initial Vectors ---
     const ballSpeedMPS = ballSpeed * 0.44704;
     const launchAngleRad = launchAngle * Math.PI / 180;
     const initialVelY = ballSpeedMPS * Math.sin(launchAngleRad);
     const initialVelHorizontalMag = ballSpeedMPS * Math.cos(launchAngleRad);
-    // Get target line, physics deviation, and relative aim adjustment angles
     const targetLineAngleRad = getCurrentTargetLineAngle() * Math.PI / 180;
-    const physicsDeviationRad = impactResult.absoluteFaceAngle * Math.PI / 180; // Deviation relative to target line
-    const relativeAimAngleRad = getShotDirectionAngle() * Math.PI / 180; // Player's fine-tuning relative to target line
-    // Calculate final absolute launch direction
+    const physicsDeviationRad = impactResult.absoluteFaceAngle * Math.PI / 180;
+    const relativeAimAngleRad = getShotDirectionAngle() * Math.PI / 180;
     const finalLaunchDirectionRad = targetLineAngleRad + physicsDeviationRad + relativeAimAngleRad;
-    console.log(`Calc (Chip): TargetLine=${getCurrentTargetLineAngle().toFixed(1)}deg, PhysicsDev=${impactResult.absoluteFaceAngle.toFixed(1)}deg, RelativeAim=${getShotDirectionAngle().toFixed(1)}deg, FinalLaunchDir=${(finalLaunchDirectionRad * 180 / Math.PI).toFixed(1)}deg`);
     const initialVelX = initialVelHorizontalMag * Math.sin(finalLaunchDirectionRad);
     const initialVelZ = initialVelHorizontalMag * Math.cos(finalLaunchDirectionRad);
-    const initialVelocity = { x: initialVelX, y: initialVelY, z: initialVelZ };
+    const initialVelocityObj = { x: initialVelX, y: initialVelY, z: initialVelZ };
     const spinVectorRPM = { x: backSpin, y: sideSpin, z: 0 };
 
-    // --- Determine Initial Position based on Game Mode ---
-    let initialPosition;
+    // --- Determine Initial Position ---
+    let initialPositionObj;
     const currentMode = getCurrentGameMode();
     if (currentMode === 'play-hole') {
-        initialPosition = getPlayHoleBallPosition();
-        // Ensure y is at least BALL_RADIUS
-        initialPosition.y = Math.max(BALL_RADIUS, initialPosition.y);
-        console.log(`Calc (Chip): Using PlayHole initial position: x=${initialPosition.x.toFixed(2)}, y=${initialPosition.y.toFixed(2)}, z=${initialPosition.z.toFixed(2)}`);
+        initialPositionObj = getPlayHoleBallPosition();
+        initialPositionObj.y = Math.max(BALL_RADIUS, initialPositionObj.y);
     } else {
-        initialPosition = { x: 0, y: BALL_RADIUS, z: 0 }; // Default tee position for other modes
-        console.log(`Calc (Chip): Using default initial position: x=${initialPosition.x.toFixed(2)}, y=${initialPosition.y.toFixed(2)}, z=${initialPosition.z.toFixed(2)}`);
+        initialPositionObj = { x: 0, y: BALL_RADIUS, z: 0 };
+    }
+    console.log(`Calc (Chip): Initial position: x=${initialPositionObj.x.toFixed(2)}, y=${initialPositionObj.y.toFixed(2)}, z=${initialPositionObj.z.toFixed(2)}`);
+
+    // --- Run Flight Simulation ---
+    const flightSimulationResult = simulateFlightStepByStep(initialPositionObj, initialVelocityObj, spinVectorRPM, selectedClub);
+
+    // --- Extract Results ---
+    carryDistance = flightSimulationResult.carryDistance;
+    peakHeight = flightSimulationResult.peakHeight;
+    const visualTimeOfFlight = Math.max(0.2, Math.min(3.0, flightSimulationResult.timeOfFlight));
+    const landingPositionObj = flightSimulationResult.landingPosition;
+
+    // Approx Landing Velocity (same crude method as full swing)
+    let landingVelocityApprox = { x: 0, y: 0, z: 0 };
+     // Landing velocity is now returned directly
+     const landingVelocity = flightSimulationResult.landingVelocity || { x: 0, y: 0, z: 0 };
+     console.log(`Calc (Chip): Landing Pos: (${landingPositionObj.x.toFixed(2)}, ${landingPositionObj.y.toFixed(2)}, ${landingPositionObj.z.toFixed(2)})`);
+     console.log(`Calc (Chip): Landing Vel: (${landingVelocity.x.toFixed(2)}, ${landingVelocity.y.toFixed(2)}, ${landingVelocity.z.toFixed(2)})`);
+
+    // --- Check for Slam Dunk ---
+    const holePosition = getFlagPosition();
+    if (currentMode === 'play-hole' && holePosition) {
+        const dxSlam = landingPositionObj.x - holePosition.x;
+        const dzSlam = landingPositionObj.z - holePosition.z;
+        const distToHoleSlam = Math.sqrt(dxSlam*dxSlam + dzSlam*dzSlam);
+        if (distToHoleSlam < HOLE_RADIUS_METERS) {
+            console.log("Calc (Chip): SLAM DUNK HOLE IN!");
+            isHoledOut = true;
+            finalPosition = new THREE.Vector3(holePosition.x, BALL_RADIUS / 2, holePosition.z);
+        }
     }
 
-    // --- Run Simulation ---
-    const simulationResult = simulateFlightStepByStep(initialPosition, initialVelocity, spinVectorRPM, selectedClub);
+    // --- Run Ground Simulation (if not holed out) ---
+    if (!isHoledOut) {
+        let surfaceType = 'rough'; // Default
+        // TODO: Implement proper surface detection
+        if (currentMode === 'play-hole') {
+            const greenCenter = getGreenCenter();
+            const greenRadius = getGreenRadius();
+            if (greenCenter && greenRadius) {
+                const dxGreen = landingPositionObj.x - greenCenter.x;
+                const dzGreen = landingPositionObj.z - greenCenter.z;
+                surfaceType = (Math.sqrt(dxGreen*dxGreen + dzGreen*dzGreen) <= greenRadius) ? 'green' : 'fairway';
+            } else {
+                 surfaceType = 'fairway'; // Fallback
+            }
+        } else {
+            surfaceType = 'fairway'; // Range mode etc.
+        }
+        console.log(`Calc (Chip): Determined landing surface: ${surfaceType}`);
 
-    // --- Extract Results from Simulation ---
-    carryDistance = simulationResult.carryDistance;
-    peakHeight = simulationResult.peakHeight;
-    const landingAngleRadians = simulationResult.landingAngleRadians;
-    const visualTimeOfFlight = Math.max(0.2, Math.min(3.0, simulationResult.timeOfFlight)); // Shorter max time for chips?
+        const rollStartPosition = new THREE.Vector3(landingPositionObj.x, landingPositionObj.y, landingPositionObj.z);
 
-    console.log(`Calc (Chip): Simulated Time of Flight: ${simulationResult.timeOfFlight.toFixed(2)}s`);
-    console.log(`Calc (Chip): Simulated Carry: ${carryDistance.toFixed(1)} yd, Peak Height: ${peakHeight.toFixed(1)} yd, Landing Angle: ${(landingAngleRadians * 180 / Math.PI).toFixed(1)} deg`);
+        // Calculate landing angle factor
+        const landingVelHorizontalMag = Math.sqrt(landingVelocity.x**2 + landingVelocity.z**2);
+        let landingAngleRad = Math.PI / 2;
+        if (landingVelHorizontalMag > 0.01) {
+            landingAngleRad = Math.atan2(Math.abs(landingVelocity.y), landingVelHorizontalMag);
+        }
+        const initialRollSpeedFactor = Math.cos(landingAngleRad);
+        console.log(`Calc (Chip): Landing Angle: ${(landingAngleRad * 180 / Math.PI).toFixed(1)} deg, RollSpeedFactor: ${initialRollSpeedFactor.toFixed(2)}`);
 
-    // --- Calculate Rollout ---
-    let baseRollFactor = 0.10;
-    switch (strikeQuality) {
-        case "Thin": baseRollFactor += 0.10; break;
-        case "Fat": baseRollFactor -= 0.05; break;
+        // Apply factor to horizontal landing velocity components
+        const rollStartVelocity = new THREE.Vector3(
+            landingVelocity.x * initialRollSpeedFactor,
+            0,
+            landingVelocity.z * initialRollSpeedFactor
+        );
+
+        // Pass the backSpin value (from impactResult) to the ground roll simulation
+        const groundRollResult = simulateGroundRoll(rollStartPosition, rollStartVelocity, surfaceType, backSpin);
+        finalPosition = groundRollResult.finalPosition;
+        isHoledOut = groundRollResult.isHoledOut;
+        // Combine trajectories
+        const fullTrajectory = flightSimulationResult.trajectoryPoints.concat(groundRollResult.rollTrajectoryPoints || []);
+        flightSimulationResult.trajectoryPoints = fullTrajectory; // Overwrite the original trajectory
+    } else {
+         console.log("Calc (Chip): Skipping ground roll due to slam dunk.");
+         // Ensure trajectoryPoints exists even if roll is skipped
+         if (!flightSimulationResult.trajectoryPoints) flightSimulationResult.trajectoryPoints = [];
     }
-    baseRollFactor = Math.max(0.02, baseRollFactor);
-    const targetSpinForZeroRoll = 5000;
-    const spinSensitivity = 2500;
-    const spinRollFactor = 1 - (backSpin - targetSpinForZeroRoll) / spinSensitivity;
-    const landingAngleFactor = clamp(Math.pow(Math.cos(landingAngleRadians), 0.5), 0.1, 1.5);
-    console.log(`Calc (Chip): Rollout Factors: Base=${baseRollFactor.toFixed(2)} (Strike: ${strikeQuality}), SpinFactor=${spinRollFactor.toFixed(2)} (BackSpin: ${backSpin.toFixed(0)}), AngleFactor=${landingAngleFactor.toFixed(2)} (Angle: ${(landingAngleRadians * 180 / Math.PI).toFixed(1)} deg)`);
-    rolloutDistance = carryDistance * baseRollFactor * spinRollFactor * landingAngleFactor;
-    const maxPositiveRollFactor = 0.35;
-    const minNegativeRollFactor = -0.05;
-    rolloutDistance = Math.max(carryDistance * minNegativeRollFactor, rolloutDistance);
-    rolloutDistance = Math.min(carryDistance * maxPositiveRollFactor, rolloutDistance);
-    totalDistance = carryDistance + rolloutDistance;
-    console.log(`Calc (Chip): Calculated Rollout: ${rolloutDistance.toFixed(1)} yd, Total Distance: ${totalDistance.toFixed(1)} yd`);
+
+     // Ensure finalPosition is set
+    if (!finalPosition) {
+        console.warn("Calc (Chip): finalPosition was not set, using landing position as fallback.");
+        finalPosition = new THREE.Vector3(landingPositionObj.x, landingPositionObj.y, landingPositionObj.z);
+    }
+
+    // Calculate final distances
+    const dxTotal = finalPosition.x - initialPositionObj.x;
+    const dzTotal = finalPosition.z - initialPositionObj.z;
+    totalDistance = Math.sqrt(dxTotal*dxTotal + dzTotal*dzTotal) * (1 / YARDS_TO_METERS);
+    const sideDistance = dxTotal * (1 / YARDS_TO_METERS);
+    console.log(`Calc (Chip): Final Position: (${finalPosition.x.toFixed(2)}, ${finalPosition.y.toFixed(2)}, ${finalPosition.z.toFixed(2)})m`);
+    console.log(`Calc (Chip): Calculated Total Distance: ${totalDistance.toFixed(1)} yd, Side Distance: ${sideDistance.toFixed(1)} yd`);
+
+    // --- Determine Result Message ---
+     if (isHoledOut) {
+        resultMessage += " CHIP IN!";
+    }
+    console.log(`Calc (Chip): ResultMessage: ${resultMessage}`);
 
     // --- Prepare Shot Data Object ---
     const shotData = {
-        backswingDuration: backswingDuration,
-        timingDeviations: { // Chip specific timing from physics result
-            rotationDeviation: impactResult.timingDeviations?.rotationDeviation,
-            hitDeviation: impactResult.timingDeviations?.hitDeviation,
-        },
+        // ... (copy timingDeviations etc. from impactResult)
+        timingDeviations: { rotationDeviation: impactResult.timingDeviations?.rotationDeviation, hitDeviation: impactResult.timingDeviations?.hitDeviation },
         ballPositionFactor: ballPositionFactor,
         message: resultMessage,
         clubHeadSpeed: impactResult.clubHeadSpeed,
@@ -370,25 +436,16 @@ export function calculateChipShot() {
         potentialCHS: impactResult.potentialCHS,
         dynamicLoft: impactResult.dynamicLoft,
         smashFactor: impactResult.smashFactor,
+        // Simulation results
         peakHeight: peakHeight,
         carryDistance: carryDistance,
-        rolloutDistance: rolloutDistance,
         totalDistance: totalDistance,
         timeOfFlight: visualTimeOfFlight,
-        trajectory: null,
-        sideDistance: 0,
-        finalPosition: { ...initialPosition } // Default final position (use determined initial pos)
+        trajectory: flightSimulationResult.trajectoryPoints, // Now contains combined flight + roll
+        sideDistance: sideDistance,
+        finalPosition: { x: finalPosition.x, y: finalPosition.y, z: finalPosition.z },
+        isHoledOut: isHoledOut
     };
-
-    // --- Use Simulation Trajectory Points ---
-    shotData.trajectory = simulationResult.trajectoryPoints; // Use simulation points
-
-    // Calculate final side distance and position using simulation's landing position
-    shotData.finalPosition = simulationResult.landingPosition;
-    // Calculate side distance relative to initial position's X
-    shotData.sideDistance = (simulationResult.landingPosition.x - initialPosition.x) * 1.09361; // Convert meters to yards
-    console.log(`Calc (Chip): Final Position: (${shotData.finalPosition.x.toFixed(1)}, ${shotData.finalPosition.y.toFixed(1)}, ${shotData.finalPosition.z.toFixed(1)})m`);
-    console.log(`Calc (Chip): Calculated Side Distance: ${shotData.sideDistance.toFixed(1)} yards (relative to start X: ${initialPosition.x.toFixed(1)}m)`);
 
     // Update internal state
     setGameState('result');
@@ -408,116 +465,110 @@ export function calculateChipShot() {
 export function calculatePuttShot() {
     const state = getGameState();
     const shotType = getCurrentShotType();
-    // Check if state is 'calculatingPutt' (set in animation timeout or action trigger)
     if (state !== 'calculatingPutt' || shotType !== 'putt') return;
 
-    // Putt animation is stopped when 'i' is pressed (in actions.js) or on timeout (in animations.js)
+    // Putt animation stopped elsewhere
 
-    // Set state to generic 'calculating' now
     setGameState('calculating');
     updateStatus('Calculating Putt...');
     console.log("Calc: Calculating Putt Shot...");
 
-    // --- Prepare Inputs for puttPhysics Module ---
+    // --- Prepare Inputs ---
     const backswingDuration = getBackswingDuration();
     const downswingPhaseStartTime = getDownswingPhaseStartTime();
-    const puttHitTime = getPuttHitTime(); // Hit time
+    const puttHitTime = getPuttHitTime();
+    const hitOffset = puttHitTime ? puttHitTime - downswingPhaseStartTime : null;
 
-    // Calculate hit offset relative to downswingPhaseStartTime (W release)
-    const hitOffset = puttHitTime ? puttHitTime - downswingPhaseStartTime : null; // Can be null if timed out
+    // --- Call putt physics ---
+    const impactResult = calculatePuttImpact(backswingDuration, hitOffset);
 
-    console.log(`Calc (Putt): Inputs: Duration=${backswingDuration?.toFixed(0)}, DownswingStart=${downswingPhaseStartTime?.toFixed(0)}, HitTime=${puttHitTime?.toFixed(0)}`);
-    console.log(`Calc (Putt): Inputs: HitOffset=${hitOffset?.toFixed(0)}`);
-
-    // --- Call the putt physics calculation module ---
-    const impactResult = calculatePuttImpact(
-        backswingDuration,
-        hitOffset // Pass offset (can be null)
-    );
-
-    // --- Use results from impactResult ---
-    const ballSpeed = impactResult.ballSpeed;
-    const horizontalLaunchAngle = impactResult.horizontalLaunchAngle; // Horizontal (Push/Pull)
-    const strikeQuality = impactResult.strikeQuality; // Center, Push, Pull
+    // --- Use results ---
+    const ballSpeed = impactResult.ballSpeed; // This is speed in mph, need m/s for simulation
+    const horizontalLaunchAngleDeg = impactResult.horizontalLaunchAngle; // Horizontal deviation (Push/Pull)
+    const strikeQuality = impactResult.strikeQuality;
     let resultMessage = impactResult.message || "Putt Result";
+    let isHoledOut = false;
+    let finalPosition = null; // Will be Vector3
 
-    // --- Simplified Putt Distance Calculation ---
-    let totalDistance = ballSpeed * PUTT_DISTANCE_FACTOR; // Simple scaling factor
-    totalDistance = Math.max(0.1, totalDistance); // Ensure minimum distance
+    // --- Prepare for Simulation ---
+    console.log("Calc (Putt): --- Preparing Simulation ---");
+    const ballSpeedMPS = ballSpeed * 0.44704; // Convert mph to m/s
 
-    // Get target line, physics deviation, and relative aim adjustment angles
+    // Calculate Initial Velocity Vector for Simulation
     const targetLineAngleRad = getCurrentTargetLineAngle() * Math.PI / 180;
-    const physicsDeviationRad = horizontalLaunchAngle * Math.PI / 180; // Deviation relative to target line
-    const relativeAimAngleRad = getShotDirectionAngle() * Math.PI / 180; // Player's fine-tuning relative to target line
-    // Calculate final absolute launch direction
+    const physicsDeviationRad = horizontalLaunchAngleDeg * Math.PI / 180;
+    const relativeAimAngleRad = getShotDirectionAngle() * Math.PI / 180;
     const finalHorizontalLaunchAngleRad = targetLineAngleRad + physicsDeviationRad + relativeAimAngleRad;
-    console.log(`Calc (Putt): TargetLine=${getCurrentTargetLineAngle().toFixed(1)}deg, PhysicsDev=${horizontalLaunchAngle.toFixed(1)}deg, RelativeAim=${getShotDirectionAngle().toFixed(1)}deg, FinalHorizAngle=${(finalHorizontalLaunchAngleRad * 180 / Math.PI).toFixed(1)}deg`);
+    const initialVelX = ballSpeedMPS * Math.sin(finalHorizontalLaunchAngleRad);
+    const initialVelZ = ballSpeedMPS * Math.cos(finalHorizontalLaunchAngleRad);
+    const initialVelocity = new THREE.Vector3(initialVelX, 0, initialVelZ); // Putt starts with Y velocity = 0
 
-    // Calculate side distance based on the *final* horizontal launch angle and total distance
-    let sideDistance = totalDistance * Math.tan(finalHorizontalLaunchAngleRad);
+    console.log(`Calc (Putt): Initial Vel: (${initialVelocity.x.toFixed(2)}, ${initialVelocity.y.toFixed(2)}, ${initialVelocity.z.toFixed(2)}) m/s`);
 
-    console.log(`Calc (Putt): BallSpeed=${ballSpeed.toFixed(1)}mph, Final HorizAngle=${(finalHorizontalLaunchAngleRad * 180 / Math.PI).toFixed(1)}deg`);
+    // --- Determine Initial Position ---
+    let initialPositionObj;
+    const currentMode = getCurrentGameMode();
+    if (currentMode === 'play-hole') {
+        initialPositionObj = getPlayHoleBallPosition();
+        initialPositionObj.y = Math.max(BALL_RADIUS, initialPositionObj.y);
+    } else {
+        initialPositionObj = { x: 0, y: BALL_RADIUS, z: 0 };
+    }
+    const initialPosition = new THREE.Vector3(initialPositionObj.x, initialPositionObj.y, initialPositionObj.z);
+    console.log(`Calc (Putt): Initial position: x=${initialPosition.x.toFixed(2)}, y=${initialPosition.y.toFixed(2)}, z=${initialPosition.z.toFixed(2)}`);
+
+    // --- Run Ground Simulation ---
+    // Assume putts always start on the green
+    // Pass a low default backspin for putts (e.g., 100 RPM)
+    const groundRollResult = simulateGroundRoll(initialPosition, initialVelocity, 'green', 100);
+    finalPosition = groundRollResult.finalPosition; // Vector3
+    isHoledOut = groundRollResult.isHoledOut;
+
+    // Calculate final distances
+    const dxTotal = finalPosition.x - initialPosition.x;
+    const dzTotal = finalPosition.z - initialPosition.z;
+    const totalDistance = Math.sqrt(dxTotal*dxTotal + dzTotal*dzTotal) * (1 / YARDS_TO_METERS);
+    const sideDistance = dxTotal * (1 / YARDS_TO_METERS);
+    console.log(`Calc (Putt): Final Position: (${finalPosition.x.toFixed(2)}, ${finalPosition.y.toFixed(2)}, ${finalPosition.z.toFixed(2)})m`);
     console.log(`Calc (Putt): Calculated Total Distance: ${totalDistance.toFixed(1)} yd, Side Distance: ${sideDistance.toFixed(1)} yd`);
+
+    // --- Determine Result Message ---
+    if (isHoledOut) {
+        resultMessage += " Sunk!";
+    }
+     console.log(`Calc (Putt): ResultMessage: ${resultMessage}`);
 
     // --- Prepare Shot Data Object ---
     const shotData = {
-        backswingDuration: backswingDuration,
-        timingDeviations: { // Putt specific timing from physics result
-            hitDeviation: impactResult.timingDeviations?.hitDeviation,
-        },
-        ballPositionFactor: 0, // Not applicable for putt
+        // ... (copy timingDeviations etc. from impactResult)
+        timingDeviations: { hitDeviation: impactResult.timingDeviations?.hitDeviation },
+        ballPositionFactor: 0,
         message: resultMessage,
         clubHeadSpeed: 0,
-        ballSpeed: impactResult.ballSpeed,
-        launchAngle: impactResult.launchAngle, // Vertical (fixed at 0)
-        horizontalLaunchAngle: finalHorizontalLaunchAngleRad * 180 / Math.PI, // Store the FINAL angle in degrees
+        ballSpeed: impactResult.ballSpeed, // Original speed in mph for display
+        launchAngle: 0, // Vertical launch angle
+        horizontalLaunchAngle: finalHorizontalLaunchAngleRad * 180 / Math.PI, // Final angle
         attackAngle: 0,
         backSpin: impactResult.backSpin,
-        sideSpin: impactResult.sideSpin, // Should be 0
+        sideSpin: 0,
         clubPathAngle: 0,
-        absoluteFaceAngle: impactResult.horizontalLaunchAngle, // Use horizontal angle
+        absoluteFaceAngle: horizontalLaunchAngleDeg, // Initial push/pull angle
         faceAngleRelPath: 0,
         strikeQuality: impactResult.strikeQuality,
         potentialCHS: 0,
         dynamicLoft: 0,
         smashFactor: 0,
+        // Simulation results
         peakHeight: 0,
-        carryDistance: 0,
-        rolloutDistance: totalDistance, // All distance is rollout
+        carryDistance: 0, // No carry for putt
         totalDistance: totalDistance,
-        timeOfFlight: 0,
-        trajectory: null,
+        timeOfFlight: 0, // No flight time
+        // Use the actual roll trajectory points for the putt animation
+        trajectory: groundRollResult.rollTrajectoryPoints ? groundRollResult.rollTrajectoryPoints.map(p => ({ x: p.x, y: p.y, z: p.z })) : [initialPositionObj, { x: finalPosition.x, y: finalPosition.y, z: finalPosition.z }],
         sideDistance: sideDistance,
-        finalPosition: null // Will be calculated below
+        finalPosition: { x: finalPosition.x, y: finalPosition.y, z: finalPosition.z },
+        isHoledOut: isHoledOut
     };
-
-    // --- Determine Initial Position based on Game Mode ---
-    let initialPosition;
-    const currentMode = getCurrentGameMode();
-    if (currentMode === 'play-hole') {
-        initialPosition = getPlayHoleBallPosition();
-        // Ensure y is at least BALL_RADIUS
-        initialPosition.y = Math.max(BALL_RADIUS, initialPosition.y);
-        console.log(`Calc (Putt): Using PlayHole initial position: x=${initialPosition.x.toFixed(2)}, y=${initialPosition.y.toFixed(2)}, z=${initialPosition.z.toFixed(2)}`);
-    } else {
-        initialPosition = { x: 0, y: BALL_RADIUS, z: 0 }; // Default tee position for other modes
-        console.log(`Calc (Putt): Using default initial position: x=${initialPosition.x.toFixed(2)}, y=${initialPosition.y.toFixed(2)}, z=${initialPosition.z.toFixed(2)}`);
-    }
-
-    // --- Calculate Trajectory Points (Simple Straight Line for Putt) ---
-    // Pass initialPosition to the trajectory calculator
-    const trajectoryPoints = calculatePuttTrajectoryPoints(shotData, initialPosition);
-    shotData.trajectory = trajectoryPoints;
-
-    // Set final position from trajectory (which now starts from the correct initialPosition)
-    if (trajectoryPoints && trajectoryPoints.length > 0) {
-        shotData.finalPosition = trajectoryPoints[trajectoryPoints.length - 1];
-        console.log(`Calc (Putt): Final Position: x=${shotData.finalPosition.x.toFixed(2)}, y=${shotData.finalPosition.y.toFixed(2)}, z=${shotData.finalPosition.z.toFixed(2)}`);
-    } else {
-        // Fallback if trajectory calculation fails
-        shotData.finalPosition = { ...initialPosition };
-        console.warn("Calc (Putt): Trajectory calculation failed, using initial position as final.");
-    }
 
     // Update internal state
     setGameState('result');

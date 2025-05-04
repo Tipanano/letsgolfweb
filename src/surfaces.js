@@ -90,3 +90,36 @@ export function getSurfaceByName(name) {
   }
   return null; // Or return a default surface like FAIRWAY
 }
+
+// --- New Function to get properties including calculated friction ---
+const FRICTION_SCALING_FACTOR = 10.0; // Tunable factor (Increased from 1.0)
+
+/**
+ * Gets surface properties including a calculated friction coefficient.
+ * @param {string} surfaceTypeName - The name key (e.g., 'GREEN', 'FAIRWAY'). Case-insensitive.
+ * @returns {object | null} An object with surface properties including 'friction', or null if not found.
+ */
+export function getSurfaceProperties(surfaceTypeName) {
+    if (!surfaceTypeName) return null;
+
+    const upperCaseName = surfaceTypeName.toUpperCase().replace(' ', '_'); // Handle names like 'Light Rough'
+    const surface = SURFACES[upperCaseName];
+
+    if (!surface) {
+        console.warn(`Surface type "${surfaceTypeName}" (mapped to "${upperCaseName}") not found. Using default friction.`);
+        // Return a default object or null? Let's return null for now.
+        return null;
+        // Or return a default:
+        // return { name: 'Default', friction: 0.1, bounce: 0.4, color: '#888888' };
+    }
+
+    // Calculate friction coefficient based on rollOut
+    // Higher rollOut means lower friction. Simple inverse scaling.
+    const friction = Math.max(0.01, FRICTION_SCALING_FACTOR * (1 - (surface.rollOut || 0)));
+
+    // Return a copy of the surface properties plus the calculated friction
+    return {
+        ...surface,
+        friction: friction
+    };
+}

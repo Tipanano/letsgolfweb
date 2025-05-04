@@ -60,47 +60,38 @@ export function handleShotResult(shotData) {
     score = shotsTaken; // Simple score for now
     console.log(`PlayHole: Handling shot ${shotsTaken} result:`, shotData);
 
-    // Update ball position based on physics result (assuming shotData.finalPosition is {x, y, z} in meters)
+    // Update ball position based on the final position from calculations.js
+    // This now includes the result of the ground roll simulation.
     if (shotData.finalPosition) {
-        currentBallPosition = { ...shotData.finalPosition };
-         // Ensure ball doesn't sink below ground visually if physics reports y=0
-         if (currentBallPosition.y < BALL_RADIUS) {
+        // Ensure we have a clean copy, calculations.js should provide {x, y, z}
+        currentBallPosition = {
+            x: shotData.finalPosition.x,
+            y: shotData.finalPosition.y,
+            z: shotData.finalPosition.z
+        };
+        // Ensure ball doesn't sink below ground visually if physics reports low y
+        // (Ground roll sim should handle this, but double-check)
+        if (currentBallPosition.y < BALL_RADIUS) {
             currentBallPosition.y = BALL_RADIUS;
         }
         console.log(`New ball position (meters): x=${currentBallPosition.x.toFixed(2)}, y=${currentBallPosition.y.toFixed(2)}, z=${currentBallPosition.z.toFixed(2)}`);
     } else {
-        console.warn("Shot data did not contain finalPosition.");
-        // Estimate based on carry/roll if needed, but ideally physics provides it
-        const endDistanceMeters = (shotData.carryDistance + shotData.rolloutDistance) * YARDS_TO_METERS;
-        const sideDistanceMeters = (shotData.sideDistance || 0) * YARDS_TO_METERS;
-        // This assumes starting from 0,0 - needs refinement if not first shot
-        currentBallPosition = { x: sideDistanceMeters, y: BALL_RADIUS, z: endDistanceMeters };
+        console.error("PlayHole Error: Shot data did not contain finalPosition!");
+        // Cannot proceed without a final position
+        return;
     }
 
+    // Check if holed out using the status from calculations.js
+    isHoledOut = shotData.isHoledOut || false; // Use the flag directly
 
-    // Check if holed out
-    const flagPosMeters = {
-        x: currentHoleLayout.flagPosition.x * YARDS_TO_METERS,
-        z: currentHoleLayout.flagPosition.z * YARDS_TO_METERS
-    };
-
-    const dx = currentBallPosition.x - flagPosMeters.x;
-    const dz = currentBallPosition.z - flagPosMeters.z;
-    const distanceToHoleMeters = Math.sqrt(dx*dx + dz*dz);
-
-    console.log(`Distance to hole: ${distanceToHoleMeters.toFixed(2)} meters`);
-
-    // Check if ball is close enough and low enough (on the green)
-    if (distanceToHoleMeters <= HOLE_RADIUS_METERS * 1.5 && currentBallPosition.y <= BALL_RADIUS * 1.5) { // Allow slight tolerance
-        isHoledOut = true;
+    if (isHoledOut) {
         console.log(`HOLE OUT! Score: ${score}`);
         ui.showHoleOutMessage(score); // Need to add this UI function
         // Potentially disable further input here
     } else {
          // Ball is not holed out, prepare for next shot
-         // The ball's visual position should already be updated by the animation callback in core.js
-         // We might need to adjust the *next* shot's origin in gameLogic/physics
-         // based on currentBallPosition.
+         // The ball's visual position should be updated by the animation callback in core.js
+         // using the trajectory points from shotData.
          console.log("Ball is not holed out. Ready for next shot.");
     }
 

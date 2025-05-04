@@ -118,6 +118,7 @@ export function drawHoleLayout(holeLayout) {
             side: THREE.DoubleSide
         });
         const greenMesh = new THREE.Mesh(greenGeometry, greenMaterial);
+        greenMesh.renderOrder = 0; // Ensure green is drawn first (default)
         greenMesh.position.set(
             greenCenterX,
             0.02, // Small offset like targetView
@@ -192,6 +193,30 @@ export function drawHoleLayout(holeLayout) {
         );
         scene.add(flagCloth);
         currentHoleObjects.push(flagCloth);
+
+        // --- Draw the Hole Cup ---
+        // --- Draw the Hole Cup ---
+        const HOLE_RADIUS_METERS = 0.108 / 2; // Regulation hole diameter is 4.25 inches (0.108m)
+        const holeDepth = 0.1; // Depth for the visual cup (meters)
+        const holeGeometry = new THREE.CylinderGeometry(HOLE_RADIUS_METERS, HOLE_RADIUS_METERS, holeDepth, 16);
+        // Use MeshBasicMaterial so it's not affected by lighting, making it appear dark
+        const holeMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 }); // Black
+        const holeMesh = new THREE.Mesh(holeGeometry, holeMaterial);
+        holeMesh.renderOrder = 1; // Draw hole *after* the green (renderOrder 0)
+
+        // Position the hole centered at the flag position, top edge slightly below green surface
+        // Green surface is at y=0.02. Set top edge to y=0.015 to be safe.
+        // Cylinder position is its center, so offset by half the depth.
+        // Center Y = Top Edge Y - (holeDepth / 2) = 0.015 - (0.1 / 2) = 0.015 - 0.05 = -0.035
+        holeMesh.position.set(
+            currentFlagPosition.x,
+            -0.035, // Position cylinder center so top edge is at y=0.015
+            currentFlagPosition.z
+        );
+        // No rotation needed as cylinder is upright
+
+        scene.add(holeMesh);
+        currentHoleObjects.push(holeMesh);
     }
 
     console.log("Finished drawing hole layout. Added objects:", currentHoleObjects.length);

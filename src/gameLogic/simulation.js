@@ -131,6 +131,140 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club) 
         peakHeight: peakHeight * 1.09361, // Convert to yards
         timeOfFlight: time, // Actual simulated time
         landingAngleRadians: landingAngleRadians, // Add landing angle
+        landingVelocity: finalVel, // Return the velocity vector just before landing
         trajectoryPoints: trajectoryPoints // Array of {x, y, z} objects
+    };
+}
+
+
+// --- Ground Roll Simulation ---
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js'; // For Vector3 operations
+import { getSurfaceProperties } from '../surfaces.js'; // To get friction coefficients
+import { BALL_RADIUS } from '../visuals/core.js'; // For ground check and hole interaction
+import { getFlagPosition } from '../visuals/holeView.js'; // To get hole coordinates
+
+const MIN_ROLL_SPEED = 0.05; // m/s - Speed below which the ball is considered stopped
+const GROUND_FRICTION_TIME_STEP = 0.02; // seconds - Simulation step for ground roll
+export const HOLE_RADIUS_METERS = 0.108 / 2; // Regulation hole diameter is 4.25 inches (0.108m)
+const MAX_HOLE_ENTRY_SPEED = 1.5; // m/s - Max speed to fall into the hole (needs tuning)
+// Spin influence on roll
+const NEUTRAL_BACKSPIN_RPM = 2500; // RPM at which spin has minimal effect on roll distance
+const SPIN_FRICTION_FACTOR = 0.00008; // How much friction changes per RPM deviation (Increased, needs tuning!)
+
+/**
+ * Simulates the ball rolling on the ground with friction, influenced by backspin.
+ *
+ * @param {THREE.Vector3} initialPosition - Starting position of the ball (meters).
+ * @param {THREE.Vector3} initialVelocity - Starting velocity of the ball (m/s).
+ * @param {string} surfaceType - The type of surface the ball is on ('green', 'fairway', 'rough', etc.).
+ * @param {number} initialBackspinRPM - Initial backspin in RPM.
+ * @returns {object} Result containing finalPosition (THREE.Vector3) and isHoledOut (boolean).
+ */
+export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType, initialBackspinRPM = 0) {
+    console.log(`Sim (Roll): Starting ground roll. Surface: ${surfaceType}, Backspin: ${initialBackspinRPM.toFixed(0)} RPM`);
+    console.log(`Sim (Roll): Initial Pos: (${initialPosition.x.toFixed(2)}, ${initialPosition.y.toFixed(2)}, ${initialPosition.z.toFixed(2)})`);
+    console.log(`Sim (Roll): Initial Vel: (${initialVelocity.x.toFixed(2)}, ${initialVelocity.y.toFixed(2)}, ${initialVelocity.z.toFixed(2)})`);
+
+    let position = initialPosition.clone();
+    let velocity = initialVelocity.clone();
+    // Ensure ball starts exactly on the ground visually for roll simulation
+    position.y = BALL_RADIUS;
+    // We only care about horizontal velocity for rolling friction
+    velocity.y = 0;
+
+    const surfaceProps = getSurfaceProperties(surfaceType);
+    const baseFrictionCoefficient = surfaceProps?.friction || 0.1; // Base friction from surface
+    const gravity = 9.81;
+
+    // Adjust friction based on backspin
+    // Higher backspin increases friction, lower backspin/topspin decreases it.
+    const spinDeviation = initialBackspinRPM - NEUTRAL_BACKSPIN_RPM;
+    // *** Corrected formula: Use '+' so high spin increases friction factor ***
+    let effectiveFrictionCoefficient = baseFrictionCoefficient * (1 + (spinDeviation * SPIN_FRICTION_FACTOR));
+    // Clamp effective friction to prevent negative values or excessive reduction/increase
+    effectiveFrictionCoefficient = Math.max(0.01, effectiveFrictionCoefficient); // Ensure minimum friction
+    // Let's remove the upper clamp for now to see the full effect of high spin
+    // effectiveFrictionCoefficient = Math.min(baseFrictionCoefficient * 3.0, effectiveFrictionCoefficient); // Optional: Cap max friction increase
+
+    // Calculate deceleration magnitude using the *effective* friction
+    const decelerationMagnitude = effectiveFrictionCoefficient * gravity;
+    console.log(`Sim (Roll): Surface='${surfaceType}', BaseFriction=${baseFrictionCoefficient.toFixed(3)}, SpinDev=${spinDeviation.toFixed(0)}, EffectiveFriction=${effectiveFrictionCoefficient.toFixed(3)}, DecelMag=${decelerationMagnitude.toFixed(2)} m/s^2`);
+
+    let time = 0;
+    const dt = GROUND_FRICTION_TIME_STEP;
+    let steps = 0;
+    let isHoledOut = false; // Track if the ball falls in the hole
+    const holePosition = getFlagPosition(); // Get hole position once at the start
+    const rollTrajectoryPoints = []; // Initialize array to store roll points
+
+    while (true) {
+        const speed = velocity.length(); // Current speed (horizontal only as y=0)
+
+        console.log('the speed is:', speed.toFixed(3), 'm/s');
+
+        // --- Hole Interaction Check ---
+        // Only check if on the green and hole position is known
+        if (surfaceType === 'green' && holePosition) {
+            // Calculate 2D distance to hole center
+            const dx = position.x - holePosition.x;
+            const dz = position.z - holePosition.z;
+            const distanceToHoleCenter = Math.sqrt(dx*dx + dz*dz);
+
+            // Check capture condition
+            if (distanceToHoleCenter < HOLE_RADIUS_METERS - BALL_RADIUS && speed < MAX_HOLE_ENTRY_SPEED) {
+                console.log(`Sim (Roll): HOLE IN! Dist=${distanceToHoleCenter.toFixed(3)}, Speed=${speed.toFixed(2)}`);
+                isHoledOut = true;
+                position.set(holePosition.x, BALL_RADIUS / 2, holePosition.z); // Center ball in hole, slightly sunk
+                velocity.set(0, 0, 0); // Stop the ball
+                break; // Exit simulation loop
+            }
+            // TODO: Add lip-out logic here later if desired
+        }
+
+        // --- Stop Check ---
+        if (speed < MIN_ROLL_SPEED) {
+            console.log(`Sim (Roll): Ball stopped at speed ${speed.toFixed(3)} m/s after ${time.toFixed(2)}s`);
+            velocity.set(0, 0, 0); // Ensure velocity is zeroed out
+            break; // Exit simulation loop
+        }
+
+        // --- Friction Calculation & Velocity Update ---
+        // const speed = velocity.length(); // This was the redeclaration - removed. Use 'speed' from loop start.
+        const decelerationAmount = decelerationMagnitude * dt;
+
+        if (speed <= decelerationAmount) {
+            // If deceleration would stop or reverse the ball, just stop it.
+            velocity.set(0, 0, 0);
+        } else {
+            // Otherwise, apply deceleration normally.
+            const decelerationVec = velocity.clone().normalize().multiplyScalar(-decelerationMagnitude);
+            velocity.addScaledVector(decelerationVec, dt);
+        }
+
+        // Update position using the potentially modified velocity
+        position.addScaledVector(velocity, dt);
+        // Keep ball on the ground plane
+        position.y = BALL_RADIUS;
+
+        // Store the current position for the roll trajectory
+        rollTrajectoryPoints.push(position.clone());
+
+        time += dt;
+        steps++;
+
+        // Safety break
+        if (time > 30) { // Max 30 seconds of rolling
+            console.warn("Sim (Roll): Ground roll simulation exceeded 30 seconds, breaking loop.");
+            velocity.set(0, 0, 0); // Stop the ball
+            break;
+        }
+    }
+
+    console.log(`Sim (Roll): Finished. HoledOut=${isHoledOut}, Steps: ${steps}, Final Pos: (${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)})`);
+
+    return {
+        finalPosition: position,
+        isHoledOut: isHoledOut,
+        rollTrajectoryPoints: rollTrajectoryPoints // Return the collected points
     };
 }
