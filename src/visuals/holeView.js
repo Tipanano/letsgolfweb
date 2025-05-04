@@ -39,78 +39,201 @@ export function drawHoleLayout(holeLayout) {
 
     const scale = YARDS_TO_METERS; // Use the conversion factor
 
-    // --- Draw Rough (Draw first as the base layer) ---
-    if (holeLayout.rough && holeLayout.rough.vertices) {
+    // --- Draw Background (Out of Bounds - Draw first) ---
+    if (holeLayout.background && holeLayout.background.vertices && holeLayout.background.surface) {
+        const bgShape = new THREE.Shape();
+        const firstBgPoint = holeLayout.background.vertices[0];
+        // Use original Z
+        bgShape.moveTo(firstBgPoint.x * scale, firstBgPoint.z * scale);
+        for (let i = 1; i < holeLayout.background.vertices.length; i++) {
+            const point = holeLayout.background.vertices[i];
+             // Use original Z
+            bgShape.lineTo(point.x * scale, point.z * scale);
+        }
+        bgShape.closePath();
+
+        const bgGeometry = new THREE.ShapeGeometry(bgShape);
+        // Geometry is created using world coordinates, no centering needed.
+
+        const bgMaterial = new THREE.MeshLambertMaterial({
+            color: holeLayout.background.surface.color,
+            side: THREE.DoubleSide
+        });
+        const bgMesh = new THREE.Mesh(bgGeometry, bgMaterial);
+        bgMesh.rotation.x = Math.PI / 2; // Positive rotation
+        // Position mesh using surface height
+        bgMesh.position.set(0, holeLayout.background.surface.height ?? -0.01, 0); // Use defined height or fallback
+        bgMesh.receiveShadow = true; // Should still receive shadows
+        scene.add(bgMesh);
+        currentHoleObjects.push(bgMesh);
+    }
+
+
+    // --- Draw Rough (Draw on top of background) ---
+    if (holeLayout.rough && holeLayout.rough.vertices && holeLayout.rough.surface) {
         // Define shape in XY plane (using Z as Y)
         const roughShape = new THREE.Shape();
         const firstRoughPoint = holeLayout.rough.vertices[0];
-        roughShape.moveTo(firstRoughPoint.x * scale, firstRoughPoint.z * scale); // Use z as y
+        // Use original Z
+        roughShape.moveTo(firstRoughPoint.x * scale, firstRoughPoint.z * scale);
+
         for (let i = 1; i < holeLayout.rough.vertices.length; i++) {
             const point = holeLayout.rough.vertices[i];
-            roughShape.lineTo(point.x * scale, point.z * scale); // Use z as y
+             // Use original Z
+            roughShape.lineTo(point.x * scale, point.z * scale);
         }
         roughShape.closePath();
 
         const roughGeometry = new THREE.ShapeGeometry(roughShape);
-        // Calculate geometry center (based on original Z range) for translation
-        // Assuming rectangular rough defined by min/max Z from vertices
-        const roughZs = holeLayout.rough.vertices.map(v => v.z * scale);
-        const roughMinZ = Math.min(...roughZs);
-        const roughMaxZ = Math.max(...roughZs);
-        const roughLength = roughMaxZ - roughMinZ;
-        roughGeometry.translate(0, -(roughMinZ + roughLength / 2), 0); // Translate geometry origin to center Y
+        // Geometry is created using world coordinates (with X negated), no centering needed.
 
         const roughMaterial = new THREE.MeshLambertMaterial({
             color: holeLayout.rough.surface.color,
             side: THREE.DoubleSide
         });
         const roughMesh = new THREE.Mesh(roughGeometry, roughMaterial);
-        roughMesh.rotation.x = -Math.PI / 2; // Rotate mesh
-        // Position mesh center in world space
-        roughMesh.position.set(0, 0.0, (roughMinZ + roughMaxZ) / 2);
+        roughMesh.rotation.x = Math.PI / 2; // Positive rotation
+        // Position mesh using surface height
+        roughMesh.position.set(0, holeLayout.rough.surface.height ?? 0.0, 0); // Use defined height or fallback
         roughMesh.receiveShadow = true;
         scene.add(roughMesh);
         currentHoleObjects.push(roughMesh);
     }
 
-    // --- Draw Fairway (On top of rough) ---
-    if (holeLayout.fairway && holeLayout.fairway.vertices) {
+
+    // --- Draw Water Hazards (On top of rough, below bunkers/fairway/green) ---
+    if (holeLayout.waterHazards && Array.isArray(holeLayout.waterHazards)) {
+        holeLayout.waterHazards.forEach(water => {
+            if (!water || !water.surface) return; // Skip invalid water hazards
+
+            const waterMaterial = new THREE.MeshLambertMaterial({
+                color: water.surface.color,
+                side: THREE.DoubleSide,
+                transparent: true, // Make water slightly transparent
+                opacity: 0.85
+            });
+            let waterGeometry;
+            let waterMesh;
+            const waterYOffset = water.surface.height ?? 0.002; // Use defined height or fallback
+
+            if (water.type === 'circle' && water.center && water.radius) {
+                const radiusMeters = water.radius * scale;
+                const centerX = water.center.x * scale;
+                const centerZ = water.center.z * scale;
+                waterGeometry = new THREE.CircleGeometry(radiusMeters, 32);
+                waterMesh = new THREE.Mesh(waterGeometry, waterMaterial);
+                waterMesh.position.set(centerX, waterYOffset, centerZ);
+                waterMesh.rotation.x = -Math.PI / 2;
+
+            } else if (water.type === 'polygon' && water.vertices && water.vertices.length >= 3) {
+                const waterShape = new THREE.Shape();
+                const firstPoint = water.vertices[0];
+                waterShape.moveTo(firstPoint.x * scale, firstPoint.z * scale);
+                for (let i = 1; i < water.vertices.length; i++) {
+                    const point = water.vertices[i];
+                    waterShape.lineTo(point.x * scale, point.z * scale);
+                }
+                waterShape.closePath();
+                waterGeometry = new THREE.ShapeGeometry(waterShape);
+                waterMesh = new THREE.Mesh(waterGeometry, waterMaterial);
+                waterMesh.position.set(0, waterYOffset, 0);
+                waterMesh.rotation.x = Math.PI / 2;
+
+            } else {
+                console.warn("Skipping invalid water hazard definition:", water);
+                return; // Skip this water hazard
+            }
+
+            waterMesh.receiveShadow = true; // Water can receive shadows
+            scene.add(waterMesh);
+            currentHoleObjects.push(waterMesh);
+        });
+    }
+
+    // --- Draw Bunkers (On top of rough/water, below fairway/green) ---
+    if (holeLayout.bunkers && Array.isArray(holeLayout.bunkers)) {
+        holeLayout.bunkers.forEach(bunker => {
+            if (!bunker || !bunker.surface) return; // Skip invalid bunkers
+
+            const bunkerMaterial = new THREE.MeshLambertMaterial({
+                color: bunker.surface.color,
+                side: THREE.DoubleSide
+            });
+            let bunkerGeometry;
+            let bunkerMesh;
+            const bunkerYOffset = bunker.surface.height ?? 0.005; // Use defined height or fallback
+
+            if (bunker.type === 'circle' && bunker.center && bunker.radius) {
+                const radiusMeters = bunker.radius * scale;
+                const centerX = bunker.center.x * scale;
+                const centerZ = bunker.center.z * scale;
+                bunkerGeometry = new THREE.CircleGeometry(radiusMeters, 32); // Use 32 segments for smoother circle
+                bunkerMesh = new THREE.Mesh(bunkerGeometry, bunkerMaterial);
+                bunkerMesh.position.set(centerX, bunkerYOffset, centerZ);
+                bunkerMesh.rotation.x = -Math.PI / 2; // Rotate to lay flat
+
+            } else if (bunker.type === 'polygon' && bunker.vertices && bunker.vertices.length >= 3) {
+                const bunkerShape = new THREE.Shape();
+                const firstPoint = bunker.vertices[0];
+                bunkerShape.moveTo(firstPoint.x * scale, firstPoint.z * scale);
+                for (let i = 1; i < bunker.vertices.length; i++) {
+                    const point = bunker.vertices[i];
+                    bunkerShape.lineTo(point.x * scale, point.z * scale);
+                }
+                bunkerShape.closePath();
+                bunkerGeometry = new THREE.ShapeGeometry(bunkerShape);
+                bunkerMesh = new THREE.Mesh(bunkerGeometry, bunkerMaterial);
+                bunkerMesh.position.set(0, bunkerYOffset, 0); // Position at origin, geometry defines shape location
+                bunkerMesh.rotation.x = Math.PI / 2; // Rotate to lay flat (like fairway/rough)
+
+            } else {
+                console.warn("Skipping invalid bunker definition:", bunker);
+                return; // Skip this bunker
+            }
+
+            bunkerMesh.receiveShadow = true;
+            scene.add(bunkerMesh);
+            currentHoleObjects.push(bunkerMesh);
+        });
+    }
+
+
+    // --- Draw Fairway (On top of rough/water/bunkers) ---
+    if (holeLayout.fairway && holeLayout.fairway.vertices && holeLayout.fairway.surface) {
         // Define shape in XY plane (using Z as Y)
         const fairwayShape = new THREE.Shape();
         const firstPoint = holeLayout.fairway.vertices[0];
-        fairwayShape.moveTo(firstPoint.x * scale, firstPoint.z * scale); // Use z as y
+        // Use original coordinates
+        fairwayShape.moveTo(firstPoint.x * scale, firstPoint.z * scale);
         for (let i = 1; i < holeLayout.fairway.vertices.length; i++) {
             const point = holeLayout.fairway.vertices[i];
-            fairwayShape.lineTo(point.x * scale, point.z * scale); // Use z as y
+             // Use original coordinates
+            fairwayShape.lineTo(point.x * scale, point.z * scale);
         }
         fairwayShape.closePath();
 
         const fairwayGeometry = new THREE.ShapeGeometry(fairwayShape);
-        // Calculate geometry center (based on original Z range) for translation
-        const fairwayZs = holeLayout.fairway.vertices.map(v => v.z * scale);
-        const fairwayMinZ = Math.min(...fairwayZs);
-        const fairwayMaxZ = Math.max(...fairwayZs);
-        const fairwayLength = fairwayMaxZ - fairwayMinZ;
-        fairwayGeometry.translate(0, -(fairwayMinZ + fairwayLength / 2), 0); // Translate geometry origin to center Y
+        // Geometry is created using world coordinates, no centering needed.
 
         const fairwayMaterial = new THREE.MeshLambertMaterial({
             color: holeLayout.fairway.surface.color,
             side: THREE.DoubleSide
         });
         const fairwayMesh = new THREE.Mesh(fairwayGeometry, fairwayMaterial);
-        fairwayMesh.rotation.x = -Math.PI / 2; // Rotate mesh
-        // Position mesh center in world space, slightly above rough
-        fairwayMesh.position.set(0, 0.01, (fairwayMinZ + fairwayMaxZ) / 2);
+        fairwayMesh.rotation.x = Math.PI / 2; // Positive rotation
+        // Position mesh using surface height
+        fairwayMesh.position.set(0, holeLayout.fairway.surface.height ?? 0.01, 0); // Use defined height or fallback
         fairwayMesh.receiveShadow = true;
         scene.add(fairwayMesh);
         currentHoleObjects.push(fairwayMesh);
     }
 
     // --- Draw Green ---
-    if (holeLayout.green && holeLayout.green.center && holeLayout.green.radius) {
+    if (holeLayout.green && holeLayout.green.center && holeLayout.green.radius && holeLayout.green.surface) {
         const greenRadiusMeters = holeLayout.green.radius * scale;
         const greenCenterX = holeLayout.green.center.x * scale;
         const greenCenterZ = holeLayout.green.center.z * scale;
+        const greenHeight = holeLayout.green.surface.height ?? 0.02; // Use defined height or fallback
 
         const greenGeometry = new THREE.CircleGeometry(greenRadiusMeters, 64);
         const greenMaterial = new THREE.MeshLambertMaterial({ // Use Lambert
@@ -121,7 +244,7 @@ export function drawHoleLayout(holeLayout) {
         greenMesh.renderOrder = 0; // Ensure green is drawn first (default)
         greenMesh.position.set(
             greenCenterX,
-            0.02, // Small offset like targetView
+            greenHeight, // Use defined height
             greenCenterZ
         );
         greenMesh.rotation.x = -Math.PI / 2;
@@ -129,16 +252,18 @@ export function drawHoleLayout(holeLayout) {
         scene.add(greenMesh);
         currentHoleObjects.push(greenMesh);
 
-        // Store green data
-        currentGreenCenter = new THREE.Vector3(greenCenterX, 0.02, greenCenterZ); // Store the mesh position
+        // Store green data using the actual height
+        currentGreenCenter = new THREE.Vector3(greenCenterX, greenHeight, greenCenterZ); // Store the mesh position
         currentGreenRadius = greenRadiusMeters;
-        console.log(`Stored green data: Center=${currentGreenCenter.z.toFixed(1)}, Radius=${currentGreenRadius.toFixed(1)}`);
+        console.log(`Stored green data: Center=${currentGreenCenter.z.toFixed(1)}, Radius=${currentGreenRadius.toFixed(1)}, Height=${greenHeight.toFixed(3)}`);
     }
 
      // --- Draw Tee Box --- (Simple rectangle for now)
-     if (holeLayout.tee && holeLayout.tee.center) {
+     if (holeLayout.tee && holeLayout.tee.center && holeLayout.tee.surface) {
         const teeWidth = holeLayout.tee.width * scale;
         const teeDepth = holeLayout.tee.depth * scale;
+        const teeHeight = holeLayout.tee.surface.height ?? 0.03; // Use defined height or fallback
+
         const teeGeometry = new THREE.PlaneGeometry(teeWidth, teeDepth);
         const teeMaterial = new THREE.MeshLambertMaterial({ // Use Lambert
             color: holeLayout.tee.surface.color, // Use specified surface color
@@ -147,7 +272,7 @@ export function drawHoleLayout(holeLayout) {
         const teeMesh = new THREE.Mesh(teeGeometry, teeMaterial);
         teeMesh.position.set(
             holeLayout.tee.center.x * scale,
-            0.03, // Small offset above green
+            teeHeight, // Use defined height
             holeLayout.tee.center.z * scale
         );
         teeMesh.rotation.x = -Math.PI / 2;
@@ -166,7 +291,7 @@ export function drawHoleLayout(holeLayout) {
         const flagstick = new THREE.Mesh(flagGeometry, flagMaterial);
         flagstick.position.set(
             holeLayout.flagPosition.x * scale,
-            flagHeight / 2, // Position base at ground level
+            flagHeight / 2, // Position base at ground level (Y=0) relative to its center
             holeLayout.flagPosition.z * scale
         );
         flagstick.castShadow = true;
@@ -176,7 +301,7 @@ export function drawHoleLayout(holeLayout) {
         // Store the flag position (base of the stick)
         currentFlagPosition = new THREE.Vector3(
             holeLayout.flagPosition.x * scale,
-            0, // Assuming flag base is at y=0
+            0, // Assuming flag base is at y=0 world coordinate
             holeLayout.flagPosition.z * scale
         );
         console.log("Stored flag position (meters):", currentFlagPosition);
@@ -186,31 +311,31 @@ export function drawHoleLayout(holeLayout) {
         const flagClothGeometry = new THREE.PlaneGeometry(0.5, 0.3);
         const flagClothMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000, side: THREE.DoubleSide }); // Red flag
         const flagCloth = new THREE.Mesh(flagClothGeometry, flagClothMaterial);
+        // Position relative to flagstick top
         flagCloth.position.set(
-            holeLayout.flagPosition.x * scale + 0.25, // Offset slightly from pole
-            flagHeight - 0.15, // Near the top
-            holeLayout.flagPosition.z * scale
+            flagstick.position.x + 0.25, // Offset slightly from pole
+            flagstick.position.y + flagHeight / 2 - 0.15, // Near the top
+            flagstick.position.z
         );
         scene.add(flagCloth);
         currentHoleObjects.push(flagCloth);
 
         // --- Draw the Hole Cup ---
-        // --- Draw the Hole Cup ---
         const HOLE_RADIUS_METERS = 0.108 / 2; // Regulation hole diameter is 4.25 inches (0.108m)
         const holeDepth = 0.1; // Depth for the visual cup (meters)
         const holeGeometry = new THREE.CylinderGeometry(HOLE_RADIUS_METERS, HOLE_RADIUS_METERS, holeDepth, 16);
-        // Use MeshBasicMaterial so it's not affected by lighting, making it appear dark
         const holeMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 }); // Black
         const holeMesh = new THREE.Mesh(holeGeometry, holeMaterial);
-        holeMesh.renderOrder = 1; // Draw hole *after* the green (renderOrder 0)
+        holeMesh.renderOrder = 1; // Draw hole *after* the green
 
         // Position the hole centered at the flag position, top edge slightly below green surface
-        // Green surface is at y=0.02. Set top edge to y=0.015 to be safe.
-        // Cylinder position is its center, so offset by half the depth.
-        // Center Y = Top Edge Y - (holeDepth / 2) = 0.015 - (0.1 / 2) = 0.015 - 0.05 = -0.035
+        const greenSurfaceY = currentGreenCenter ? currentGreenCenter.y : (holeLayout.green?.surface?.height ?? 0.02); // Get green height
+        const holeTopEdgeY = greenSurfaceY - 0.005; // Place top slightly below green surface
+        const holeCenterY = holeTopEdgeY - (holeDepth / 2); // Calculate center Y
+
         holeMesh.position.set(
             currentFlagPosition.x,
-            -0.035, // Position cylinder center so top edge is at y=0.015
+            holeCenterY, // Position cylinder center
             currentFlagPosition.z
         );
         // No rotation needed as cylinder is upright
