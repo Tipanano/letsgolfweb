@@ -18,6 +18,7 @@ import { calculateChipImpact } from '../chipPhysics.js';
 import { calculatePuttImpact } from '../puttPhysics.js';
 // Import both simulation functions and HOLE_RADIUS
 import { simulateFlightStepByStep, simulateGroundRoll, HOLE_RADIUS_METERS } from './simulation.js';
+import { getSurfaceProperties } from '../surfaces.js'; // Import surface properties getter
 // Removed Putt Trajectory import as roll simulation handles it
 import { clamp, getSurfaceTypeAtPoint } from './utils.js'; // Import getSurfaceTypeAtPoint
 import { getCurrentGameMode } from '../main.js'; // Import mode checker
@@ -139,45 +140,50 @@ export function calculateFullSwingShot() {
 
     // --- Run Ground Simulation (if not holed out) ---
     if (!isHoledOut) {
-        let surfaceType = 'OUT_OF_BOUNDS'; // Default to OOB
-        if (currentMode === 'play-hole') {
-            const currentHoleLayout = getCurrentHoleLayout(); // Get layout from state
-            if (currentHoleLayout) {
-                // Use the new utility function to determine surface type at landing position (meters)
-                surfaceType = getSurfaceTypeAtPoint(landingPositionObj, currentHoleLayout);
-            } else {
-                console.warn("Calc (Full): Could not get hole layout for surface detection. Defaulting to FAIRWAY.");
-                surfaceType = 'FAIRWAY'; // Fallback if layout missing
-            }
+        let landingSurfaceType = 'OUT_OF_BOUNDS'; // Default to OOB
+        const currentHoleLayout = getCurrentHoleLayout(); // Get layout (might be null)
+
+        if (currentMode === 'play-hole' && currentHoleLayout) {
+            // Use the utility function to determine surface type at landing position (meters)
+            landingSurfaceType = getSurfaceTypeAtPoint(landingPositionObj, currentHoleLayout);
+        } else if (currentMode !== 'play-hole') {
+            landingSurfaceType = 'FAIRWAY'; // Range mode etc. defaults to Fairway landing
         } else {
-            surfaceType = 'FAIRWAY'; // Range mode etc.
+             console.warn("Calc (Full): Could not get hole layout for surface detection. Defaulting landing surface to FAIRWAY.");
+             landingSurfaceType = 'FAIRWAY'; // Fallback if layout missing in play-hole mode
         }
         // Ensure surfaceType is uppercase for getSurfaceProperties lookup
-        surfaceType = surfaceType.toUpperCase().replace(' ', '_');
-        console.log(`Calc (Full): Determined landing surface: ${surfaceType}`);
+        landingSurfaceType = landingSurfaceType.toUpperCase().replace(' ', '_');
+        console.log(`Calc (Full): Determined landing surface: ${landingSurfaceType}`);
 
         const rollStartPosition = new THREE.Vector3(landingPositionObj.x, landingPositionObj.y, landingPositionObj.z);
 
-        // Calculate landing angle factor to adjust initial roll speed
+        // --- Calculate Initial Roll Speed Factor based on Landing Angle AND Surface Bounce ---
         const landingVelHorizontalMag = Math.sqrt(landingVelocity.x**2 + landingVelocity.z**2);
         let landingAngleRad = Math.PI / 2; // Default 90 deg
         if (landingVelHorizontalMag > 0.01) {
             landingAngleRad = Math.atan2(Math.abs(landingVelocity.y), landingVelHorizontalMag);
         }
-        // Simple factor: cos(angle). Steeper angle (closer to PI/2) -> lower factor. Shallow angle (closer to 0) -> higher factor.
-        // Add power for more effect? e.g., Math.pow(Math.cos(landingAngleRad), 0.5)
-        const initialRollSpeedFactor = Math.cos(landingAngleRad);
-        console.log(`Calc (Full): Landing Angle: ${(landingAngleRad * 180 / Math.PI).toFixed(1)} deg, RollSpeedFactor: ${initialRollSpeedFactor.toFixed(2)}`);
+        const angleFactor = Math.cos(landingAngleRad); // Factor from landing angle
 
-        // Apply factor to horizontal landing velocity components
+        // Get surface properties to find bounce
+        const surfaceProps = getSurfaceProperties(landingSurfaceType);
+        const surfaceBounceFactor = surfaceProps?.bounce ?? 0.4; // Get bounce or default to 0.4
+
+        // Combine factors: Higher bounce means more speed retained
+        const finalRollSpeedFactor = angleFactor * surfaceBounceFactor;
+        console.log(`Calc Roll Start (Full): Landing Angle=${(landingAngleRad * 180 / Math.PI).toFixed(1)}deg (Factor=${angleFactor.toFixed(2)}), Surface=${landingSurfaceType}, Bounce=${surfaceBounceFactor.toFixed(2)}, FinalFactor=${finalRollSpeedFactor.toFixed(2)}`);
+
+
+        // Apply the combined factor to horizontal landing velocity components
         const rollStartVelocity = new THREE.Vector3(
-            landingVelocity.x * initialRollSpeedFactor,
+            landingVelocity.x * finalRollSpeedFactor,
             0, // Y velocity is zero for roll start
-            landingVelocity.z * initialRollSpeedFactor
+            landingVelocity.z * finalRollSpeedFactor
         );
 
         // Pass the backSpin and sideSpin values (from impactResult) to the ground roll simulation
-        const groundRollResult = simulateGroundRoll(rollStartPosition, rollStartVelocity, surfaceType, backSpin, sideSpin);
+        const groundRollResult = simulateGroundRoll(rollStartPosition, rollStartVelocity, landingSurfaceType, backSpin, sideSpin);
         finalPosition = groundRollResult.finalPosition; // Vector3
         isHoledOut = groundRollResult.isHoledOut;
         // Combine trajectories
@@ -373,43 +379,49 @@ export function calculateChipShot() {
 
     // --- Run Ground Simulation (if not holed out) ---
     if (!isHoledOut) {
-        let surfaceType = 'OUT_OF_BOUNDS'; // Default to OOB
-        if (currentMode === 'play-hole') {
-             const currentHoleLayout = getCurrentHoleLayout(); // Get layout from state
-             if (currentHoleLayout) {
-                 // Use the new utility function to determine surface type at landing position (meters)
-                 surfaceType = getSurfaceTypeAtPoint(landingPositionObj, currentHoleLayout);
-             } else {
-                 console.warn("Calc (Chip): Could not get hole layout for surface detection. Defaulting to FAIRWAY.");
-                 surfaceType = 'FAIRWAY'; // Fallback if layout missing
-             }
+        let landingSurfaceType = 'OUT_OF_BOUNDS'; // Default to OOB
+        const currentHoleLayout = getCurrentHoleLayout(); // Get layout (might be null)
+
+        if (currentMode === 'play-hole' && currentHoleLayout) {
+             // Use the utility function to determine surface type at landing position (meters)
+             landingSurfaceType = getSurfaceTypeAtPoint(landingPositionObj, currentHoleLayout);
+        } else if (currentMode !== 'play-hole') {
+            landingSurfaceType = 'FAIRWAY'; // Range mode etc. defaults to Fairway landing
         } else {
-            surfaceType = 'FAIRWAY'; // Range mode etc.
+             console.warn("Calc (Chip): Could not get hole layout for surface detection. Defaulting landing surface to FAIRWAY.");
+             landingSurfaceType = 'FAIRWAY'; // Fallback if layout missing in play-hole mode
         }
          // Ensure surfaceType is uppercase for getSurfaceProperties lookup
-        surfaceType = surfaceType.toUpperCase().replace(' ', '_');
-        console.log(`Calc (Chip): Determined landing surface: ${surfaceType}`);
+        landingSurfaceType = landingSurfaceType.toUpperCase().replace(' ', '_');
+        console.log(`Calc (Chip): Determined landing surface: ${landingSurfaceType}`);
 
         const rollStartPosition = new THREE.Vector3(landingPositionObj.x, landingPositionObj.y, landingPositionObj.z);
 
-        // Calculate landing angle factor
+        // --- Calculate Initial Roll Speed Factor based on Landing Angle AND Surface Bounce ---
         const landingVelHorizontalMag = Math.sqrt(landingVelocity.x**2 + landingVelocity.z**2);
         let landingAngleRad = Math.PI / 2;
         if (landingVelHorizontalMag > 0.01) {
             landingAngleRad = Math.atan2(Math.abs(landingVelocity.y), landingVelHorizontalMag);
         }
-        const initialRollSpeedFactor = Math.cos(landingAngleRad);
-        console.log(`Calc (Chip): Landing Angle: ${(landingAngleRad * 180 / Math.PI).toFixed(1)} deg, RollSpeedFactor: ${initialRollSpeedFactor.toFixed(2)}`);
+        const angleFactor = Math.cos(landingAngleRad); // Factor from landing angle
 
-        // Apply factor to horizontal landing velocity components
+        // Get surface properties to find bounce
+        const surfaceProps = getSurfaceProperties(landingSurfaceType);
+        const surfaceBounceFactor = surfaceProps?.bounce ?? 0.4; // Get bounce or default to 0.4
+
+        // Combine factors: Higher bounce means more speed retained
+        const finalRollSpeedFactor = angleFactor * surfaceBounceFactor;
+        console.log(`Calc Roll Start (Chip): Landing Angle=${(landingAngleRad * 180 / Math.PI).toFixed(1)}deg (Factor=${angleFactor.toFixed(2)}), Surface=${landingSurfaceType}, Bounce=${surfaceBounceFactor.toFixed(2)}, FinalFactor=${finalRollSpeedFactor.toFixed(2)}`);
+
+        // Apply the combined factor to horizontal landing velocity components
         const rollStartVelocity = new THREE.Vector3(
-            landingVelocity.x * initialRollSpeedFactor,
+            landingVelocity.x * finalRollSpeedFactor,
             0,
-            landingVelocity.z * initialRollSpeedFactor
+            landingVelocity.z * finalRollSpeedFactor
         );
 
         // Pass the backSpin and sideSpin values (from impactResult) to the ground roll simulation
-        const groundRollResult = simulateGroundRoll(rollStartPosition, rollStartVelocity, surfaceType, backSpin, sideSpin);
+        const groundRollResult = simulateGroundRoll(rollStartPosition, rollStartVelocity, landingSurfaceType, backSpin, sideSpin);
         finalPosition = groundRollResult.finalPosition;
         isHoledOut = groundRollResult.isHoledOut;
         // Combine trajectories

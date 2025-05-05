@@ -32,15 +32,17 @@ let currentStaticView = 'range'; // 'range', 'target', 'chip', 'putt', 'tee', 'h
 
 // Static Camera Zoom State
 const DEFAULT_STATIC_ZOOM_LEVEL = 0.5;
+const DEFAUTLT_STATIC_PUTT_ZOOM_LEVEL = 0.1; // Default zoom level for putt view
 const STATIC_ZOOM_STEP = 0.1;
 const STATIC_ZOOM_MIN_LEVEL = 0.0;
 const STATIC_ZOOM_MAX_LEVEL = 1.0;
-const STATIC_ZOOM_MIN_DIST_FACTOR = 0.1; // Multiplier for base distance when fully zoomed in
+const STATIC_ZOOM_MIN_DIST_FACTOR = 0.15; // Multiplier for base distance when fully zoomed in
 const STATIC_ZOOM_MAX_DIST_FACTOR = 2.0; // Multiplier for base distance when fully zoomed out
 const STATIC_ZOOM_MIN_HEIGHT = BALL_RADIUS + 0.5; // Minimum height above ball radius
 const STATIC_ZOOM_MAX_HEIGHT = 15.0; // Maximum height in meters
 const STATIC_ZOOM_MAX_HEIGHT_THRESHOLD = 0.7; // Zoom level at which max height is reached
 let staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL;
+let staticCameraZoomLevelPutt = DEFAUTLT_STATIC_PUTT_ZOOM_LEVEL; // Putt view zoom level
 
 // Animation state
 let isBallAnimating = false;
