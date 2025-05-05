@@ -12,7 +12,7 @@ export const SURFACES = {
       velocityReduction: 0.05
     },
     height: 0.03, // Visual height
-    ballLieOffset: 0.8 // On top
+    ballLieOffset: 0.68 // On top
   },
   GREEN: {
     name: 'Green',

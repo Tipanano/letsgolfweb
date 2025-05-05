@@ -5,8 +5,10 @@ import { getShotDirectionAngle, getCurrentTargetLineAngle } from '../gameLogic/s
 // Import position getters needed for re-applying hole view camera
 import { getCurrentBallPosition as getPlayHoleBallPosition } from '../modes/playHole.js';
 import { getFlagPosition } from './holeView.js';
+import { createTeeMesh } from './objects.js'; // Import the tee creator
+import { getSurfaceProperties } from '../surfaces.js'; // Import surface properties getter
 
-export let scene, camera, renderer, ball, trajectoryLine;
+export let scene, camera, renderer, ball, trajectoryLine, teeMesh; // Add teeMesh
 // export const BALL_RADIUS = 0.2; // Old, incorrect value
 export const BALL_RADIUS = 0.021336; // Regulation radius (1.68 inches / 2) in meters
 export const YARDS_TO_METERS = 1 / 1.09361; // Define and export the conversion factor
@@ -123,8 +125,14 @@ export function initCoreVisuals(canvasElement) {
      ball.castShadow = true;
      // ball.renderOrder = 1; // REMOVED - Will use polygonOffset on terrain instead
      ball.scale.copy(BALL_SCALE_VECTOR_ENLARGED); // Start with enlarged scale
-     showBallAtAddress(); // Position the ball initially
      scene.add(ball);
+
+    // 6. Tee Mesh (created but hidden initially)
+    teeMesh = createTeeMesh(); // Create the tee using the imported function
+    scene.add(teeMesh);
+
+    // Position ball and potentially tee initially
+    showBallAtAddress();
 
     // Handle window resize
     window.addEventListener('resize', onWindowResize, false);
@@ -372,20 +380,57 @@ export function removeTrajectoryLine() {
     }
 }
 
-// --- Ball Visibility ---
-export function showBallAtAddress() {
-    if (ball) {
-        ball.position.set(0, BALL_RADIUS, 0);
-        console.log("Showing ball at address position");
-        ball.visible = true; // Ensure it's visible
+// --- Ball and Tee Visibility/Positioning ---
+export function showBallAtAddress(position = null, surfaceType = null) {
+    if (!ball) return;
+
+    // Use provided position or default tee box position
+    const ballPos = position ? position.clone() : new THREE.Vector3(0, BALL_RADIUS, 0);
+
+    // Determine surface type. Use provided type, otherwise default to 'TEE' (e.g., for initial range setup)
+    const currentSurface = surfaceType || 'TEE';
+
+    // Adjust ball Y position based on surface offset (using logic similar to simulation end)
+    // This is crucial for placing the ball correctly *before* the shot
+    const surfaceProps = typeof getSurfaceProperties === 'function' ? getSurfaceProperties(currentSurface) : null;
+    if (surfaceProps && typeof surfaceProps.ballLieOffset === 'number' && surfaceProps.ballLieOffset !== -1) { // Check if getSurfaceProperties exists
+        ballPos.y = BALL_RADIUS + surfaceProps.ballLieOffset;
+        console.log(`showBallAtAddress: Surface=${currentSurface}, Offset=${surfaceProps.ballLieOffset.toFixed(3)}, Setting ball Y to ${ballPos.y.toFixed(3)}`);
+    } else {
+        // Default Y if no surface info or water
+        ballPos.y = BALL_RADIUS;
+         console.log(`showBallAtAddress: No valid surface/offset for ${currentSurface}, setting ball Y to default ${ballPos.y.toFixed(3)}`);
+    }
+
+    ball.position.copy(ballPos);
+    ball.visible = true;
+    console.log(`Showing ball at address position: (${ballPos.x.toFixed(2)}, ${ballPos.y.toFixed(2)}, ${ballPos.z.toFixed(2)}) on surface: ${currentSurface}`);
+
+    // --- Tee Visibility and Positioning ---
+    if (teeMesh) {
+        if (currentSurface === 'TEE') {
+            // Position tee directly below the ball's center
+            // The tee's origin is at its base due to geometry.translate in createTeeMesh
+            teeMesh.position.set(ballPos.x, 0.0, ballPos.z); // Place base of tee at ground level (y=0) under the ball
+            // Adjust tee height slightly if needed visually? For now, base at y=0.
+            teeMesh.visible = true;
+            console.log("Showing tee.");
+        } else {
+            teeMesh.visible = false;
+            // console.log("Hiding tee."); // Reduce console noise
+        }
     }
 }
 
-// Function to hide the ball
+// Function to hide the ball and tee
 export function hideBall() {
     if (ball) {
         ball.visible = false;
         console.log("Hiding ball.");
+    }
+    if (teeMesh) {
+        teeMesh.visible = false;
+        // console.log("Hiding tee."); // Reduce console noise
     }
 }
 
@@ -441,7 +486,9 @@ export function resetCoreVisuals() {
     // Stop any ongoing animation and reset state
     isBallAnimating = false;
     currentTrajectoryPoints = [];
-    showBallAtAddress(); // Put ball back at start
+    // Reset ball and tee based on current game state
+    // For simplicity during reset, assume we are back on the TEE or range default
+    showBallAtAddress(null, 'TEE'); // Reset ball/tee assuming TEE surface
 
     // Reset camera to the default static view for the current mode
     // This might be redundant if resetVisuals in visuals.js handles it
