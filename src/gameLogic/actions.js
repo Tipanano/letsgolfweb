@@ -20,9 +20,10 @@ import { calculateFullSwingShot, calculateChipShot, calculatePuttShot } from './
 // Import debug data getter directly
 import { getDebugTimingData } from './utils.js';
 import { getCurrentGameMode } from '../main.js'; // Import mode checker
-import { getCurrentBallPosition as getPlayHoleBallPosition } from '../modes/playHole.js'; // Import position getter for playHole ball
-import { getFlagPosition } from '../visuals/holeView.js'; // Import flag position getter
-import { getActiveCameraMode, setCameraBehindBall, snapFollowCameraToBall, CameraMode, removeTrajectoryLine, applyAimAngleToCamera, setCameraBehindBallLookingAtTarget, setInitialFollowCameraLookingAtTarget } from '../visuals/core.js'; // Import camera functions, line removal, and aim application
+import { getCurrentBallPosition as getPlayHoleBallPosition, getCurrentHoleLayout } from '../modes/playHole.js'; // Import position and layout getters for playHole
+import { getFlagPosition, setFlagstickVisibility } from '../visuals/holeView.js'; // Import flag position getter AND visibility setter
+import { getActiveCameraMode, setCameraBehindBall, snapFollowCameraToBall, CameraMode, removeTrajectoryLine, applyAimAngleToCamera, setCameraBehindBallLookingAtTarget, setInitialFollowCameraLookingAtTarget, setBallScale } from '../visuals/core.js'; // Import camera functions, line removal, aim application, AND setBallScale
+import { getSurfaceTypeAtPoint } from './utils.js'; // Import surface checker
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js'; // Need THREE for Vector3
 
 // --- Action Functions for Input Handler ---
@@ -243,8 +244,8 @@ export function prepareNextShot() {
     resetUIForNewShot(); // Reset timing bars and other relevant UI elements
     updateStatus("Ready for next shot..."); // Update status explicitly
 
-    // --- Update Camera Position and Aim for PlayHole Mode ---
-    const currentMode = getCurrentGameMode(); // Need to import this if not already available
+    // --- Update Camera Position, Aim, and Flag Visibility for PlayHole Mode ---
+    const currentMode = getCurrentGameMode();
     if (currentMode === 'play-hole') {
         const ballPosData = getPlayHoleBallPosition(); // Get the new ball position (meters {x, y, z})
         const targetPos = getFlagPosition(); // Get the flag position (meters THREE.Vector3)
@@ -253,6 +254,20 @@ export function prepareNextShot() {
 
         // Ensure ballPos is a Vector3 for calculations
         const ballPos = ballPosData ? new THREE.Vector3(ballPosData.x, ballPosData.y, ballPosData.z) : null;
+
+        // --- Toggle Flagstick Visibility AND Set Ball Scale ---
+        const layout = getCurrentHoleLayout(); // Get layout
+        let isOnGreen = false; // Default
+        if (ballPos && layout) {
+            // Pass only X and Z for surface check
+            const surface = getSurfaceTypeAtPoint({ x: ballPos.x, z: ballPos.z }, layout);
+            isOnGreen = (surface === 'GREEN');
+            setFlagstickVisibility(!isOnGreen); // Hide if on green, show otherwise
+        } else {
+            setFlagstickVisibility(true); // Default to visible if info missing
+        }
+        // Set ball scale based on whether it's on the green
+        setBallScale(!isOnGreen); // Use enlarged scale if NOT on green
 
         // --- Set Default Aim Angle ---
         let angleDeg = 0; // Initialize angleDeg

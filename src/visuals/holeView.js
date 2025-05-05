@@ -8,6 +8,8 @@ let currentHoleObjects = []; // To keep track of objects added for the hole
 let currentFlagPosition = null; // Store the flag position in meters (Vector3)
 let currentGreenCenter = null; // Store the green center position in meters (Vector3)
 let currentGreenRadius = null; // Store the green radius in meters (Number)
+let flagstickPoleMesh = null; // Reference to the flagstick pole mesh
+let flagClothMesh = null; // Reference to the flag cloth mesh
 
 /**
  * Clears any previously drawn hole objects from the scene.
@@ -20,6 +22,9 @@ export function clearHoleLayout() {
         if (obj.material) obj.material.dispose();
     });
     currentHoleObjects = [];
+    // Reset flagstick references when clearing
+    flagstickPoleMesh = null;
+    flagClothMesh = null;
     console.log("Cleared previous hole layout visuals.");
 }
 
@@ -746,15 +751,16 @@ export function drawHoleLayout(holeLayout) {
         const flagRadius = 0.05; // Meters
         const flagGeometry = new THREE.CylinderGeometry(flagRadius, flagRadius, flagHeight, 8);
         const flagMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff }); // White pole
-        const flagstick = new THREE.Mesh(flagGeometry, flagMaterial);
-        flagstick.position.set(
+        flagstickPoleMesh = new THREE.Mesh(flagGeometry, flagMaterial); // Assign to module variable
+        flagstickPoleMesh.name = "FlagstickPole"; // Optional: Add name for debugging
+        flagstickPoleMesh.position.set(
             holeLayout.flagPosition.x * scale,
             flagHeight / 2, // Position base at ground level (Y=0) relative to its center
             holeLayout.flagPosition.z * scale
         );
-        flagstick.castShadow = true;
-        scene.add(flagstick);
-        currentHoleObjects.push(flagstick);
+        flagstickPoleMesh.castShadow = true;
+        scene.add(flagstickPoleMesh);
+        currentHoleObjects.push(flagstickPoleMesh);
 
         // Store the flag position (base of the stick)
         currentFlagPosition = new THREE.Vector3(
@@ -768,15 +774,16 @@ export function drawHoleLayout(holeLayout) {
         // Optional: Add a little flag cloth
         const flagClothGeometry = new THREE.PlaneGeometry(0.5, 0.3);
         const flagClothMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000, side: THREE.DoubleSide }); // Red flag
-        const flagCloth = new THREE.Mesh(flagClothGeometry, flagClothMaterial);
+        flagClothMesh = new THREE.Mesh(flagClothGeometry, flagClothMaterial); // Assign to module variable
+        flagClothMesh.name = "FlagCloth"; // Optional: Add name for debugging
         // Position relative to flagstick top
-        flagCloth.position.set(
-            flagstick.position.x + 0.25, // Offset slightly from pole
-            flagstick.position.y + flagHeight / 2 - 0.15, // Near the top
-            flagstick.position.z
+        flagClothMesh.position.set(
+            flagstickPoleMesh.position.x + 0.25, // Offset slightly from pole
+            flagstickPoleMesh.position.y + flagHeight / 2 - 0.15, // Near the top
+            flagstickPoleMesh.position.z
         );
-        scene.add(flagCloth);
-        currentHoleObjects.push(flagCloth);
+        scene.add(flagClothMesh);
+        currentHoleObjects.push(flagClothMesh);
 
         // --- Draw the Hole Cup ---
         const HOLE_RADIUS_METERS = 0.108 / 2; // Regulation hole diameter is 4.25 inches (0.108m)
@@ -788,7 +795,7 @@ export function drawHoleLayout(holeLayout) {
 
         // Position the hole centered at the flag position, top edge slightly below green surface
         const greenSurfaceY = currentGreenCenter ? currentGreenCenter.y : (holeLayout.green?.surface?.height ?? 0.02); // Get green height
-        const holeTopEdgeY = greenSurfaceY - 0.005; // Place top slightly below green surface
+        const holeTopEdgeY = greenSurfaceY + 0.05; // Place top slightly below green surface
         const holeCenterY = holeTopEdgeY - (holeDepth / 2); // Calculate center Y
 
         holeMesh.position.set(
@@ -827,4 +834,18 @@ export function getGreenCenter() {
  */
 export function getGreenRadius() {
     return currentGreenRadius;
+}
+
+/**
+ * Sets the visibility of the flagstick pole and cloth.
+ * @param {boolean} visible - True to show, false to hide.
+ */
+export function setFlagstickVisibility(visible) {
+    if (flagstickPoleMesh) {
+        flagstickPoleMesh.visible = visible;
+    }
+    if (flagClothMesh) {
+        flagClothMesh.visible = visible;
+    }
+    console.log(`Flagstick visibility set to: ${visible}`);
 }

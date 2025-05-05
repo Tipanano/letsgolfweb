@@ -7,8 +7,16 @@ import { getCurrentBallPosition as getPlayHoleBallPosition } from '../modes/play
 import { getFlagPosition } from './holeView.js';
 
 export let scene, camera, renderer, ball, trajectoryLine;
-export const BALL_RADIUS = 0.2;
+// export const BALL_RADIUS = 0.2; // Old, incorrect value
+export const BALL_RADIUS = 0.021336; // Regulation radius (1.68 inches / 2) in meters
 export const YARDS_TO_METERS = 1 / 1.09361; // Define and export the conversion factor
+
+// Ball Scale Factors for Visibility
+const BALL_SCALE_NORMAL = 1.0; // Scale for on the green
+const BALL_SCALE_ENLARGED = 10.0; // Scale for off the green (Adjust as needed)
+const BALL_SCALE_VECTOR_NORMAL = new THREE.Vector3(BALL_SCALE_NORMAL, BALL_SCALE_NORMAL, BALL_SCALE_NORMAL);
+const BALL_SCALE_VECTOR_ENLARGED = new THREE.Vector3(BALL_SCALE_ENLARGED, BALL_SCALE_ENLARGED, BALL_SCALE_ENLARGED);
+
 
 // Camera Modes
 export const CameraMode = {
@@ -18,7 +26,19 @@ export const CameraMode = {
     GREEN_FOCUS: 'green_focus',
 };
 let activeCameraMode = CameraMode.STATIC;
-let currentStaticView = 'range'; // 'range', 'target', 'chip', 'putt' - Tracks the *current* static view setting
+let currentStaticView = 'range'; // 'range', 'target', 'chip', 'putt', 'tee', 'hole' - Tracks the *current* static view setting
+
+// Static Camera Zoom State
+const DEFAULT_STATIC_ZOOM_LEVEL = 0.5;
+const STATIC_ZOOM_STEP = 0.1;
+const STATIC_ZOOM_MIN_LEVEL = 0.0;
+const STATIC_ZOOM_MAX_LEVEL = 1.0;
+const STATIC_ZOOM_MIN_DIST_FACTOR = 0.1; // Multiplier for base distance when fully zoomed in
+const STATIC_ZOOM_MAX_DIST_FACTOR = 2.0; // Multiplier for base distance when fully zoomed out
+const STATIC_ZOOM_MIN_HEIGHT = BALL_RADIUS + 0.5; // Minimum height above ball radius
+const STATIC_ZOOM_MAX_HEIGHT = 20.0; // Maximum height in meters
+const STATIC_ZOOM_MAX_HEIGHT_THRESHOLD = 0.7; // Zoom level at which max height is reached
+let staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL;
 
 // Animation state
 let isBallAnimating = false;
@@ -102,6 +122,7 @@ export function initCoreVisuals(canvasElement) {
      ball = new THREE.Mesh(ballGeometry, ballMaterial);
      ball.castShadow = true;
      // ball.renderOrder = 1; // REMOVED - Will use polygonOffset on terrain instead
+     ball.scale.copy(BALL_SCALE_VECTOR_ENLARGED); // Start with enlarged scale
      showBallAtAddress(); // Position the ball initially
      scene.add(ball);
 
@@ -541,7 +562,9 @@ export function resetCameraPosition(angleToUse = 0) { // Accept angle parameter
     camera.position.copy(rotatedCamPos);
     camera.lookAt(rotatedLookAt);
     currentStaticView = 'range'; // Update stored static view type
+    staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // Reset zoom level
     console.log(`Static camera set to: Range View (Angle: ${angleToUse.toFixed(1)})`);
+    updateStaticCameraPositionFromZoom(); // Apply initial zoom position
 }
 
 // Sets camera for Target view
@@ -570,7 +593,9 @@ export function setCameraForTargetView(targetZ = 150, angleToUse = 0) { // Accep
     camera.position.copy(rotatedCamPos);
     camera.lookAt(rotatedLookAt);
     currentStaticView = 'target'; // Update stored static view type
+    staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // Reset zoom level
     console.log(`Static camera set to: Target View (Z=${targetZ.toFixed(1)}, Angle: ${angleToUse.toFixed(1)})`);
+    updateStaticCameraPositionFromZoom(); // Apply initial zoom position
 }
 
 // Sets camera for Chip view
@@ -594,7 +619,9 @@ export function setCameraForChipView(angleToUse = 0) { // Accept angle parameter
     camera.position.copy(rotatedCamPos);
     camera.lookAt(rotatedLookAt);
     currentStaticView = 'chip'; // Update stored static view type
+    staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // Reset zoom level
     console.log(`Static camera set to: Chip View (Angle: ${angleToUse.toFixed(1)})`);
+    updateStaticCameraPositionFromZoom(); // Apply initial zoom position
 }
 
 // Sets camera for Putt view
@@ -618,7 +645,9 @@ export function setCameraForPuttView(angleToUse = 0) { // Accept angle parameter
     camera.position.copy(rotatedCamPos);
     camera.lookAt(rotatedLookAt);
     currentStaticView = 'putt'; // Update stored static view type
+    staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // Reset zoom level
     console.log(`Static camera set to: Putt View (Angle: ${angleToUse.toFixed(1)})`);
+    updateStaticCameraPositionFromZoom(); // Apply initial zoom position
 }
 
 // Sets camera for Hole Tee view (overview)
@@ -643,7 +672,9 @@ export function setCameraForHoleTeeView(holeLengthYards = 400, angleToUse = 0) {
     camera.position.copy(rotatedCamPos);
     camera.lookAt(rotatedLookAt);
     currentStaticView = 'tee'; // Update stored static view type
+    staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // Reset zoom level
     console.log(`Static camera set to: Hole Tee View (Angle: ${angleToUse.toFixed(1)}, looking towards Z=${(holeLengthMeters * 0.6).toFixed(1)})`);
+    updateStaticCameraPositionFromZoom(); // Apply initial zoom position
 }
 
 // Sets camera behind the ball, looking directly at a target, adjusting distance based on proximity
@@ -683,8 +714,10 @@ export function setCameraBehindBallLookingAtTarget(ballPosition, targetPosition,
     camera.lookAt(rotatedLookAt); // Look at the rotated target point
     currentStaticView = 'hole'; // Update stored static view type
     setActiveCameraMode(CameraMode.STATIC); // Ensure mode is static
+    staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // Reset zoom level
 
     console.log(`Static camera set to: Hole View (Angle: ${angleToUse.toFixed(1)}, behind ball at ${ballPosition.z.toFixed(1)}, looking towards ${targetPosition.z.toFixed(1)})`);
+    updateStaticCameraPositionFromZoom(); // Apply initial zoom position
 }
 
 // Sets the initial position and lookAt for the follow camera, aiming at a target
@@ -791,8 +824,10 @@ export function setCameraBehindBall(targetPosition, viewType = 'range') { // Kee
     camera.position.copy(rotatedCamPos);
     camera.lookAt(rotatedLookAt);
     setActiveCameraMode(CameraMode.STATIC); // Ensure mode is static
+    staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // Reset zoom level
 
     console.log(`Static camera set behind ball (Total Angle: ${totalAimAngle.toFixed(1)}) at (${targetPosVec3.x.toFixed(1)}, ${targetPosVec3.z.toFixed(1)}) with view type: ${currentStaticView}`);
+    updateStaticCameraPositionFromZoom(); // Apply initial zoom position
 }
 
 // Snaps the follow camera instantly to its starting offset relative to a target position
@@ -822,24 +857,169 @@ export function snapFollowCameraToBall(targetPosition) { // Keep original signat
 
 // --- Zoom Functions ---
 const MIN_FOV = 10; // Minimum Field of View (Zoom In Limit)
-const MAX_FOV = 90; // Maximum Field of View (Zoom Out Limit)
+const MAX_FOV = 150; // Maximum Field of View (Zoom Out Limit)
 const ZOOM_STEP = 5;  // How much FOV changes per step
 
+// --- New function to update static camera based on zoom level ---
+function updateStaticCameraPositionFromZoom() {
+    if (!camera || activeCameraMode !== CameraMode.STATIC) return;
+
+    const totalAimAngle = getCurrentTargetLineAngle() + getShotDirectionAngle();
+    const pivot = ball ? ball.position.clone() : BALL_PIVOT_POINT.clone(); // Pivot around current ball pos if available
+
+    // 1. Determine Base Offsets for the current view (relative to pivot, 0 degrees)
+    let baseCamPosOffset = new THREE.Vector3();
+    let baseLookAtOffset = new THREE.Vector3();
+    let baseDistance = 0; // Horizontal distance from pivot
+    let baseHeight = 0;   // Vertical distance from pivot plane
+
+    // --- Get base offsets based on currentStaticView ---
+    // This logic mirrors the setCamera... functions but extracts offsets
+    switch (currentStaticView) {
+        case 'range':
+            baseCamPosOffset.set(0, 18, -25);
+            baseLookAtOffset.set(0, 0, 80);
+            break;
+        case 'target':
+            // Use stored target Z for target view base calculation
+            const targetZ = currentTargetZ !== undefined ? currentTargetZ : 150;
+            const cameraHeightTarget = 20;
+            const cameraDistBackTarget = 30;
+            baseCamPosOffset.set(0, cameraHeightTarget, targetZ - cameraDistBackTarget);
+            baseLookAtOffset.set(0, 0, targetZ / 1.5);
+            break;
+        case 'chip':
+        case 'putt':
+            baseCamPosOffset.set(0, 4, -8);
+            baseLookAtOffset.set(0, 0, 20);
+            break;
+        case 'tee':
+            // Need hole length if available, otherwise default
+            const layout = typeof getCurrentHoleLayout === 'function' ? getCurrentHoleLayout() : null; // Check if function exists
+            const holeLengthYards = layout ? layout.length : 400;
+            const holeLengthMeters = holeLengthYards * YARDS_TO_METERS;
+            baseCamPosOffset.set(0, 30, -40);
+            baseLookAtOffset.set(0, 5, holeLengthMeters * 0.6);
+            break;
+        case 'hole':
+            // For 'hole' view, the base is calculated dynamically in setCameraBehindBallLookingAtTarget
+            // We need to recalculate the base offsets here based on current ball/target
+            const ballPos = getPlayHoleBallPosition();
+            const targetPos = getFlagPosition();
+            if (ballPos && targetPos) {
+                const ballPosVec3 = ballPos instanceof THREE.Vector3 ? ballPos : new THREE.Vector3(ballPos.x, ballPos.y, ballPos.z);
+                const distanceToTarget = ballPosVec3.distanceTo(targetPos);
+                const maxDist = 50;
+                const minDistBehind = 8;
+                const maxDistBehind = 25;
+                const minHeight = 4;
+                const maxHeight = 18;
+                const clampedDistance = Math.min(distanceToTarget, maxDist);
+                const interpFactor = clampedDistance / maxDist;
+                const baseDistBehind = THREE.MathUtils.lerp(minDistBehind, maxDistBehind, interpFactor);
+                const baseCamHeight = THREE.MathUtils.lerp(minHeight, maxHeight, interpFactor);
+                baseCamPosOffset.set(0, baseCamHeight, -baseDistBehind); // Offset relative to ball
+                baseLookAtOffset.set(0, 0, 100); // Look far ahead along the line
+            } else {
+                console.warn("updateStaticCameraPositionFromZoom: Could not get ball/target for 'hole' view base. Using range defaults.");
+                baseCamPosOffset.set(0, 18, -25); // Fallback
+                baseLookAtOffset.set(0, 0, 80);
+            }
+            break;
+        default:
+            console.warn(`updateStaticCameraPositionFromZoom: Unknown view '${currentStaticView}'. Using range defaults.`);
+            baseCamPosOffset.set(0, 18, -25);
+            baseLookAtOffset.set(0, 0, 80);
+            break;
+    }
+
+    // Calculate base distance (XZ plane) and height (Y) from the offset
+    baseDistance = Math.sqrt(baseCamPosOffset.x * baseCamPosOffset.x + baseCamPosOffset.z * baseCamPosOffset.z);
+    baseHeight = baseCamPosOffset.y;
+
+    // 2. Calculate Target Distance and Height based on Zoom Level
+    const targetDist = THREE.MathUtils.lerp(baseDistance * STATIC_ZOOM_MIN_DIST_FACTOR, baseDistance * STATIC_ZOOM_MAX_DIST_FACTOR, staticCameraZoomLevel);
+
+    let targetHeight;
+    if (staticCameraZoomLevel <= STATIC_ZOOM_MAX_HEIGHT_THRESHOLD) {
+        // Interpolate height up to the threshold
+        const heightInterpFactor = staticCameraZoomLevel / STATIC_ZOOM_MAX_HEIGHT_THRESHOLD;
+        targetHeight = THREE.MathUtils.lerp(STATIC_ZOOM_MIN_HEIGHT, STATIC_ZOOM_MAX_HEIGHT, heightInterpFactor);
+    } else {
+        // Height is capped at max height beyond the threshold
+        targetHeight = STATIC_ZOOM_MAX_HEIGHT;
+    }
+    targetHeight = Math.max(STATIC_ZOOM_MIN_HEIGHT, targetHeight); // Ensure min height is respected
+
+    // 3. Construct the New Base Camera Position Offset (before rotation)
+    // Find the original direction vector on the XZ plane
+    const baseDirXZ = new THREE.Vector3(baseCamPosOffset.x, 0, baseCamPosOffset.z).normalize();
+    // Scale this direction by the target distance
+    const targetOffsetXZ = baseDirXZ.multiplyScalar(targetDist);
+    // Create the new offset vector with the target height
+    const newBaseCamPosOffset = new THREE.Vector3(targetOffsetXZ.x, targetHeight, targetOffsetXZ.z);
+
+    // 4. Calculate Absolute Positions (relative to world origin) before rotation
+    const baseCamPos = pivot.clone().add(newBaseCamPosOffset);
+    // Keep the lookAt target based on the original base offset direction, but relative to the pivot
+    const baseLookAtTargetPoint = pivot.clone().add(baseLookAtOffset);
+
+    // 5. Rotate Position and LookAt around the pivot
+    const rotatedCamPos = rotatePointAroundPivot(baseCamPos, pivot, totalAimAngle);
+    const rotatedLookAt = rotatePointAroundPivot(baseLookAtTargetPoint, pivot, totalAimAngle);
+
+    // 6. Apply to Camera
+    camera.position.copy(rotatedCamPos);
+    camera.lookAt(rotatedLookAt);
+
+    // console.log(`Static Zoom Update: Level=${staticCameraZoomLevel.toFixed(2)}, Dist=${targetDist.toFixed(1)}, Height=${targetHeight.toFixed(1)}`);
+}
+
+
+// --- Zoom Functions (Modified) ---
 export function zoomCameraIn() {
     if (!camera) return;
-    camera.fov = Math.max(MIN_FOV, camera.fov - ZOOM_STEP);
-    camera.updateProjectionMatrix();
-    console.log(`Zoom In: FOV = ${camera.fov}`);
+
+    if (activeCameraMode === CameraMode.STATIC) {
+        staticCameraZoomLevel = Math.max(STATIC_ZOOM_MIN_LEVEL, staticCameraZoomLevel - STATIC_ZOOM_STEP);
+        updateStaticCameraPositionFromZoom();
+        console.log(`Static Zoom In: Level = ${staticCameraZoomLevel.toFixed(2)}`);
+    } else {
+        // Original FOV zoom for non-static modes
+        camera.fov = Math.max(MIN_FOV, camera.fov - ZOOM_STEP);
+        camera.updateProjectionMatrix();
+        console.log(`FOV Zoom In: FOV = ${camera.fov}`);
+    }
 }
 
 export function zoomCameraOut() {
     if (!camera) return;
-    camera.fov = Math.min(MAX_FOV, camera.fov + ZOOM_STEP);
-    camera.updateProjectionMatrix();
-    console.log(`Zoom Out: FOV = ${camera.fov}`);
+
+    if (activeCameraMode === CameraMode.STATIC) {
+        staticCameraZoomLevel = Math.min(STATIC_ZOOM_MAX_LEVEL, staticCameraZoomLevel + STATIC_ZOOM_STEP);
+        updateStaticCameraPositionFromZoom();
+        console.log(`Static Zoom Out: Level = ${staticCameraZoomLevel.toFixed(2)}`);
+    } else {
+        // Original FOV zoom for non-static modes
+        camera.fov = Math.min(MAX_FOV, camera.fov + ZOOM_STEP);
+        camera.updateProjectionMatrix();
+        console.log(`FOV Zoom Out: FOV = ${camera.fov}`);
+    }
 }
 
 // --- Getters ---
 export function getActiveCameraMode() {
-    return activeCameraMode;
+     return activeCameraMode;
+}
+
+/**
+ * Sets the visual scale of the golf ball.
+ * @param {boolean} enlarged - True to use enlarged scale, false for normal scale.
+ */
+export function setBallScale(enlarged) {
+    if (ball) {
+        const targetScale = enlarged ? BALL_SCALE_VECTOR_ENLARGED : BALL_SCALE_VECTOR_NORMAL;
+        ball.scale.copy(targetScale);
+        console.log(`Ball scale set to: ${enlarged ? 'Enlarged' : 'Normal'} (${targetScale.x})`);
+    }
 }
