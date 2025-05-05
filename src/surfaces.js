@@ -9,7 +9,7 @@ export const SURFACES = {
     flightModification: {
       spinReduction: 0.1,
       launchAngleChange: 0,
-      velocityReduction: 0.05
+      velocityReduction: 0.00
     },
     height: 0.03, // Visual height
     ballLieOffset: 0.68 // On top
@@ -34,7 +34,7 @@ export const SURFACES = {
     bounce: 0.4, // Slightly more bounce than green
     rollOut: 0.90, // Slightly less roll out than green
     flightModification: {
-      spinReduction: 0.1,
+      spinReduction: 0.0,
       launchAngleChange: 0,
       velocityReduction: 0.05
     },
@@ -48,9 +48,9 @@ export const SURFACES = {
     bounce: 0.5, // More bounce
     rollOut: 0.80, // More friction
     flightModification: {
-      spinReduction: 0.25, // Noticeable spin reduction
+      spinReduction: [0.15, 0.35], // Range for spin reduction
       launchAngleChange: 0.5, // Slight increase in launch angle possible
-      velocityReduction: 0.15 // More velocity lost
+      velocityReduction: [0.10, 0.20] // Range for velocity loss
     },
     height: 0.00, // Base rough height
     texturePath: 'assets/textures/rough.png', // Added texture path
@@ -62,9 +62,9 @@ export const SURFACES = {
     bounce: 0.55, // Similar bounce to light rough
     rollOut: 0.70, // Significant friction
     flightModification: {
-      spinReduction: 0.45, // Significant spin reduction
+      spinReduction: [0.35, 0.55], // Range for spin reduction
       launchAngleChange: 1.0, // Can affect launch angle more
-      velocityReduction: 0.25 // Significant velocity loss
+      velocityReduction: [0.20, 0.35] // Range for velocity loss
     },
     height: 0.00, // Visual height (same as light rough for now)
     texturePath: 'assets/textures/rough.png', // Added texture path
@@ -76,9 +76,9 @@ export const SURFACES = {
     bounce: 0.6, // High bounce, unpredictable
     rollOut: 0.50, // Very high friction
     flightModification: {
-      spinReduction: 0.70, // Massive spin reduction
+      spinReduction: [0.60, 0.80], // Range for spin reduction
       launchAngleChange: 2.0, // Potential for significant launch angle change
-      velocityReduction: 0.40 // Huge velocity loss
+      velocityReduction: [0.30, 0.50] // Range for velocity loss
     },
     height: 0.00, // Visual height (same as medium rough for now)
     texturePath: 'assets/textures/rough.png', // Added texture path
@@ -90,9 +90,9 @@ export const SURFACES = {
     bounce: 0.2, // Very low bounce (absorbs energy)
     rollOut: 0.60, // High friction, but different from rough
     flightModification: {
-      spinReduction: 0.60, // Hard to generate spin
+      spinReduction: [0.50, 0.75], // Range for spin reduction
       launchAngleChange: 1.5, // Tends to increase launch angle
-      velocityReduction: 0.35 // Significant velocity loss
+      velocityReduction: [0.25, 0.45] // Range for velocity loss
     },
     height: 0.04, // Visual height (highest)
     texturePath: 'assets/textures/bunker.png', // Added texture path

@@ -38,7 +38,7 @@ const STATIC_ZOOM_MAX_LEVEL = 1.0;
 const STATIC_ZOOM_MIN_DIST_FACTOR = 0.1; // Multiplier for base distance when fully zoomed in
 const STATIC_ZOOM_MAX_DIST_FACTOR = 2.0; // Multiplier for base distance when fully zoomed out
 const STATIC_ZOOM_MIN_HEIGHT = BALL_RADIUS + 0.5; // Minimum height above ball radius
-const STATIC_ZOOM_MAX_HEIGHT = 20.0; // Maximum height in meters
+const STATIC_ZOOM_MAX_HEIGHT = 15.0; // Maximum height in meters
 const STATIC_ZOOM_MAX_HEIGHT_THRESHOLD = 0.7; // Zoom level at which max height is reached
 let staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL;
 
@@ -385,10 +385,16 @@ export function showBallAtAddress(position = null, surfaceType = null) {
     if (!ball) return;
 
     // Use provided position or default tee box position
-    const ballPos = position ? position.clone() : new THREE.Vector3(0, BALL_RADIUS, 0);
+    // Create a new Vector3 from the plain object if position is provided
+    const ballPos = position
+        ? new THREE.Vector3(position.x, position.y, position.z)
+        : new THREE.Vector3(0, BALL_RADIUS, 0); // Default if position is null
+    console.log(`>>> ballPos created: (${ballPos.x.toFixed(2)}, ${ballPos.y.toFixed(2)}, ${ballPos.z.toFixed(2)}) from position:`, position); // ADDED LOG
 
-    // Determine surface type. Use provided type, otherwise default to 'TEE' (e.g., for initial range setup)
-    const currentSurface = surfaceType || 'TEE';
+    // Determine surface type. Use provided type, otherwise default to 'TEE'
+    // If a specific position was given, we should ideally determine the surface there,
+    // but for now, we'll allow overriding or default to TEE.
+    const currentSurface = surfaceType || 'TEE'; // Default to TEE if not specified
 
     // Adjust ball Y position based on surface offset (using logic similar to simulation end)
     // This is crucial for placing the ball correctly *before* the shot
@@ -402,6 +408,7 @@ export function showBallAtAddress(position = null, surfaceType = null) {
          console.log(`showBallAtAddress: No valid surface/offset for ${currentSurface}, setting ball Y to default ${ballPos.y.toFixed(3)}`);
     }
 
+    console.log(`>>> PRE-COPY ballPos: (${ballPos.x.toFixed(2)}, ${ballPos.y.toFixed(2)}, ${ballPos.z.toFixed(2)})`); // ADDED LOG
     ball.position.copy(ballPos);
     ball.visible = true;
     console.log(`Showing ball at address position: (${ballPos.x.toFixed(2)}, ${ballPos.y.toFixed(2)}, ${ballPos.z.toFixed(2)}) on surface: ${currentSurface}`);

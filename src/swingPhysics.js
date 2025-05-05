@@ -7,6 +7,7 @@
  */
 
 import { clubs } from './clubs.js'; // May need club data (base speed, loft, AoA)
+import { getSurfaceProperties } from './surfaces.js'; // Import surface properties getter
 
 // --- Tunable Parameters ---
 
@@ -41,6 +42,7 @@ const WRIST_FAT_THIN_THRESHOLD_MS = 100; // ms deviation threshold for Fat/Thin 
 
 // Attack Angle
 const BALLPOS_AOA_SENSITIVITY = 10.0; // Max degrees AoA change from ball position (-1 to +1 factor)
+const MAX_NON_TEE_AOA_BONUS = 1.0; // Max degrees positive AoA bonus from ball position when *not* on tee
 // const ARMS_AOA_SENSITIVITY = 0.0; // How much arms timing affects AoA (set to 0 based on new rules?)
 
 // Strike & Smash Factor
@@ -48,6 +50,7 @@ const FAT_STRIKE_SMASH_PENALTY = 0.25; // % smash factor reduction
 const THIN_STRIKE_SMASH_PENALTY = 0.20; // % smash factor reduction
 const FLIP_STRIKE_SMASH_PENALTY = 0.10; // % smash factor reduction (early release)
 const PUNCH_STRIKE_SMASH_PENALTY = 0.05; // % smash factor reduction (late release)
+const BUNKER_FAT_STRIKE_SMASH_PENALTY = 0.10; // Reduced penalty for fat shots from sand
 
 // Spin Calculation Factors (Placeholders - Need Refinement)
 const SPIN_AXIS_SENSITIVITY = 6.0; // How much face-to-path affects spin axis tilt
@@ -58,6 +61,7 @@ const FAT_STRIKE_SPIN_MOD = 0.8; // Multiplier for backspin
 const THIN_STRIKE_SPIN_MOD = 0.5; // Multiplier for backspin
 const FLIP_STRIKE_SPIN_MOD = 1.2; // Multiplier for backspin (adds spin)
 const PUNCH_STRIKE_SPIN_MOD = 0.7; // Multiplier for backspin (reduces spin)
+const BUNKER_FAT_STRIKE_SPIN_MOD = 0.9; // Less spin reduction for fat bunker shots
 
 
 // --- Helper Functions ---
@@ -231,16 +235,27 @@ function calculateDynamicLoft(baseLoft, wristsDev, attackAngle, swingSpeed) {
 }
 
 /**
- * Calculates the Attack Angle (AoA) based on base club AoA and ball position.
+ * Calculates the Attack Angle (AoA) based on base club AoA, ball position, and surface.
+ * @param {number} baseAoA - The club's default attack angle.
+ * @param {number} ballPositionFactor - Factor from -1 (Fwd) to +1 (Back).
+ * @param {string} currentSurface - The surface the ball is on (e.g., 'TEE', 'FAIRWAY').
  */
-function calculateAttackAngle(baseAoA, ballPositionFactor) {
+function calculateAttackAngle(baseAoA, ballPositionFactor, currentSurface) {
     // Ball Position Factor: -1 (Forward) to +1 (Back)
     // Forward ball pos (-1) = more positive AoA (upward hit) -> multiply factor by -Sensitivity
     // Backward ball pos (+1) = more negative AoA (downward hit) -> multiply factor by -Sensitivity
-    const aoaFromBallPos = ballPositionFactor * -BALLPOS_AOA_SENSITIVITY;
+    let aoaFromBallPos = ballPositionFactor * -BALLPOS_AOA_SENSITIVITY;
+
+    // Apply cap if not on tee and AoA bonus is positive
+    // Convert surface to lowercase for comparison
+    if (currentSurface.toLowerCase() !== 'tee' && aoaFromBallPos > 0) {
+        aoaFromBallPos = Math.min(aoaFromBallPos, MAX_NON_TEE_AOA_BONUS);
+        console.log(`AoA Calc: Capping non-tee AoA bonus to ${MAX_NON_TEE_AOA_BONUS}`);
+    }
+
     const attackAngle = baseAoA + aoaFromBallPos;
 
-    console.log(`AoA Calc: Base=${baseAoA}, BallPosFactor=${ballPositionFactor.toFixed(2)}, AoAChange=${aoaFromBallPos.toFixed(1)}, FinalAoA=${attackAngle.toFixed(1)}`);
+    console.log(`AoA Calc: Base=${baseAoA}, BallPosFactor=${ballPositionFactor.toFixed(2)}, Surface=${currentSurface}, AoAChange=${aoaFromBallPos.toFixed(1)}, FinalAoA=${attackAngle.toFixed(1)}`);
     return attackAngle;
 }
 
@@ -272,19 +287,30 @@ function calculateStrikeQuality(wristsDev, attackAngle, baseAoA, swingSpeed) {
 }
 
 /**
- * Calculates the Smash Factor based on base club smash and strike quality penalty.
+ * Calculates the Smash Factor based on base club smash, strike quality penalty, and surface.
+ * @param {number} baseSmash - Club's base smash factor.
+ * @param {string} strikeQuality - Calculated strike quality ("Fat", "Thin", etc.).
+ * @param {string} currentSurface - The surface the ball is on.
+ * @returns {number} The final smash factor.
  */
-function calculateSmashFactor(baseSmash, strikeQuality) {
+function calculateSmashFactor(baseSmash, strikeQuality, currentSurface) {
     let penalty = 0;
-    switch (strikeQuality) {
-        case "Fat": penalty = FAT_STRIKE_SMASH_PENALTY; break;
+    // Special handling for fat shots from bunker
+    if (strikeQuality === "Fat" && currentSurface.toUpperCase() === 'BUNKER') {
+        penalty = BUNKER_FAT_STRIKE_SMASH_PENALTY;
+        console.log(`Smash Calc: Applying BUNKER Fat penalty: ${penalty.toFixed(2)}`);
+    } else {
+        // Standard penalties
+        switch (strikeQuality) {
+            case "Fat": penalty = FAT_STRIKE_SMASH_PENALTY; break;
         case "Thin": penalty = THIN_STRIKE_SMASH_PENALTY; break;
         case "Flip": penalty = FLIP_STRIKE_SMASH_PENALTY; break;
         case "Punch": penalty = PUNCH_STRIKE_SMASH_PENALTY; break;
-        default: penalty = 0; break; // Center
+            default: penalty = 0; break; // Center
+        }
     }
     const smash = baseSmash * (1 - penalty);
-    console.log(`Smash Calc: Base=${baseSmash}, Strike=${strikeQuality}, Penalty=${penalty.toFixed(2)}, FinalSmash=${smash.toFixed(2)}`);
+    console.log(`Smash Calc: Base=${baseSmash}, Strike=${strikeQuality}, Surface=${currentSurface}, Penalty=${penalty.toFixed(2)}, FinalSmash=${smash.toFixed(2)}`);
     return smash;
 }
 
@@ -329,9 +355,15 @@ function calculateSpinAxis(faceAngleRelativeToPath, dynamicLoft) {
 }
 
 /**
- * Calculates the Back Spin rate (RPM) based on dynamic loft, speed, AoA, and strike quality.
+ * Calculates the Back Spin rate (RPM) based on dynamic loft, speed, AoA, strike quality, and surface.
+ * @param {number} dynamicLoft - Calculated dynamic loft.
+ * @param {number} actualCHS - Calculated actual club head speed.
+ * @param {number} attackAngle - Calculated attack angle.
+ * @param {string} strikeQuality - Calculated strike quality.
+ * @param {string} currentSurface - The surface the ball is on.
+ * @returns {number} The final backspin in RPM.
  */
-function calculateBackSpin(dynamicLoft, actualCHS, attackAngle, strikeQuality) {
+function calculateBackSpin(dynamicLoft, actualCHS, attackAngle, strikeQuality, currentSurface) {
     // Base spin calculation (needs significant tuning)
     // Higher loft, higher speed = more spin. Steeper AoA (more negative) = more spin.
     let baseSpin = 1000 + // Base minimum spin
@@ -339,20 +371,27 @@ function calculateBackSpin(dynamicLoft, actualCHS, attackAngle, strikeQuality) {
                    (actualCHS * BACKSPIN_SPEED_FACTOR) +
                    (attackAngle * BACKSPIN_AOA_FACTOR); // Note: More negative AoA increases spin
 
-    // Apply modifier based on strike quality
+    // Apply modifier based on strike quality and surface
     let strikeMod = 1.0;
-    switch (strikeQuality) {
-        case "Fat": strikeMod = FAT_STRIKE_SPIN_MOD; break; // Less compression
+    // Special handling for fat shots from bunker
+    if (strikeQuality === "Fat" && currentSurface.toUpperCase() === 'BUNKER') {
+        strikeMod = BUNKER_FAT_STRIKE_SPIN_MOD;
+        console.log(`BackSpin Calc: Applying BUNKER Fat strike modifier: ${strikeMod.toFixed(2)}`);
+    } else {
+        // Standard modifiers
+        switch (strikeQuality) {
+            case "Fat": strikeMod = FAT_STRIKE_SPIN_MOD; break; // Less compression
         case "Thin": strikeMod = THIN_STRIKE_SPIN_MOD; break; // Hits equator
         case "Flip": strikeMod = FLIP_STRIKE_SPIN_MOD; break; // Adds spin (scooping)
-        case "Punch": strikeMod = PUNCH_STRIKE_SPIN_MOD; break; // Less spin (delofting)
+            case "Punch": strikeMod = PUNCH_STRIKE_SPIN_MOD; break; // Less spin (delofting)
+        }
     }
     let backSpin = baseSpin * strikeMod;
 
     // Clamp backspin to reasonable limits
     backSpin = clamp(backSpin, 500, 12000);
 
-    console.log(`BackSpin Calc: DynLoft=${dynamicLoft.toFixed(1)}, ACHS=${actualCHS.toFixed(1)}, AoA=${attackAngle.toFixed(1)}, BaseSpin=${baseSpin.toFixed(0)}, Strike=${strikeQuality}, Mod=${strikeMod.toFixed(2)}, FinalSpin=${backSpin.toFixed(0)}`);
+    console.log(`BackSpin Calc: DynLoft=${dynamicLoft.toFixed(1)}, ACHS=${actualCHS.toFixed(1)}, AoA=${attackAngle.toFixed(1)}, BaseSpin=${baseSpin.toFixed(0)}, Strike=${strikeQuality}, Surface=${currentSurface}, Mod=${strikeMod.toFixed(2)}, FinalSpin=${backSpin.toFixed(0)}`);
     return backSpin; // RPM
 }
 
@@ -374,11 +413,12 @@ function calculateBackSpin(dynamicLoft, actualCHS, attackAngle, strikeQuality) {
  * @param {object} club - The selected club object from clubs.js.
  * @param {number} swingSpeed - The current swing speed multiplier (0.3 - 1.0).
  * @param {number} ballPositionFactor - Factor representing ball position (-1 Fwd to +1 Back).
+ * @param {string} currentSurface - The surface the ball is currently on.
  * @returns {object} An object containing calculated impact parameters.
  */
-export function calculateImpactPhysics(timingInputs, club, swingSpeed, ballPositionFactor) {
+export function calculateImpactPhysics(timingInputs, club, swingSpeed, ballPositionFactor, currentSurface) {
     console.log("--- Calculating Impact Physics ---");
-    console.log("Inputs:", timingInputs, club.name, swingSpeed, ballPositionFactor);
+    console.log("Inputs:", timingInputs, club.name, swingSpeed, ballPositionFactor, `Surface: ${currentSurface}`);
 
     // Calculate Deviations (relative to downswing start)
     const rotationTime = timingInputs.rotationStartTime ?? timingInputs.rotationInitiationTime; // Use whichever 'a' press happened
@@ -400,18 +440,70 @@ export function calculateImpactPhysics(timingInputs, club, swingSpeed, ballPosit
     const clubPathAngle = calculateClubPathAngle(armsDev, rotationDev, swingSpeed);
     const faceAngleRelPath = calculateFaceAngleRelativeToPath(wristsDev, swingSpeed);
     const absoluteFaceAngle = clubPathAngle + faceAngleRelPath;
-    const attackAngle = calculateAttackAngle(club.baseAoA, ballPositionFactor);
+    const attackAngle = calculateAttackAngle(club.baseAoA, ballPositionFactor, currentSurface); // Pass currentSurface
     const dynamicLoft = calculateDynamicLoft(club.loft, wristsDev, attackAngle, swingSpeed);
     const strikeQuality = calculateStrikeQuality(wristsDev, attackAngle, club.baseAoA, swingSpeed);
-    const smashFactor = calculateSmashFactor(club.baseSmash, strikeQuality);
-    const ballSpeed = calculateBallSpeed(actualCHS, smashFactor);
-    const launchAngle = calculateLaunchAngle(dynamicLoft, attackAngle);
-    const spinAxisTilt = calculateSpinAxis(faceAngleRelPath, dynamicLoft);
-    const backSpin = calculateBackSpin(dynamicLoft, actualCHS, attackAngle, strikeQuality);
+    // Pass surface to smash factor and backspin calculations
+    const smashFactor = calculateSmashFactor(club.baseSmash, strikeQuality, currentSurface);
+    let ballSpeed = calculateBallSpeed(actualCHS, smashFactor); // Calculate initial ball speed
+    let launchAngle = calculateLaunchAngle(dynamicLoft, attackAngle); // Calculate initial launch angle
+    let backSpin = calculateBackSpin(dynamicLoft, actualCHS, attackAngle, strikeQuality, currentSurface); // Calculate initial backspin
 
-    // --- Determine Side Spin from Spin Axis Tilt (Simplified) ---
-    // Need a relationship: Tilt -> Side Spin RPM. Placeholder:
-    const sideSpin = spinAxisTilt * 150; // Example: 1 degree tilt = 150 RPM side spin
+    // --- Apply Surface Flight Modifications ---
+    const surfaceProps = getSurfaceProperties(currentSurface);
+    const flightMod = surfaceProps?.flightModification;
+
+    if (flightMod) {
+        console.log("Applying surface flight modifications:", flightMod);
+        // Velocity Reduction (Apply to Ball Speed)
+        let velReduction = flightMod.velocityReduction || 0;
+        if (Array.isArray(velReduction)) {
+            const [min, max] = velReduction;
+            velReduction = min + Math.random() * (max - min);
+            console.log(`Randomized Velocity Reduction: ${velReduction.toFixed(3)} (Range: [${min}, ${max}])`);
+        }
+        ballSpeed *= (1 - velReduction);
+
+        // Spin Reduction (Apply to Back Spin)
+        let spinReduction = flightMod.spinReduction || 0;
+        if (Array.isArray(spinReduction)) {
+            const [min, max] = spinReduction;
+            spinReduction = min + Math.random() * (max - min);
+            console.log(`Randomized Spin Reduction: ${spinReduction.toFixed(3)} (Range: [${min}, ${max}])`);
+        }
+        backSpin *= (1 - spinReduction);
+        // Also apply to side spin? Let's assume yes for now.
+        // sideSpin *= (1 - spinReduction); // Apply before side spin calculation below
+
+        // Launch Angle Change
+        const launchChange = flightMod.launchAngleChange || 0;
+        launchAngle += launchChange;
+
+        console.log(`Post-Surface Mod: BallSpeed=${ballSpeed.toFixed(1)}, BackSpin=${backSpin.toFixed(0)}, LaunchAngle=${launchAngle.toFixed(1)}`);
+    }
+
+    // --- Calculate Spin Axis and Side Spin (AFTER potential backspin reduction) ---
+    const spinAxisTilt = calculateSpinAxis(faceAngleRelPath, dynamicLoft); // Tilt depends on face/path/loft, not surface directly
+    let sideSpin = spinAxisTilt * 150; // Example: 1 degree tilt = 150 RPM side spin
+
+    // Apply spin reduction to side spin as well
+    if (flightMod && flightMod.spinReduction) {
+         let spinReductionFactor = flightMod.spinReduction;
+         if (Array.isArray(spinReductionFactor)) {
+             // If it was randomized for backspin, we should ideally use the *same* random factor
+             // For simplicity now, let's just re-randomize or use the midpoint? Re-randomize is easier.
+             const [min, max] = spinReductionFactor;
+             spinReductionFactor = min + Math.random() * (max - min);
+         }
+         sideSpin *= (1 - spinReductionFactor);
+         console.log(`Post-Surface Mod SideSpin: ${sideSpin.toFixed(0)} (ReductionFactor: ${spinReductionFactor.toFixed(3)})`);
+    }
+
+    console.log(`SideSpin Calc: Tilt=${spinAxisTilt.toFixed(1)}, Final SideSpin=${sideSpin.toFixed(0)}`);
+
+
+    // --- Assemble Result Object ---
+
     console.log(`SideSpin Calc: Tilt=${spinAxisTilt.toFixed(1)}, SideSpin=${sideSpin.toFixed(0)}`);
 
 

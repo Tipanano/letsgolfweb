@@ -54,7 +54,29 @@ export function calculateFullSwingShot() {
     const timingInputs = { backswingDuration, hipInitiationTime: getHipInitiationTime(), rotationStartTime: getRotationStartTime(), rotationInitiationTime: getRotationInitiationTime(), armsStartTime: getArmsStartTime(), wristsStartTime: getWristsStartTime(), downswingPhaseStartTime: getDownswingPhaseStartTime(), idealBackswingEndTime };
 
     // --- Call the full swing physics calculation module ---
-    const impactResult = calculateImpactPhysics(timingInputs, selectedClub, swingSpeed, ballPositionFactor);
+    // --- Determine Initial Position and Surface ---
+    let initialPositionObj;
+    let currentSurface = 'fairway'; // Default surface
+    const currentMode = getCurrentGameMode();
+    const currentHoleLayout = getCurrentHoleLayout(); // Get layout
+
+    if (currentMode === 'play-hole' && currentHoleLayout) {
+        initialPositionObj = getPlayHoleBallPosition();
+        initialPositionObj.y = Math.max(BALL_RADIUS, initialPositionObj.y);
+        // Determine surface type at the starting position
+        currentSurface = getSurfaceTypeAtPoint(initialPositionObj, currentHoleLayout);
+    } else {
+        // Range or other modes
+        initialPositionObj = { x: 0, y: BALL_RADIUS, z: 0 };
+        currentSurface = 'tee'; // Assume range is always off a tee for full swings
+    }
+    // Ensure surfaceType is uppercase for consistency (though lowercase check is used in physics)
+    currentSurface = currentSurface.toUpperCase().replace(' ', '_');
+    console.log(`Calc (Full): Initial position: x=${initialPositionObj.x.toFixed(2)}, y=${initialPositionObj.y.toFixed(2)}, z=${initialPositionObj.z.toFixed(2)}, Surface: ${currentSurface}`);
+
+
+    // --- Call the full swing physics calculation module ---
+    const impactResult = calculateImpactPhysics(timingInputs, selectedClub, swingSpeed, ballPositionFactor, currentSurface); // Pass currentSurface
 
     // --- Use results from impactResult ---
     const ballSpeed = impactResult.ballSpeed;
@@ -87,18 +109,8 @@ export function calculateFullSwingShot() {
     const initialVelocityObj = { x: initialVelX, y: initialVelY, z: initialVelZ };
     const spinVectorRPM = { x: backSpin, y: sideSpin, z: 0 };
 
-    // --- Determine Initial Position based on Game Mode ---
-    let initialPositionObj;
-    const currentMode = getCurrentGameMode();
-    if (currentMode === 'play-hole') {
-        initialPositionObj = getPlayHoleBallPosition();
-        initialPositionObj.y = Math.max(BALL_RADIUS, initialPositionObj.y);
-    } else {
-        initialPositionObj = { x: 0, y: BALL_RADIUS, z: 0 };
-    }
-    console.log(`Calc (Full): Initial position: x=${initialPositionObj.x.toFixed(2)}, y=${initialPositionObj.y.toFixed(2)}, z=${initialPositionObj.z.toFixed(2)}`);
-
     // --- Run Flight Simulation ---
+    // Initial position already determined above
     const flightSimulationResult = simulateFlightStepByStep(initialPositionObj, initialVelocityObj, spinVectorRPM, selectedClub);
 
     // --- Extract Results from Flight Simulation ---
@@ -275,8 +287,28 @@ export function calculateChipShot() {
     const rotationOffset = chipRotationStartTime ? chipRotationStartTime - downswingPhaseStartTime : null;
     const hitOffset = chipWristsStartTime ? chipWristsStartTime - downswingPhaseStartTime : null;
 
+    // --- Determine Initial Position and Surface ---
+    let initialPositionObj;
+    let currentSurface = 'fairway'; // Default surface
+    const currentMode = getCurrentGameMode();
+    const currentHoleLayout = getCurrentHoleLayout(); // Get layout
+
+    if (currentMode === 'play-hole' && currentHoleLayout) {
+        initialPositionObj = getPlayHoleBallPosition();
+        initialPositionObj.y = Math.max(BALL_RADIUS, initialPositionObj.y);
+        // Determine surface type at the starting position
+        currentSurface = getSurfaceTypeAtPoint(initialPositionObj, currentHoleLayout);
+    } else {
+        // Range or other modes
+        initialPositionObj = { x: 0, y: BALL_RADIUS, z: 0 };
+        currentSurface = 'fairway'; // Assume range chips are off fairway/short grass
+    }
+    // Ensure surfaceType is uppercase for consistency
+    currentSurface = currentSurface.toUpperCase().replace(' ', '_');
+    console.log(`Calc (Chip): Initial position: x=${initialPositionObj.x.toFixed(2)}, y=${initialPositionObj.y.toFixed(2)}, z=${initialPositionObj.z.toFixed(2)}, Surface: ${currentSurface}`);
+
     // --- Call chip physics ---
-    const impactResult = calculateChipImpact(backswingDuration, rotationOffset, hitOffset, selectedClub, ballPositionFactor);
+    const impactResult = calculateChipImpact(backswingDuration, rotationOffset, hitOffset, selectedClub, ballPositionFactor, currentSurface); // Pass currentSurface
 
     // --- Use results ---
     const ballSpeed = impactResult.ballSpeed;
@@ -309,18 +341,8 @@ export function calculateChipShot() {
     const initialVelocityObj = { x: initialVelX, y: initialVelY, z: initialVelZ };
     const spinVectorRPM = { x: backSpin, y: sideSpin, z: 0 };
 
-    // --- Determine Initial Position ---
-    let initialPositionObj;
-    const currentMode = getCurrentGameMode();
-    if (currentMode === 'play-hole') {
-        initialPositionObj = getPlayHoleBallPosition();
-        initialPositionObj.y = Math.max(BALL_RADIUS, initialPositionObj.y);
-    } else {
-        initialPositionObj = { x: 0, y: BALL_RADIUS, z: 0 };
-    }
-    console.log(`Calc (Chip): Initial position: x=${initialPositionObj.x.toFixed(2)}, y=${initialPositionObj.y.toFixed(2)}, z=${initialPositionObj.z.toFixed(2)}`);
-
     // --- Run Flight Simulation ---
+    // Initial position already determined above
     const flightSimulationResult = simulateFlightStepByStep(initialPositionObj, initialVelocityObj, spinVectorRPM, selectedClub);
 
     // --- Extract Results ---

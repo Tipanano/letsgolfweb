@@ -6,6 +6,7 @@
  */
 
 import { clubs } from './clubs.js'; // May need club data (loft)
+import { getSurfaceProperties } from './surfaces.js'; // Import surface properties getter
 
 // --- Tunable Chip Parameters ---
 const MAX_CHIP_BACKSWING_MS = 1000; // Max backswing duration contributing to chip power
@@ -60,6 +61,11 @@ const CHIP_BACKSPIN_LOFT_FACTOR = 50; // RPM per degree of loft
 const CHIP_BACKSPIN_SPEED_FACTOR = 20; // RPM per mph of ball speed
 const BALLPOS_CHIP_LAUNCH_ADJUST = 5; // Degrees launch change per unit of ball pos factor
 const BALLPOS_CHIP_SPIN_ADJUST = 500; // RPM backspin change per unit of ball pos factor
+const BALLPOS_CHIP_AOA_SENSITIVITY = 3.0; // Degrees AoA change per unit of ball pos factor (simple model)
+const MAX_NON_TEE_AOA_BONUS_CHIP = 1.0; // Max positive AoA bonus when not on tee for chips
+// Bunker Fat Shot Adjustment Factors (Applied *after* interpolation)
+const BUNKER_FAT_CHIP_SPEED_RECOVERY = 0.3; // Factor to recover speed lost from fat penalty (0=no recovery, 1=full recovery)
+const BUNKER_FAT_CHIP_SPIN_RECOVERY = 0.2; // Factor to recover spin lost from fat penalty
 
 /**
  * Clamps a value between a minimum and maximum.
@@ -108,11 +114,12 @@ function interpolateEffect(deviation, points) {
  * @param {number | null} hitOffset - Time of 'i' press relative to downswing start (ms).
  * @param {object} club - The selected club object.
  * @param {number} ballPositionFactor - Factor from -1 (Fwd) to +1 (Back).
+ * @param {string} currentSurface - The surface the ball is currently on.
  * @returns {object} An object containing calculated chip impact parameters.
  */
-export function calculateChipImpact(backswingDuration, rotationOffset, hitOffset, club, ballPositionFactor) {
+export function calculateChipImpact(backswingDuration, rotationOffset, hitOffset, club, ballPositionFactor, currentSurface) {
     console.log("--- Calculating Chip Impact Physics ---");
-    console.log(`Inputs: Duration=${backswingDuration?.toFixed(0)}, RotOffset=${rotationOffset?.toFixed(0)}, HitOffset=${hitOffset?.toFixed(0)}, Club=${club.name}, BallPosFactor=${ballPositionFactor.toFixed(2)}`);
+    console.log(`Inputs: Duration=${backswingDuration?.toFixed(0)}, RotOffset=${rotationOffset?.toFixed(0)}, HitOffset=${hitOffset?.toFixed(0)}, Club=${club.name}, BallPosFactor=${ballPositionFactor.toFixed(2)}, Surface: ${currentSurface}`);
 
     // Handle missing inputs with large penalty offsets
     const effectiveRotationOffset = rotationOffset ?? 9999;
@@ -170,11 +177,25 @@ export function calculateChipImpact(backswingDuration, rotationOffset, hitOffset
     // --- Calculate Gradual Effects based on Deviations ---
 
     // Speed Adjustment (using hit deviation)
-    const speedMultiplier = interpolateEffect(hitDeviation, SPEED_MULT_POINTS);
-    actualBallSpeed *= speedMultiplier;
-    console.log(`Gradual Speed: Multiplier=${speedMultiplier.toFixed(2)} (HitDev: ${hitDeviation.toFixed(0)})`);
+    let speedMultiplier = interpolateEffect(hitDeviation, SPEED_MULT_POINTS);
+    // Spin Adjustment (using absolute hit deviation)
+    let spinMultiplier = interpolateEffect(Math.abs(hitDeviation), SPIN_MULT_POINTS);
 
-    // Ensure minimum speed
+    // --- Bunker Fat Shot Adjustments ---
+    if (strikeQuality === "Fat" && currentSurface.toUpperCase() === 'BUNKER') {
+        const originalSpeedMult = speedMultiplier;
+        const originalSpinMult = spinMultiplier;
+        // Adjust multipliers closer to 1.0 based on recovery factors
+        speedMultiplier = speedMultiplier + (1.0 - speedMultiplier) * BUNKER_FAT_CHIP_SPEED_RECOVERY;
+        spinMultiplier = spinMultiplier + (1.0 - spinMultiplier) * BUNKER_FAT_CHIP_SPIN_RECOVERY;
+        console.log(`Bunker Fat Chip Adjust: SpeedMult ${originalSpeedMult.toFixed(2)} -> ${speedMultiplier.toFixed(2)}, SpinMult ${originalSpinMult.toFixed(2)} -> ${spinMultiplier.toFixed(2)}`);
+    }
+
+    // Apply Speed Multiplier
+    actualBallSpeed *= speedMultiplier;
+    console.log(`Gradual Speed: Final Multiplier=${speedMultiplier.toFixed(2)} (HitDev: ${hitDeviation.toFixed(0)})`);
+
+    // Ensure minimum speed AFTER multiplier
     let minSpeed = 2; // Default min
     if (hitDeviation > CHIP_THIN_THRESHOLD_MS) minSpeed = 6; // Higher min for thin/top range
     if (hitDeviation > CHIP_TOP_THRESHOLD_MS) minSpeed = 8;
@@ -188,25 +209,63 @@ export function calculateChipImpact(backswingDuration, rotationOffset, hitOffset
     const launchAdjustment = interpolateEffect(hitDeviation, LAUNCH_ADJ_POINTS);
     launchAngle += launchAdjustment;
     console.log(`Gradual Launch: Adjustment=${launchAdjustment.toFixed(1)} deg (HitDev: ${hitDeviation.toFixed(0)})`);
-    launchAngle = clamp(launchAngle, 1, 60); // Clamp launch angle (allow very low for Top)
+    // Launch angle clamped later, after surface mods
 
-    // 6. Calculate Back Spin
+    // 6. Calculate Back Spin (Initial)
     let backSpin = CHIP_BASE_BACKSPIN +
                    (club.loft * CHIP_BACKSPIN_LOFT_FACTOR) +
                    (potentialBallSpeed * CHIP_BACKSPIN_SPEED_FACTOR); // Base spin on *potential* speed before strike penalty
     // Adjust spin based on ball position (Back = more spin)
     backSpin += ballPositionFactor * BALLPOS_CHIP_SPIN_ADJUST;
-    // Gradual Spin Adjustment (using absolute hit deviation)
-    const spinMultiplier = interpolateEffect(Math.abs(hitDeviation), SPIN_MULT_POINTS);
-    backSpin *= spinMultiplier;
-    console.log(`Gradual Spin: Multiplier=${spinMultiplier.toFixed(2)} (AbsHitDev: ${Math.abs(hitDeviation).toFixed(0)})`);
-    backSpin = clamp(backSpin * qualityModifier, 200, 6000); // Apply quality mod and clamp (lower min possible)
 
-    // 7. Calculate Side Spin (Removed for now - assuming 0 for chips)
+    // Apply Spin Multiplier (potentially adjusted for bunker fat)
+    backSpin *= spinMultiplier;
+    console.log(`Gradual Spin: Final Multiplier=${spinMultiplier.toFixed(2)} (AbsHitDev: ${Math.abs(hitDeviation).toFixed(0)})`);
+    // Apply quality modifier from timing
+    backSpin *= qualityModifier;
+
+    // 7. Calculate Side Spin (Assume 0 for chips initially)
     let sideSpin = 0;
-    // let sideSpin = hitDeviation * CHIP_TIMING_SPIN_FACTOR; // RPM side spin
-    // sideSpin = clamp(sideSpin, -1500, 1500); // Clamp side spin
-    // console.log(`Side Spin: ${sideSpin.toFixed(0)} RPM (HitDev: ${hitDeviation.toFixed(0)})`);
+
+    // --- Apply Surface Flight Modifications ---
+    const surfaceProps = getSurfaceProperties(currentSurface);
+    const flightMod = surfaceProps?.flightModification;
+    let appliedSpinReductionFactor = 0; // Store the randomized factor if needed
+
+    if (flightMod) {
+        console.log("Applying chip surface flight modifications:", flightMod);
+        // Velocity Reduction (Apply to Ball Speed)
+        let velReduction = flightMod.velocityReduction || 0;
+        if (Array.isArray(velReduction)) {
+            const [min, max] = velReduction;
+            velReduction = min + Math.random() * (max - min);
+            console.log(`Randomized Chip Velocity Reduction: ${velReduction.toFixed(3)} (Range: [${min}, ${max}])`);
+        }
+        actualBallSpeed *= (1 - velReduction);
+
+        // Spin Reduction (Apply to Back Spin & Side Spin)
+        let spinReduction = flightMod.spinReduction || 0;
+        if (Array.isArray(spinReduction)) {
+            const [min, max] = spinReduction;
+            spinReduction = min + Math.random() * (max - min);
+            console.log(`Randomized Chip Spin Reduction: ${spinReduction.toFixed(3)} (Range: [${min}, ${max}])`);
+        }
+        appliedSpinReductionFactor = spinReduction; // Store for side spin
+        backSpin *= (1 - spinReduction);
+        sideSpin *= (1 - spinReduction); // Apply to side spin too
+
+        // Launch Angle Change
+        const launchChange = flightMod.launchAngleChange || 0;
+        launchAngle += launchChange;
+
+        console.log(`Post-Surface Mod (Chip): BallSpeed=${actualBallSpeed.toFixed(1)}, BackSpin=${backSpin.toFixed(0)}, SideSpin=${sideSpin.toFixed(0)}, LaunchAngle=${launchAngle.toFixed(1)}`);
+    }
+
+    // Clamp final values
+    launchAngle = clamp(launchAngle, 1, 60);
+    backSpin = clamp(backSpin, 100, 6000); // Allow slightly lower min spin
+    sideSpin = clamp(sideSpin, -1500, 1500);
+
 
     // --- Assemble Result Object (matching structure of full swing where possible) ---
     const impactResult = {
@@ -222,7 +281,7 @@ export function calculateChipImpact(backswingDuration, rotationOffset, hitOffset
         clubPathAngle: 0, // Assume 0 for chips for now
         faceAngleRelPath: 0, // Assume 0 for chips for now
         absoluteFaceAngle: 0, // Assume 0 for chips for now
-        attackAngle: -2 + (ballPositionFactor * -3), // Simple AoA based on ball pos
+        attackAngle: calculateChipAttackAngle(-2, ballPositionFactor, currentSurface), // Use helper function
         dynamicLoft: club.loft, // Placeholder - could adjust based on timing/AoA
         strikeQuality: strikeQuality,
 
@@ -246,4 +305,25 @@ export function calculateChipImpact(backswingDuration, rotationOffset, hitOffset
     console.log("Result:", impactResult);
 
     return impactResult;
+}
+
+/**
+ * Helper function to calculate chip attack angle with surface capping.
+ * @param {number} baseAoA - Base AoA for chips (e.g., -2).
+ * @param {number} ballPositionFactor - Factor from -1 (Fwd) to +1 (Back).
+ * @param {string} currentSurface - The surface the ball is on.
+ * @returns {number} Calculated attack angle.
+ */
+function calculateChipAttackAngle(baseAoA, ballPositionFactor, currentSurface) {
+    let aoaFromBallPos = ballPositionFactor * -BALLPOS_CHIP_AOA_SENSITIVITY;
+
+    // Apply cap if not on tee and AoA bonus is positive
+    if (currentSurface.toLowerCase() !== 'tee' && aoaFromBallPos > 0) {
+        aoaFromBallPos = Math.min(aoaFromBallPos, MAX_NON_TEE_AOA_BONUS_CHIP);
+        console.log(`AoA Calc (Chip): Capping non-tee AoA bonus to ${MAX_NON_TEE_AOA_BONUS_CHIP}`);
+    }
+
+    const attackAngle = baseAoA + aoaFromBallPos;
+    console.log(`AoA Calc (Chip): Base=${baseAoA}, BallPosFactor=${ballPositionFactor.toFixed(2)}, Surface=${currentSurface}, AoAChange=${aoaFromBallPos.toFixed(1)}, FinalAoA=${attackAngle.toFixed(1)}`);
+    return attackAngle;
 }

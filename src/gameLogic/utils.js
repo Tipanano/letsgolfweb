@@ -75,10 +75,17 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
     const scale = YARDS_TO_METERS; // For converting polygon vertices if needed (though they should be in yards)
     const pointYards = { x: pointMeters.x / scale, z: pointMeters.z / scale }; // Convert check point to yards
 
-    // Check order: Green > Fairway > Bunkers > Water > Rough > Background
+    // Check order: Tee > Green > Fairway > Bunkers > Water > Rough > Background
     // Note: Assumes holeLayout vertices are in YARDS.
 
-    // 1. Green (Polygon)
+    // 1. Tee Box (Polygon) - Check first as it might overlap rough/background
+    if (holeLayout.tee?.type === 'polygon' && holeLayout.tee.vertices) {
+        if (isPointInPolygon(pointYards, holeLayout.tee.vertices)) {
+            return 'TEE';
+        }
+    }
+
+    // 2. Green (Polygon)
     if (holeLayout.green?.type === 'polygon' && holeLayout.green.vertices) {
         if (isPointInPolygon(pointYards, holeLayout.green.vertices)) {
             return 'GREEN';
@@ -86,14 +93,14 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
     }
     // TODO: Add check for legacy circle green if needed
 
-    // 2. Fairway (Polygon)
+    // 3. Fairway (Polygon)
     if (holeLayout.fairway?.vertices) {
         if (isPointInPolygon(pointYards, holeLayout.fairway.vertices)) {
             return 'FAIRWAY';
         }
     }
 
-    // 3. Bunkers (Array of Polygons/Circles)
+    // 4. Bunkers (Array of Polygons/Circles)
     if (holeLayout.bunkers && Array.isArray(holeLayout.bunkers)) {
         for (const bunker of holeLayout.bunkers) {
             if (bunker.type === 'polygon' && bunker.vertices) {
@@ -110,7 +117,7 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
         }
     }
 
-    // 4. Water Hazards (Array of Polygons/Circles)
+    // 5. Water Hazards (Array of Polygons/Circles)
     if (holeLayout.waterHazards && Array.isArray(holeLayout.waterHazards)) {
         for (const water of holeLayout.waterHazards) {
             if (water.type === 'polygon' && water.vertices) {
@@ -128,27 +135,33 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
     }
 
     // 5. Rough (Polygon - assumes it covers area outside fairway/green but inside background)
-    // We might need different rough types later (Light, Medium, Thick)
-    // For now, if it's not Green/Fairway/Bunker/Water, assume it's in the rough polygon if defined
+    // 6. Rough (Polygon - assumes it covers area outside fairway/green but inside background)
+    // Since this specific hole only defines one rough type (THICK_ROUGH in the generator),
+    // we check for that polygon. If other rough types were defined (e.g., lightRough),
+    // they would need to be checked here in the correct order (e.g., medium before light).
     if (holeLayout.rough?.vertices) {
          if (isPointInPolygon(pointYards, holeLayout.rough.vertices)) {
-             // TODO: Differentiate rough types later if needed
-             return 'THICK_ROUGH'; // Default to heavy Rough for now
+             // Return the surface type defined in the hole layout for this rough polygon
+             // (Currently THICK_ROUGH based on holeGenerator.js)
+             const roughSurfaceName = holeLayout.rough.surface?.name?.toUpperCase() || 'THICK_ROUGH';
+             return roughSurfaceName;
          }
     }
+    // Add checks for other rough types (e.g., holeLayout.lightRough) here if they exist in the layout data.
 
-    // 6. Background / Out of Bounds (Polygon)
-    // If it's not in any of the above, check if it's within the background bounds.
-    // If even the background check fails, it's definitely OOB.
+    // 7. Background / Fallback Rough / Out of Bounds
+    // If it's not in any specific feature above, check if it's within the background bounds.
     if (holeLayout.background?.vertices) {
         if (isPointInPolygon(pointYards, holeLayout.background.vertices)) {
-            // It's within the background polygon but not any specific feature above.
-            // This *could* still be considered rough, or a specific 'background' surface type if defined.
-            // Let's default to OUT_OF_BOUNDS if not caught by rough explicitly.
-             console.warn(`Point (${pointYards.x.toFixed(1)}, ${pointYards.z.toFixed(1)}) is inside background but not other features. Treating as OOB.`);
-             return 'OUT_OF_BOUNDS';
+            // It's within the background polygon but not any specific feature.
+            // Treat this as the thickest rough by default if not caught by a specific rough polygon.
+            // Or potentially a different 'Waste Area' surface if defined.
+            // For now, let's assume it's THICK_ROUGH if inside the background but outside everything else.
+            // console.log(`Point (${pointYards.x.toFixed(1)}, ${pointYards.z.toFixed(1)}) is inside background but not other features. Treating as THICK_ROUGH.`);
+            return 'THICK_ROUGH'; // Fallback to thickest rough within bounds
         }
     }
+    // If not inside the background polygon either, it's definitely OOB.
 
     // Default: If not inside any defined polygon (including background)
     return 'OUT_OF_BOUNDS';

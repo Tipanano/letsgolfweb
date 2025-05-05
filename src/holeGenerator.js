@@ -128,6 +128,25 @@ export function generateBasicHole() {
     // Create a deep copy to avoid modifying the original template
     const layoutToReturn = JSON.parse(JSON.stringify(basicHoleLayout));
 
+    // Process Tee Box: Calculate vertices from center/width/depth
+    if (layoutToReturn.tee && layoutToReturn.tee.center && layoutToReturn.tee.width && layoutToReturn.tee.depth) {
+        const c = layoutToReturn.tee.center;
+        const hw = layoutToReturn.tee.width / 2;
+        const hd = layoutToReturn.tee.depth / 2;
+        layoutToReturn.tee.vertices = [
+            { x: c.x - hw, z: c.z - hd }, // Front-left
+            { x: c.x + hw, z: c.z - hd }, // Front-right
+            { x: c.x + hw, z: c.z + hd }, // Back-right
+            { x: c.x - hw, z: c.z + hd }  // Back-left
+        ];
+        layoutToReturn.tee.type = 'polygon'; // Add type
+        console.log("Calculated tee vertices:", layoutToReturn.tee.vertices);
+    } else {
+        console.warn("Tee definition missing center, width, or depth. Cannot calculate vertices.");
+        layoutToReturn.tee = { ...(layoutToReturn.tee || {}), vertices: [] }; // Ensure vertices array exists
+    }
+
+
     // Process Green: Convert control points to vertices and calculate center
     if (layoutToReturn.green && layoutToReturn.green.controlPoints) {
         const greenVertices = createSmoothClosedShape(layoutToReturn.green.controlPoints);

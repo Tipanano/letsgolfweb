@@ -22,17 +22,31 @@ export function initializeMode() {
     shotsTaken = 0;
     score = 0;
     isHoledOut = false;
-    // Set initial ball position here, where BALL_RADIUS is definitely available
-    currentBallPosition = { x: 0, y: BALL_RADIUS, z: 0 };
 
-    // 1. Generate the hole layout
+    // 1. Generate the hole layout *first* to get tee position
     currentHoleLayout = holeGenerator.generateBasicHole();
     console.log("Generated Layout:", currentHoleLayout);
 
-    // 2. Tell visuals system to draw the hole
-    visuals.drawHole(currentHoleLayout); // We'll add this function to visuals.js
+    // 2. Set initial ball position to the center of the generated tee box
+    let initialX = 0;
+    let initialZ = 0;
+    if (currentHoleLayout?.tee?.center) {
+        // Convert tee center (yards) to meters
+        initialX = currentHoleLayout.tee.center.x * YARDS_TO_METERS;
+        initialZ = currentHoleLayout.tee.center.z * YARDS_TO_METERS;
+        console.log(`Setting initial ball position to tee center: (${initialX.toFixed(2)}, ${initialZ.toFixed(2)}) meters`);
+    } else {
+        console.warn("Tee center not found in layout, defaulting initial position to (0, 0) meters.");
+    }
+    currentBallPosition = { x: initialX, y: BALL_RADIUS, z: initialZ };
 
-    // 3. Update UI (Only overlay now)
+    // 3. Tell visuals system to draw the hole geometry
+    visuals.drawHole(currentHoleLayout); // This draws the hole but doesn't necessarily position the ball yet
+
+    // 4. Reset visuals and place the ball at the correct starting position *before* setting the camera view
+    visuals.resetVisuals(currentBallPosition);
+
+    // 5. Update UI (Only overlay now)
     // ui.resetPlayHoleDisplay(); // REMOVED
     // ui.updatePlayHoleInfo(currentHoleLayout.par, currentHoleLayout.lengthYards, score); // REMOVED
 
@@ -53,11 +67,11 @@ export function initializeMode() {
         position: '1st' // placeholder
     });
 
-    // 4. Set initial camera view to behind the ball looking at the hole
-    visuals.activateHoleViewCamera(); // Sets the 'hole' view
+    // 6. Set initial camera view *after* the ball has been positioned
+    visuals.activateHoleViewCamera(); // Sets the 'hole' view based on the now correct ball position
 
-    // 5. Ensure ball is at the tee position visually
-    visuals.resetVisuals(); // This should place the ball at the origin (0, BALL_RADIUS, 0)
+    // 7. Ball position is already set by resetVisuals above. No need to call again.
+    // visuals.resetVisuals(currentBallPosition); // REMOVED redundant call
 
     console.log("Play Hole mode initialized.");
 }

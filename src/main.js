@@ -38,6 +38,8 @@ function setGameMode(newMode) {
         visuals.switchToRangeView();
         // Reset overlay for Range mode (clear hole info, show default range info)
         ui.updateVisualOverlayInfo('range', { lie: 'Tee', wind: 'Calm' });
+        // Reset basic swing state specifically for Range mode
+        logic.resetSwing();
     } else if (currentMode === GAME_MODES.CLOSEST_TO_FLAG) {
         closestToFlag.initializeMode(); // This should call updateVisualOverlayInfo internally now
         visuals.switchToTargetView(closestToFlag.getTargetDistance()); // Pass target distance
@@ -48,11 +50,10 @@ function setGameMode(newMode) {
         // playHole.initializeMode handles its initial overlay update
     }
 
-    // Reset basic swing state for the new mode
-    logic.resetSwing();
+    // REMOVED: logic.resetSwing(); // Moved into RANGE mode block, other modes handle their own reset.
 
     // Ensure visuals are reset/redrawn for the new mode
-    // visuals.resetVisuals(); // Might be redundant if mode init handles it
+    // visuals.resetVisuals(); // This call seems redundant as mode init functions handle visual setup/reset.
 }
 
 // Function to get the current game mode (needed by inputHandler)

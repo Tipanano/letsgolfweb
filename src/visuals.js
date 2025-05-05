@@ -137,7 +137,7 @@ export function switchToHoleView(holeLayout, initialScene = null) {
     TargetVisuals.hideTargetElements(); // Ensure target is gone
     HoleVisuals.drawHoleLayout(holeLayout); // Draw the actual hole
     setCameraView('tee'); // Set initial camera for the hole view
-    CoreVisuals.showBallAtAddress(); // Ensure ball is visible at the tee
+    // REMOVED: CoreVisuals.showBallAtAddress(); // Ball position is set later by resetVisuals in playHole.js
 }
 
 // Wrapper function called by playHole.js
@@ -171,21 +171,32 @@ export function animateBallFlight(shotData) {
 }
 
 // Reset visuals - Resets core elements and the current view
-export function resetVisuals() {
-    console.log(`Resetting visuals for mode: ${currentVisualMode}`);
-    CoreVisuals.resetCoreVisuals(); // Resets ball, trajectory line
+// Accepts an optional position to place the ball at.
+export function resetVisuals(position = null) {
+    console.log(`Resetting visuals for mode: ${currentVisualMode}. Position provided:`, position);
+    // CoreVisuals.resetCoreVisuals(); // Don't call this as it resets ball to default
 
-     // Reset the specific view elements
-    if (currentVisualMode === VISUAL_MODES.RANGE) {
-        // RangeVisuals might have specific resets later
-        CoreVisuals.showBallAtAddress(); // Ensure ball is back for 3D range
-    } else if (currentVisualMode === VISUAL_MODES.TARGET) {
-        TargetVisuals.resetView(); // Reset target view elements (e.g., clear landing markers)
-        //CoreVisuals.hideBall(); // Keep ball hidden if in target view?
-    } else if (currentVisualMode === VISUAL_MODES.HOLE) {
-        // Hole view doesn't have specific reset actions beyond core reset yet
-        CoreVisuals.showBallAtAddress(); // Ensure ball is back at tee
+    // Manually replicate parts of resetCoreVisuals needed:
+    CoreVisuals.removeTrajectoryLine(); // Remove trajectory line
+    // TODO: Add calls to stop animation state if needed (isBallAnimating = false etc.)
+
+    // Reset ball position: Use provided position if available, otherwise default.
+    // The showBallAtAddress function in core.js handles the surface type logic.
+    if (position) {
+        console.log(">>> CONDITION PASSED: Resetting ball position using provided coordinates:", position);
+        CoreVisuals.showBallAtAddress(position); // Pass the position, let core handle surface/defaulting
+    } else {
+        console.log(">>> CONDITION FAILED: Resetting ball position to default (null). Position was:", position);
+        CoreVisuals.showBallAtAddress(null); // Pass null to use default position/surface
     }
+
+
+     // Reset the specific view elements (if any)
+     // The ball position is already set by the showBallAtAddress call above.
+    if (currentVisualMode === VISUAL_MODES.TARGET) {
+        TargetVisuals.resetView(); // Reset target view elements (e.g., clear landing markers)
+    }
+    // No specific reset needed for RANGE or HOLE views beyond what showBallAtAddress does.
 
     // Check current camera mode before resetting
     const currentCameraMode = CoreVisuals.getActiveCameraMode();
@@ -205,9 +216,11 @@ export function resetVisuals() {
     }
 }
 
-// Show ball at address - Calls the core function (likely only relevant for 3D range)
-export function showBallAtAddress() {
-    CoreVisuals.showBallAtAddress();
+// Show ball at address - Calls the core function, optionally passing position
+export function showBallAtAddress(position = null) {
+    // We need to determine the surface type here ideally, or assume TEE/Range default
+    // For now, let core handle the default position if null is passed
+    CoreVisuals.showBallAtAddress(position, position ? undefined : 'TEE'); // Pass undefined surface if position is given, let core determine? Or default TEE? Let's default TEE for now.
 }
 
 // --- Landing Animation Handling ---
