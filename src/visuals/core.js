@@ -1,4 +1,5 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
+import { TextureLoader } from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js'; // Import TextureLoader
 // Import both relative and target line angles
 import { getShotDirectionAngle, getCurrentTargetLineAngle } from '../gameLogic/state.js';
 // Import position getters needed for re-applying hole view camera
@@ -90,8 +91,14 @@ export function initCoreVisuals(canvasElement) {
     scene.add(directionalLight);
 
     // 5. Ball (Common element)
+    const textureLoader = new TextureLoader();
+    const ballTexture = textureLoader.load('assets/textures/golf_ball.jpg');
     const ballGeometry = new THREE.SphereGeometry(BALL_RADIUS, 32, 32);
-    const ballMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff });
+    // Apply the texture to the material
+    const ballMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffffff, // Keep white base color, texture will overlay
+        map: ballTexture
+    });
     ball = new THREE.Mesh(ballGeometry, ballMaterial);
     ball.castShadow = true;
     showBallAtAddress(); // Position the ball initially
