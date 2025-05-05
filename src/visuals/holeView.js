@@ -88,6 +88,34 @@ export function drawHoleLayout(holeLayout) {
         roughShape.closePath(); // Use original ShapeGeometry
 
         const roughGeometry = new THREE.ShapeGeometry(roughShape);
+        // --- BEGIN Manual UV Calculation ---
+        roughGeometry.computeBoundingBox();
+        const bbox = roughGeometry.boundingBox;
+        if (bbox) { // Check if bounding box exists
+            const positionAttribute = roughGeometry.attributes.position;
+            const uvAttribute = new THREE.BufferAttribute(new Float32Array(positionAttribute.count * 2), 2);
+            const sizeX = bbox.max.x - bbox.min.x;
+            const sizeY = bbox.max.y - bbox.min.y; // Use Y size from XY plane
+
+            if (sizeX > 0 && sizeY > 0) { // Avoid division by zero
+                for (let i = 0; i < positionAttribute.count; i++) {
+                    const x = positionAttribute.getX(i);
+                    const y = positionAttribute.getY(i); // Use Y from ShapeGeometry's XY plane
+
+                    const u = (x - bbox.min.x) / sizeX;
+                    const v = (y - bbox.min.y) / sizeY;
+
+                    uvAttribute.setXY(i, u, v);
+                }
+                roughGeometry.setAttribute('uv', uvAttribute);
+                console.log("Manually calculated UVs for rough geometry.");
+            } else {
+                console.warn("Rough geometry has zero size in X or Y dimension, cannot calculate UVs.");
+            }
+        } else {
+             console.warn("Could not compute bounding box for rough geometry.");
+        }
+        // --- END Manual UV Calculation ---
         // Geometry is created using world coordinates, no centering needed.
 
         // --- Rough Material (Texture or Color) ---
@@ -257,6 +285,32 @@ export function drawHoleLayout(holeLayout) {
         fairwayShape.closePath();
 
         const fairwayGeometry = new THREE.ShapeGeometry(fairwayShape);
+        // --- BEGIN Manual UV Calculation for Fairway ---
+        fairwayGeometry.computeBoundingBox();
+        const fairwayBbox = fairwayGeometry.boundingBox;
+        if (fairwayBbox) {
+            const positionAttribute = fairwayGeometry.attributes.position;
+            const uvAttribute = new THREE.BufferAttribute(new Float32Array(positionAttribute.count * 2), 2);
+            const sizeX = fairwayBbox.max.x - fairwayBbox.min.x;
+            const sizeY = fairwayBbox.max.y - fairwayBbox.min.y;
+
+            if (sizeX > 0 && sizeY > 0) {
+                for (let i = 0; i < positionAttribute.count; i++) {
+                    const x = positionAttribute.getX(i);
+                    const y = positionAttribute.getY(i);
+                    const u = (x - fairwayBbox.min.x) / sizeX;
+                    const v = (y - fairwayBbox.min.y) / sizeY;
+                    uvAttribute.setXY(i, u, v);
+                }
+                fairwayGeometry.setAttribute('uv', uvAttribute);
+                console.log("Manually calculated UVs for fairway geometry.");
+            } else {
+                console.warn("Fairway geometry has zero size in X or Y dimension, cannot calculate UVs.");
+            }
+        } else {
+            console.warn("Could not compute bounding box for fairway geometry.");
+        }
+        // --- END Manual UV Calculation for Fairway ---
         // Geometry is created using world coordinates, no centering needed.
 
         // --- Fairway Material (Texture or Color) ---
@@ -272,11 +326,14 @@ export function drawHoleLayout(holeLayout) {
                 // onLoad callback
                 (texture) => {
                     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-                    const textureWorldSize = 10; // meters (Increased from 5)
-                    fairwayGeometry.computeBoundingBox();
-                    const size = fairwayGeometry.boundingBox.getSize(new THREE.Vector3());
-                    texture.repeat.set(size.x / textureWorldSize, size.y / textureWorldSize);
-                    // texture.needsUpdate = true;
+                    // Removed old repetition logic - manual UVs handle mapping
+                    // const textureWorldSize = 10;
+                    // fairwayGeometry.computeBoundingBox(); // Already computed for UVs
+                    // const size = fairwayGeometry.boundingBox.getSize(new THREE.Vector3());
+                    // texture.repeat.set(size.x / textureWorldSize, size.y / textureWorldSize);
+                    const textureRepetitions = 15; // Adjust this value to control tiling density
+                    texture.repeat.set(textureRepetitions, textureRepetitions);
+
 
                     fairwayMesh.material = new THREE.MeshStandardMaterial({ // Changed to StandardMaterial
                         map: texture,
@@ -324,6 +381,32 @@ export function drawHoleLayout(holeLayout) {
         greenShape.closePath();
 
         const greenGeometry = new THREE.ShapeGeometry(greenShape);
+        // --- BEGIN Manual UV Calculation for Green ---
+        greenGeometry.computeBoundingBox();
+        const greenBbox = greenGeometry.boundingBox;
+        if (greenBbox) {
+            const positionAttribute = greenGeometry.attributes.position;
+            const uvAttribute = new THREE.BufferAttribute(new Float32Array(positionAttribute.count * 2), 2);
+            const sizeX = greenBbox.max.x - greenBbox.min.x;
+            const sizeY = greenBbox.max.y - greenBbox.min.y;
+
+            if (sizeX > 0 && sizeY > 0) {
+                for (let i = 0; i < positionAttribute.count; i++) {
+                    const x = positionAttribute.getX(i);
+                    const y = positionAttribute.getY(i);
+                    const u = (x - greenBbox.min.x) / sizeX;
+                    const v = (y - greenBbox.min.y) / sizeY;
+                    uvAttribute.setXY(i, u, v);
+                }
+                greenGeometry.setAttribute('uv', uvAttribute);
+                console.log("Manually calculated UVs for green geometry.");
+            } else {
+                console.warn("Green geometry has zero size in X or Y dimension, cannot calculate UVs.");
+            }
+        } else {
+            console.warn("Could not compute bounding box for green geometry.");
+        }
+        // --- END Manual UV Calculation for Green ---
         // --- Green Material (Texture or Color) ---
         const greenSurface = holeLayout.green.surface;
         const greenMesh = new THREE.Mesh(greenGeometry); // Create mesh first
@@ -337,11 +420,14 @@ export function drawHoleLayout(holeLayout) {
                 // onLoad callback
                 (texture) => {
                     texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-                    const textureWorldSize = 4; // meters (Increased from 2)
-                    greenGeometry.computeBoundingBox();
-                    const size = greenGeometry.boundingBox.getSize(new THREE.Vector3());
-                    texture.repeat.set(size.x / textureWorldSize, size.y / textureWorldSize);
-                    // texture.needsUpdate = true;
+                    // Removed old repetition logic - manual UVs handle mapping
+                    // const textureWorldSize = 4;
+                    // greenGeometry.computeBoundingBox(); // Already computed for UVs
+                    // const size = greenGeometry.boundingBox.getSize(new THREE.Vector3());
+                    // texture.repeat.set(size.x / textureWorldSize, size.y / textureWorldSize);
+                    const textureRepetitions = 10; // Adjust this value to control tiling density
+                    texture.repeat.set(textureRepetitions, textureRepetitions);
+
 
                     greenMesh.material = new THREE.MeshStandardMaterial({ // Changed to StandardMaterial
                         map: texture,
