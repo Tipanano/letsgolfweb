@@ -1,6 +1,6 @@
 // src/holeGenerator.js
 import { SURFACES } from './surfaces.js';
-// Import both utility functions
+// Import utility functions (removed createRoundedPolygonShape)
 import { createSmoothClosedShape, calculatePolygonCenter } from './shapeUtils.js';
 
 // Define control points for shapes that will be smoothed
@@ -168,6 +168,9 @@ export function generateBasicHole() {
     }
 
     // Water hazards are still circles, no processing needed here yet.
+
+    // --- Corner Rounding Removed - Using original vertices ---
+
 
     console.log("Finished processing shapes for hole layout.");
     return layoutToReturn;

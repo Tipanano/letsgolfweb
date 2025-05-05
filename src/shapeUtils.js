@@ -85,5 +85,4 @@ export function calculatePolygonCenter(vertices) {
 
 
 // Future function examples:
-// export function createRoundedPolygon(vertices, cornerRadius, segmentsPerCorner) { ... }
 // export function createSmoothPath(controlPoints, segments) { ... }

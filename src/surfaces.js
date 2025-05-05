@@ -11,7 +11,8 @@ export const SURFACES = {
       launchAngleChange: 0,
       velocityReduction: 0.05
     },
-    height: 0.03 // Visual height
+    height: 0.03, // Visual height
+    ballLieOffset: 0 // On top
   },
   GREEN: {
     name: 'Green',
@@ -24,7 +25,8 @@ export const SURFACES = {
       velocityReduction: 0.02
     },
     height: 0.02, // Visual height
-    texturePath: 'assets/textures/green.png' // Added texture path
+    texturePath: 'assets/textures/green.png', // Added texture path
+    ballLieOffset: 0 // On top
   },
   FAIRWAY: {
     name: 'Fairway',
@@ -37,7 +39,8 @@ export const SURFACES = {
       velocityReduction: 0.05
     },
     height: 0.01, // Visual height
-    texturePath: 'assets/textures/fairway.png' // Added texture path
+    texturePath: 'assets/textures/fairway.png', // Added texture path
+    ballLieOffset: -0.005 // Slightly into
   },
   LIGHT_ROUGH: {
     name: 'Light Rough',
@@ -50,7 +53,8 @@ export const SURFACES = {
       velocityReduction: 0.15 // More velocity lost
     },
     height: 0.00, // Base rough height
-    texturePath: 'assets/textures/rough.png' // Added texture path
+    texturePath: 'assets/textures/rough.png', // Added texture path
+    ballLieOffset: -0.01 // Slightly into
   },
   MEDIUM_ROUGH: {
     name: 'Medium Rough',
@@ -63,7 +67,8 @@ export const SURFACES = {
       velocityReduction: 0.25 // Significant velocity loss
     },
     height: 0.00, // Visual height (same as light rough for now)
-    texturePath: 'assets/textures/rough.png' // Added texture path
+    texturePath: 'assets/textures/rough.png', // Added texture path
+    ballLieOffset: -0.02 // Half hidden
   },
   THICK_ROUGH: {
     name: 'Thick Rough',
@@ -76,7 +81,8 @@ export const SURFACES = {
       velocityReduction: 0.40 // Huge velocity loss
     },
     height: 0.00, // Visual height (same as medium rough for now)
-    texturePath: 'assets/textures/rough.png' // Added texture path
+    texturePath: 'assets/textures/rough.png', // Added texture path
+    ballLieOffset: -0.035 // Almost hidden
   },
   BUNKER: {
     name: 'Bunker',
@@ -88,7 +94,9 @@ export const SURFACES = {
       launchAngleChange: 1.5, // Tends to increase launch angle
       velocityReduction: 0.35 // Significant velocity loss
     },
-    height: 0.04 // Visual height (highest)
+    height: 0.04, // Visual height (highest)
+    texturePath: 'assets/textures/bunker.png', // Added texture path
+    ballLieOffset: -0.01 // Slightly into
   },
   WATER: {
     name: 'Water',
@@ -101,7 +109,8 @@ export const SURFACES = {
       velocityReduction: 1.0 // Stops the ball
     },
     isPenalty: true, // Flag for penalty stroke/rules
-    height: 0.005 // Visual height (above rough, below fairway)
+    height: 0.005, // Visual height (above rough, below fairway)
+    ballLieOffset: -1 // Submerged (special value)
   },
   OUT_OF_BOUNDS: {
     name: 'Out of Bounds',
@@ -114,7 +123,8 @@ export const SURFACES = {
       velocityReduction: 0.9 // Drastic velocity loss
     },
     isPenalty: true, // Flag for penalty stroke/rules
-    height: -0.01 // Visual height (lowest)
+    height: -0.01, // Visual height (lowest)
+    ballLieOffset: 0 // On top
   }
 };
 

@@ -1,7 +1,7 @@
 // src/visuals/holeView.js
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
 import { TextureLoader } from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js'; // Import TextureLoader
-// Removed noise import
+import { createNoise2D } from 'https://esm.sh/simplex-noise'; // Import Simplex noise
 import { scene, YARDS_TO_METERS } from './core.js'; // Import scene and conversion factor
 
 let currentHoleObjects = []; // To keep track of objects added for the hole
@@ -56,40 +56,102 @@ export function drawHoleLayout(holeLayout) {
         bgShape.closePath();
 
         const bgGeometry = new THREE.ShapeGeometry(bgShape);
+        // --- BEGIN Manual UV Calculation for Background ---
+        bgGeometry.computeBoundingBox();
+        const bgBbox = bgGeometry.boundingBox;
+        if (bgBbox) {
+            const positionAttribute = bgGeometry.attributes.position;
+            const uvAttribute = new THREE.BufferAttribute(new Float32Array(positionAttribute.count * 2), 2);
+            const sizeX = bgBbox.max.x - bgBbox.min.x;
+            const sizeY = bgBbox.max.y - bgBbox.min.y;
+
+            if (sizeX > 0 && sizeY > 0) {
+                for (let i = 0; i < positionAttribute.count; i++) {
+                    const x = positionAttribute.getX(i);
+                    const y = positionAttribute.getY(i);
+                    const u = (x - bgBbox.min.x) / sizeX;
+                    const v = (y - bgBbox.min.y) / sizeY;
+                    uvAttribute.setXY(i, u, v);
+                }
+                bgGeometry.setAttribute('uv', uvAttribute);
+                console.log("Manually calculated UVs for background geometry.");
+            } else {
+                console.warn("Background geometry has zero size in X or Y dimension, cannot calculate UVs.");
+            }
+        } else {
+            console.warn("Could not compute bounding box for background geometry.");
+        }
+        // --- END Manual UV Calculation for Background ---
         // Geometry is created using world coordinates, no centering needed.
 
-        const bgMaterial = new THREE.MeshLambertMaterial({
-            color: holeLayout.background.surface.color,
-            side: THREE.DoubleSide
-        });
-        const bgMesh = new THREE.Mesh(bgGeometry, bgMaterial);
+        const bgSurface = holeLayout.background.surface;
+        const bgMesh = new THREE.Mesh(bgGeometry); // Create mesh first
         bgMesh.rotation.x = Math.PI / 2; // Positive rotation
-        // Position mesh using surface height
-        bgMesh.position.set(0, holeLayout.background.surface.height ?? -0.01, 0); // Use defined height or fallback
-        bgMesh.receiveShadow = true; // Should still receive shadows
+        bgMesh.position.set(0, bgSurface?.height ?? -0.01, 0); // Use defined height or fallback
+        bgMesh.receiveShadow = true;
+
+        // --- Background Material (Texture or Color) ---
+        if (bgSurface && bgSurface.texturePath) {
+            textureLoader.load(
+                bgSurface.texturePath,
+                (texture) => {
+                    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+                    const textureRepetitions = 5; // Example value, adjust as needed
+                    texture.repeat.set(textureRepetitions, textureRepetitions);
+                    bgMesh.material = new THREE.MeshStandardMaterial({
+                        map: texture,
+                        side: THREE.DoubleSide
+                    });
+                    bgMesh.material.needsUpdate = true;
+                    console.log(`Texture ${bgSurface.texturePath} loaded and applied to background.`);
+                },
+                undefined,
+                (err) => {
+                    console.error(`Error loading background texture: ${bgSurface.texturePath}`, err);
+                    bgMesh.material = new THREE.MeshStandardMaterial({
+                        color: bgSurface?.color || '#8B4513', // Fallback color (SaddleBrown)
+                        side: THREE.DoubleSide
+                    });
+                    bgMesh.material.needsUpdate = true;
+                }
+            );
+        } else {
+            bgMesh.material = new THREE.MeshStandardMaterial({
+                color: bgSurface?.color || '#8B4513', // Fallback color
+                side: THREE.DoubleSide
+            });
+            console.log("Applied color to background.");
+        }
+
         scene.add(bgMesh);
         currentHoleObjects.push(bgMesh);
     }
 
 
     // --- Draw Rough (Draw on top of background) ---
-    if (holeLayout.rough && holeLayout.rough.vertices && holeLayout.rough.surface) {
-        // Define shape in XY plane (using Z as Y)
-        const roughShape = new THREE.Shape();
+    let roughGeometry = null; // Initialize as null
+    // Reverted: Always create from vertices for now
+    if (holeLayout.rough?.vertices && holeLayout.rough.vertices.length >= 3) {
+        console.log("Creating rough shape from vertices.");
+        const roughShapeFromVertices = new THREE.Shape();
         const firstRoughPoint = holeLayout.rough.vertices[0];
-        // Use original Z
-        roughShape.moveTo(firstRoughPoint.x * scale, firstRoughPoint.z * scale);
-
+        roughShapeFromVertices.moveTo(firstRoughPoint.x * scale, firstRoughPoint.z * scale); // Use z here
         for (let i = 1; i < holeLayout.rough.vertices.length; i++) {
             const point = holeLayout.rough.vertices[i];
-             // Use original Z
-            roughShape.lineTo(point.x * scale, point.z * scale);
+            roughShapeFromVertices.lineTo(point.x * scale, point.z * scale); // Use z here
         }
-        roughShape.closePath(); // Use original ShapeGeometry
+        roughShapeFromVertices.closePath();
+        roughGeometry = new THREE.ShapeGeometry(roughShapeFromVertices);
+    } else {
+        console.warn("Rough definition missing or invalid. Cannot draw rough.");
+        // roughGeometry remains null
+    }
 
-        const roughGeometry = new THREE.ShapeGeometry(roughShape);
+
+    if (roughGeometry) { // Proceed only if geometry was created
+        // console.log("Rough geometry object is valid, proceeding to UV/Noise/Mesh creation.", roughGeometry); // Removed log
         // --- BEGIN Manual UV Calculation ---
-        roughGeometry.computeBoundingBox();
+        roughGeometry.computeBoundingBox(); // Ensure bounding box is computed (might have been done after scaling)
         const bbox = roughGeometry.boundingBox;
         if (bbox) { // Check if bounding box exists
             const positionAttribute = roughGeometry.attributes.position;
@@ -116,6 +178,42 @@ export function drawHoleLayout(holeLayout) {
              console.warn("Could not compute bounding box for rough geometry.");
         }
         // --- END Manual UV Calculation ---
+
+        // --- BEGIN Simplex Noise Vertex Colors for Variation ---
+        const positionAttributeRough = roughGeometry.attributes.position;
+        const vertexCountRough = positionAttributeRough.count;
+        const colorsRough = new Float32Array(vertexCountRough * 3); // R, G, B
+        const baseRoughColor = new THREE.Color(holeLayout.rough.surface?.color || '#228b22'); // Use surface color or fallback
+        const noise2D = createNoise2D(); // Create a 2D noise function instance
+
+        // --- Noise Parameters (Adjust these) ---
+        const noiseScale = 0.001; // Smaller value = larger patches
+        const variationStrength = 0.4; // Controls contrast (e.g., 0.2 means variation from 0.8 to 1.2)
+        // --- End Noise Parameters ---
+
+        for (let i = 0; i < vertexCountRough; i++) {
+            // Use the correct coordinates based on how your ShapeGeometry is defined and rotated.
+            // Shape is defined in XY plane before rotation:
+            const x = positionAttributeRough.getX(i);
+            const y = positionAttributeRough.getY(i);
+
+            // Sample Simplex noise based on vertex position
+            const noiseValue = noise2D(x * noiseScale, y * noiseScale); // Noise value between -1 and 1
+
+            // Map noise value to a variation factor (e.g., 1.0 +/- variationStrength)
+            const variation = 1.0 + noiseValue * variationStrength;
+
+            // Clamp variation to avoid negative colors
+            const clampedVariation = Math.max(0, variation);
+
+            colorsRough[i * 3] = baseRoughColor.r * clampedVariation;
+            colorsRough[i * 3 + 1] = baseRoughColor.g * clampedVariation;
+            colorsRough[i * 3 + 2] = baseRoughColor.b * clampedVariation;
+        }
+        roughGeometry.setAttribute('color', new THREE.BufferAttribute(colorsRough, 3));
+        console.log("Applied Simplex noise vertex colors to rough geometry.");
+        // --- END Simplex Noise Variation ---
+
         // Geometry is created using world coordinates, no centering needed.
 
         // --- Rough Material (Texture or Color) ---
@@ -139,8 +237,8 @@ export function drawHoleLayout(holeLayout) {
 
                     roughMesh.material = new THREE.MeshStandardMaterial({ // Using StandardMaterial
                         map: texture,
-                        side: THREE.DoubleSide
-                        // vertexColors: false // Vertex colors removed
+                        side: THREE.DoubleSide,
+                        vertexColors: true // <--- Enable vertex colors
                     });
                     roughMesh.material.needsUpdate = true; // Important: update material when texture loads
                     console.log(`Texture ${roughSurface.texturePath} loaded and applied to rough.`);
@@ -153,8 +251,8 @@ export function drawHoleLayout(holeLayout) {
                     // Fallback to color on error
                     roughMesh.material = new THREE.MeshStandardMaterial({ // Using StandardMaterial
                         color: roughSurface?.color || '#228b22',
-                        side: THREE.DoubleSide
-                        // vertexColors: false
+                        side: THREE.DoubleSide,
+                        vertexColors: true // <--- Enable vertex colors
                     });
                     roughMesh.material.needsUpdate = true;
                 }
@@ -163,8 +261,8 @@ export function drawHoleLayout(holeLayout) {
             // Apply color immediately if no texture path
             roughMesh.material = new THREE.MeshStandardMaterial({ // Using StandardMaterial
                 color: roughSurface?.color || '#228b22', // Fallback color
-                side: THREE.DoubleSide
-                // vertexColors: false
+                side: THREE.DoubleSide,
+                vertexColors: true // <--- Enable vertex colors
             });
             console.log("Applied color to rough.");
         }
@@ -178,22 +276,18 @@ export function drawHoleLayout(holeLayout) {
         holeLayout.waterHazards.forEach(water => {
             if (!water || !water.surface) return; // Skip invalid water hazards
 
-            const waterMaterial = new THREE.MeshLambertMaterial({
-                color: water.surface.color,
-                side: THREE.DoubleSide,
-                transparent: true, // Make water slightly transparent
-                opacity: 0.85
-            });
             let waterGeometry;
-            let waterMesh;
+            let waterMesh = new THREE.Mesh(); // Create mesh shell first
+            waterMesh.receiveShadow = true; // Water can receive shadows
             const waterYOffset = water.surface.height ?? 0.002; // Use defined height or fallback
+            const waterSurface = water.surface;
 
             if (water.type === 'circle' && water.center && water.radius) {
                 const radiusMeters = water.radius * scale;
                 const centerX = water.center.x * scale;
                 const centerZ = water.center.z * scale;
                 waterGeometry = new THREE.CircleGeometry(radiusMeters, 32);
-                waterMesh = new THREE.Mesh(waterGeometry, waterMaterial);
+                waterMesh.geometry = waterGeometry; // Assign geometry
                 waterMesh.position.set(centerX, waterYOffset, centerZ);
                 waterMesh.rotation.x = -Math.PI / 2;
 
@@ -207,7 +301,33 @@ export function drawHoleLayout(holeLayout) {
                 }
                 waterShape.closePath();
                 waterGeometry = new THREE.ShapeGeometry(waterShape);
-                waterMesh = new THREE.Mesh(waterGeometry, waterMaterial);
+                 // --- BEGIN Manual UV Calculation for Polygon Water ---
+                waterGeometry.computeBoundingBox();
+                const waterBbox = waterGeometry.boundingBox;
+                if (waterBbox) {
+                    const positionAttribute = waterGeometry.attributes.position;
+                    const uvAttribute = new THREE.BufferAttribute(new Float32Array(positionAttribute.count * 2), 2);
+                    const sizeX = waterBbox.max.x - waterBbox.min.x;
+                    const sizeY = waterBbox.max.y - waterBbox.min.y;
+
+                    if (sizeX > 0 && sizeY > 0) {
+                        for (let i = 0; i < positionAttribute.count; i++) {
+                            const x = positionAttribute.getX(i);
+                            const y = positionAttribute.getY(i);
+                            const u = (x - waterBbox.min.x) / sizeX;
+                            const v = (y - waterBbox.min.y) / sizeY;
+                            uvAttribute.setXY(i, u, v);
+                        }
+                        waterGeometry.setAttribute('uv', uvAttribute);
+                        // console.log("Manually calculated UVs for polygon water geometry."); // Optional: less verbose logging
+                    } else {
+                        console.warn("Polygon water geometry has zero size in X or Y dimension, cannot calculate UVs.");
+                    }
+                } else {
+                    console.warn("Could not compute bounding box for polygon water geometry.");
+                }
+                // --- END Manual UV Calculation for Polygon Water ---
+                waterMesh.geometry = waterGeometry; // Assign geometry
                 waterMesh.position.set(0, waterYOffset, 0);
                 waterMesh.rotation.x = Math.PI / 2;
 
@@ -216,7 +336,46 @@ export function drawHoleLayout(holeLayout) {
                 return; // Skip this water hazard
             }
 
-            waterMesh.receiveShadow = true; // Water can receive shadows
+             // --- Water Material (Texture or Color) ---
+            const waterMaterialOptions = {
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.85
+            };
+
+            if (waterSurface && waterSurface.texturePath) {
+                textureLoader.load(
+                    waterSurface.texturePath,
+                    (texture) => {
+                        texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+                        const textureRepetitions = 5; // Example value, adjust as needed
+                        texture.repeat.set(textureRepetitions, textureRepetitions);
+                        waterMesh.material = new THREE.MeshStandardMaterial({
+                            ...waterMaterialOptions,
+                            map: texture
+                        });
+                        waterMesh.material.needsUpdate = true;
+                        console.log(`Texture ${waterSurface.texturePath} loaded and applied to water.`);
+                    },
+                    undefined,
+                    (err) => {
+                        console.error(`Error loading water texture: ${waterSurface.texturePath}`, err);
+                        waterMesh.material = new THREE.MeshStandardMaterial({
+                            ...waterMaterialOptions,
+                            color: waterSurface?.color || '#ADD8E6' // Fallback color (LightBlue)
+                        });
+                        waterMesh.material.needsUpdate = true;
+                    }
+                );
+            } else {
+                waterMesh.material = new THREE.MeshStandardMaterial({
+                     ...waterMaterialOptions,
+                    color: waterSurface?.color || '#ADD8E6' // Fallback color
+                });
+                console.log("Applied color to water.");
+            }
+
+
             scene.add(waterMesh);
             currentHoleObjects.push(waterMesh);
         });
@@ -227,22 +386,21 @@ export function drawHoleLayout(holeLayout) {
         holeLayout.bunkers.forEach(bunker => {
             if (!bunker || !bunker.surface) return; // Skip invalid bunkers
 
-            const bunkerMaterial = new THREE.MeshLambertMaterial({
-                color: bunker.surface.color,
-                side: THREE.DoubleSide
-            });
+            // Initialize mesh first, material will be set later (async texture loading)
             let bunkerGeometry;
-            let bunkerMesh;
+            let bunkerMesh = new THREE.Mesh(); // Create mesh shell
+            bunkerMesh.receiveShadow = true;
             const bunkerYOffset = bunker.surface.height ?? 0.005; // Use defined height or fallback
+            const bunkerSurface = bunker.surface; // Reference surface data
 
             if (bunker.type === 'circle' && bunker.center && bunker.radius) {
                 const radiusMeters = bunker.radius * scale;
                 const centerX = bunker.center.x * scale;
                 const centerZ = bunker.center.z * scale;
-                bunkerGeometry = new THREE.CircleGeometry(radiusMeters, 32); // Use 32 segments for smoother circle
-                bunkerMesh = new THREE.Mesh(bunkerGeometry, bunkerMaterial);
+                bunkerGeometry = new THREE.CircleGeometry(radiusMeters, 32);
+                bunkerMesh.geometry = bunkerGeometry; // Assign geometry
                 bunkerMesh.position.set(centerX, bunkerYOffset, centerZ);
-                bunkerMesh.rotation.x = -Math.PI / 2; // Rotate to lay flat
+                bunkerMesh.rotation.x = -Math.PI / 2;
 
             } else if (bunker.type === 'polygon' && bunker.vertices && bunker.vertices.length >= 3) {
                 const bunkerShape = new THREE.Shape();
@@ -254,39 +412,110 @@ export function drawHoleLayout(holeLayout) {
                 }
                 bunkerShape.closePath();
                 bunkerGeometry = new THREE.ShapeGeometry(bunkerShape);
-                bunkerMesh = new THREE.Mesh(bunkerGeometry, bunkerMaterial);
-                bunkerMesh.position.set(0, bunkerYOffset, 0); // Position at origin, geometry defines shape location
-                bunkerMesh.rotation.x = Math.PI / 2; // Rotate to lay flat (like fairway/rough)
+                // --- BEGIN Manual UV Calculation for Polygon Bunker ---
+                bunkerGeometry.computeBoundingBox();
+                const bunkerBbox = bunkerGeometry.boundingBox;
+                if (bunkerBbox) {
+                    const positionAttribute = bunkerGeometry.attributes.position;
+                    const uvAttribute = new THREE.BufferAttribute(new Float32Array(positionAttribute.count * 2), 2);
+                    const sizeX = bunkerBbox.max.x - bunkerBbox.min.x;
+                    const sizeY = bunkerBbox.max.y - bunkerBbox.min.y;
+
+                    if (sizeX > 0 && sizeY > 0) {
+                        for (let i = 0; i < positionAttribute.count; i++) {
+                            const x = positionAttribute.getX(i);
+                            const y = positionAttribute.getY(i);
+                            const u = (x - bunkerBbox.min.x) / sizeX;
+                            const v = (y - bunkerBbox.min.y) / sizeY;
+                            uvAttribute.setXY(i, u, v);
+                        }
+                        bunkerGeometry.setAttribute('uv', uvAttribute);
+                         // console.log("Manually calculated UVs for polygon bunker geometry."); // Optional: less verbose logging
+                    } else {
+                        console.warn("Polygon bunker geometry has zero size in X or Y dimension, cannot calculate UVs.");
+                    }
+                } else {
+                    console.warn("Could not compute bounding box for polygon bunker geometry.");
+                }
+                 // --- END Manual UV Calculation for Polygon Bunker ---
+                bunkerMesh.geometry = bunkerGeometry; // Assign geometry
+                bunkerMesh.position.set(0, bunkerYOffset, 0);
+                bunkerMesh.rotation.x = Math.PI / 2;
 
             } else {
                 console.warn("Skipping invalid bunker definition:", bunker);
                 return; // Skip this bunker
             }
 
-            bunkerMesh.receiveShadow = true;
-            scene.add(bunkerMesh);
+            // --- Bunker Material (Texture or Color) ---
+            if (bunkerSurface && bunkerSurface.texturePath) {
+                textureLoader.load(
+                    bunkerSurface.texturePath,
+                    // onLoad callback
+                    (texture) => {
+                        texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+                        // Adjust repetition as needed, similar to fairway/green
+                        const textureRepetitions = 8; // Example value, adjust for desired look
+                        texture.repeat.set(textureRepetitions, textureRepetitions);
+
+                        bunkerMesh.material = new THREE.MeshStandardMaterial({
+                            map: texture,
+                            side: THREE.DoubleSide
+                        });
+                        bunkerMesh.material.needsUpdate = true;
+                        console.log(`Texture ${bunkerSurface.texturePath} loaded and applied to bunker.`);
+                    },
+                    // onProgress callback (optional)
+                    undefined,
+                    // onError callback
+                    (err) => {
+                        console.error(`Error loading bunker texture: ${bunkerSurface.texturePath}`, err);
+                        // Fallback to color on error
+                        bunkerMesh.material = new THREE.MeshStandardMaterial({
+                            color: bunkerSurface?.color || '#D2B48C', // Fallback color (Tan)
+                            side: THREE.DoubleSide
+                        });
+                        bunkerMesh.material.needsUpdate = true;
+                    }
+                );
+            } else {
+                // Apply color immediately if no texture path
+                bunkerMesh.material = new THREE.MeshStandardMaterial({
+                    color: bunkerSurface?.color || '#D2B48C', // Fallback color (Tan)
+                    side: THREE.DoubleSide
+                });
+                console.log("Applied color to bunker.");
+            }
+
+            scene.add(bunkerMesh); // Add mesh to scene (material might be applied async)
             currentHoleObjects.push(bunkerMesh);
         });
     }
 
 
     // --- Draw Fairway (On top of rough/water/bunkers) ---
-    if (holeLayout.fairway && holeLayout.fairway.vertices && holeLayout.fairway.surface) {
-        // Define shape in XY plane (using Z as Y)
-        const fairwayShape = new THREE.Shape();
+    let fairwayGeometry = null; // Initialize as null
+     // Reverted: Always create from vertices for now
+    if (holeLayout.fairway?.vertices && holeLayout.fairway.vertices.length >= 3) {
+        console.log("Creating fairway shape from vertices.");
+        const fairwayShapeFromVertices = new THREE.Shape();
         const firstPoint = holeLayout.fairway.vertices[0];
-        // Use original coordinates
-        fairwayShape.moveTo(firstPoint.x * scale, firstPoint.z * scale);
+        fairwayShapeFromVertices.moveTo(firstPoint.x * scale, firstPoint.z * scale); // Use z
         for (let i = 1; i < holeLayout.fairway.vertices.length; i++) {
             const point = holeLayout.fairway.vertices[i];
-             // Use original coordinates
-            fairwayShape.lineTo(point.x * scale, point.z * scale);
+            fairwayShapeFromVertices.lineTo(point.x * scale, point.z * scale); // Use z
         }
-        fairwayShape.closePath();
+        fairwayShapeFromVertices.closePath();
+        fairwayGeometry = new THREE.ShapeGeometry(fairwayShapeFromVertices);
+    } else {
+         console.warn("Fairway definition missing or invalid. Cannot draw fairway.");
+         // fairwayGeometry remains null
+    }
 
-        const fairwayGeometry = new THREE.ShapeGeometry(fairwayShape);
+    if(fairwayGeometry) { // Proceed only if geometry was created
+        // console.log("Fairway geometry object is valid, proceeding to UV/Mesh creation.", fairwayGeometry); // Removed log
         // --- BEGIN Manual UV Calculation for Fairway ---
-        fairwayGeometry.computeBoundingBox();
+        fairwayGeometry.computeBoundingBox(); // Ensure bounding box is computed (might have been done after scaling)
         const fairwayBbox = fairwayGeometry.boundingBox;
         if (fairwayBbox) {
             const positionAttribute = fairwayGeometry.attributes.position;
