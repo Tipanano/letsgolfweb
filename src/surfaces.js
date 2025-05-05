@@ -23,7 +23,8 @@ export const SURFACES = {
       launchAngleChange: 0,
       velocityReduction: 0.02
     },
-    height: 0.02 // Visual height
+    height: 0.02, // Visual height
+    texturePath: 'assets/textures/green.png' // Added texture path
   },
   FAIRWAY: {
     name: 'Fairway',
@@ -35,7 +36,8 @@ export const SURFACES = {
       launchAngleChange: 0,
       velocityReduction: 0.05
     },
-    height: 0.01 // Visual height
+    height: 0.01, // Visual height
+    texturePath: 'assets/textures/fairway.png' // Added texture path
   },
   LIGHT_ROUGH: {
     name: 'Light Rough',
@@ -47,7 +49,8 @@ export const SURFACES = {
       launchAngleChange: 0.5, // Slight increase in launch angle possible
       velocityReduction: 0.15 // More velocity lost
     },
-    height: 0.00 // Base rough height
+    height: 0.00, // Base rough height
+    texturePath: 'assets/textures/rough.png' // Added texture path
   },
   MEDIUM_ROUGH: {
     name: 'Medium Rough',
@@ -59,7 +62,8 @@ export const SURFACES = {
       launchAngleChange: 1.0, // Can affect launch angle more
       velocityReduction: 0.25 // Significant velocity loss
     },
-    height: 0.00 // Visual height (same as light rough for now)
+    height: 0.00, // Visual height (same as light rough for now)
+    texturePath: 'assets/textures/rough.png' // Added texture path
   },
   THICK_ROUGH: {
     name: 'Thick Rough',
@@ -71,7 +75,8 @@ export const SURFACES = {
       launchAngleChange: 2.0, // Potential for significant launch angle change
       velocityReduction: 0.40 // Huge velocity loss
     },
-    height: 0.00 // Visual height (same as medium rough for now)
+    height: 0.00, // Visual height (same as medium rough for now)
+    texturePath: 'assets/textures/rough.png' // Added texture path
   },
   BUNKER: {
     name: 'Bunker',

@@ -1,5 +1,7 @@
 // src/visuals/holeView.js
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
+import { TextureLoader } from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js'; // Import TextureLoader
+// Removed noise import
 import { scene, YARDS_TO_METERS } from './core.js'; // Import scene and conversion factor
 
 let currentHoleObjects = []; // To keep track of objects added for the hole
@@ -38,6 +40,7 @@ export function drawHoleLayout(holeLayout) {
     console.log("Drawing hole layout:", holeLayout);
 
     const scale = YARDS_TO_METERS; // Use the conversion factor
+    const textureLoader = new TextureLoader(); // Create texture loader instance
 
     // --- Draw Background (Out of Bounds - Draw first) ---
     if (holeLayout.background && holeLayout.background.vertices && holeLayout.background.surface) {
@@ -82,21 +85,62 @@ export function drawHoleLayout(holeLayout) {
              // Use original Z
             roughShape.lineTo(point.x * scale, point.z * scale);
         }
-        roughShape.closePath();
+        roughShape.closePath(); // Use original ShapeGeometry
 
         const roughGeometry = new THREE.ShapeGeometry(roughShape);
-        // Geometry is created using world coordinates (with X negated), no centering needed.
+        // Geometry is created using world coordinates, no centering needed.
 
-        const roughMaterial = new THREE.MeshLambertMaterial({
-            color: holeLayout.rough.surface.color,
-            side: THREE.DoubleSide
-        });
-        const roughMesh = new THREE.Mesh(roughGeometry, roughMaterial);
-        roughMesh.rotation.x = Math.PI / 2; // Positive rotation
-        // Position mesh using surface height
-        roughMesh.position.set(0, holeLayout.rough.surface.height ?? 0.0, 0); // Use defined height or fallback
+        // --- Rough Material (Texture or Color) ---
+        const roughSurface = holeLayout.rough.surface;
+        const roughMesh = new THREE.Mesh(roughGeometry); // Create mesh first
+        roughMesh.rotation.x = Math.PI / 2; // Rotate ShapeGeometry like before
+        roughMesh.position.set(0, roughSurface?.height ?? 0.0, 0); // Use defined height or fallback
         roughMesh.receiveShadow = true;
-        scene.add(roughMesh);
+
+        if (roughSurface && roughSurface.texturePath) {
+            textureLoader.load(
+                roughSurface.texturePath,
+                // onLoad callback
+                (texture) => {
+                    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+                    // --- Simple Texture Repetition for Testing ---
+                    const simpleRepetitions = 10; // Test value
+                    texture.repeat.set(simpleRepetitions, simpleRepetitions);
+                    console.log(`Rough Shape: Set simple texture repeat ${simpleRepetitions}x${simpleRepetitions}`);
+                    // texture.needsUpdate = true; // Not needed when set before first render
+
+                    roughMesh.material = new THREE.MeshStandardMaterial({ // Using StandardMaterial
+                        map: texture,
+                        side: THREE.DoubleSide
+                        // vertexColors: false // Vertex colors removed
+                    });
+                    roughMesh.material.needsUpdate = true; // Important: update material when texture loads
+                    console.log(`Texture ${roughSurface.texturePath} loaded and applied to rough.`);
+                },
+                // onProgress callback (optional)
+                undefined,
+                // onError callback
+                (err) => {
+                    console.error(`Error loading rough texture: ${roughSurface.texturePath}`, err);
+                    // Fallback to color on error
+                    roughMesh.material = new THREE.MeshStandardMaterial({ // Using StandardMaterial
+                        color: roughSurface?.color || '#228b22',
+                        side: THREE.DoubleSide
+                        // vertexColors: false
+                    });
+                    roughMesh.material.needsUpdate = true;
+                }
+            );
+        } else {
+            // Apply color immediately if no texture path
+            roughMesh.material = new THREE.MeshStandardMaterial({ // Using StandardMaterial
+                color: roughSurface?.color || '#228b22', // Fallback color
+                side: THREE.DoubleSide
+                // vertexColors: false
+            });
+            console.log("Applied color to rough.");
+        }
+        scene.add(roughMesh); // Add mesh to scene (material will be applied async if texture loads)
         currentHoleObjects.push(roughMesh);
     }
 
@@ -215,16 +259,54 @@ export function drawHoleLayout(holeLayout) {
         const fairwayGeometry = new THREE.ShapeGeometry(fairwayShape);
         // Geometry is created using world coordinates, no centering needed.
 
-        const fairwayMaterial = new THREE.MeshLambertMaterial({
-            color: holeLayout.fairway.surface.color,
-            side: THREE.DoubleSide
-        });
-        const fairwayMesh = new THREE.Mesh(fairwayGeometry, fairwayMaterial);
+        // --- Fairway Material (Texture or Color) ---
+        const fairwaySurface = holeLayout.fairway.surface;
+        const fairwayMesh = new THREE.Mesh(fairwayGeometry); // Create mesh first
         fairwayMesh.rotation.x = Math.PI / 2; // Positive rotation
-        // Position mesh using surface height
-        fairwayMesh.position.set(0, holeLayout.fairway.surface.height ?? 0.01, 0); // Use defined height or fallback
+        fairwayMesh.position.set(0, fairwaySurface?.height ?? 0.01, 0); // Use defined height or fallback
         fairwayMesh.receiveShadow = true;
-        scene.add(fairwayMesh);
+
+        if (fairwaySurface && fairwaySurface.texturePath) {
+             textureLoader.load(
+                fairwaySurface.texturePath,
+                // onLoad callback
+                (texture) => {
+                    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+                    const textureWorldSize = 10; // meters (Increased from 5)
+                    fairwayGeometry.computeBoundingBox();
+                    const size = fairwayGeometry.boundingBox.getSize(new THREE.Vector3());
+                    texture.repeat.set(size.x / textureWorldSize, size.y / textureWorldSize);
+                    // texture.needsUpdate = true;
+
+                    fairwayMesh.material = new THREE.MeshStandardMaterial({ // Changed to StandardMaterial
+                        map: texture,
+                        side: THREE.DoubleSide
+                    });
+                    fairwayMesh.material.needsUpdate = true;
+                    console.log(`Texture ${fairwaySurface.texturePath} loaded and applied to fairway.`);
+                },
+                 // onProgress callback (optional)
+                undefined,
+                // onError callback
+                (err) => {
+                    console.error(`Error loading fairway texture: ${fairwaySurface.texturePath}`, err);
+                    // Fallback to color on error
+                    fairwayMesh.material = new THREE.MeshStandardMaterial({ // Changed to StandardMaterial
+                        color: fairwaySurface?.color || '#5DBB5D',
+                        side: THREE.DoubleSide
+                    });
+                    fairwayMesh.material.needsUpdate = true;
+                }
+            );
+        } else {
+             // Apply color immediately if no texture path
+            fairwayMesh.material = new THREE.MeshStandardMaterial({ // Changed to StandardMaterial
+                color: fairwaySurface?.color || '#5DBB5D', // Fallback color
+                side: THREE.DoubleSide
+            });
+            console.log("Applied color to fairway.");
+        }
+        scene.add(fairwayMesh); // Add mesh to scene
         currentHoleObjects.push(fairwayMesh);
     }
 
@@ -242,15 +324,54 @@ export function drawHoleLayout(holeLayout) {
         greenShape.closePath();
 
         const greenGeometry = new THREE.ShapeGeometry(greenShape);
-        const greenMaterial = new THREE.MeshLambertMaterial({
-            color: holeLayout.green.surface.color,
-            side: THREE.DoubleSide
-        });
-        const greenMesh = new THREE.Mesh(greenGeometry, greenMaterial);
+        // --- Green Material (Texture or Color) ---
+        const greenSurface = holeLayout.green.surface;
+        const greenMesh = new THREE.Mesh(greenGeometry); // Create mesh first
         greenMesh.rotation.x = Math.PI / 2; // Rotate polygon to lay flat like fairway/rough
         greenMesh.position.set(0, greenHeight, 0); // Position mesh using surface height
         greenMesh.receiveShadow = true;
-        scene.add(greenMesh);
+
+         if (greenSurface && greenSurface.texturePath) {
+             textureLoader.load(
+                greenSurface.texturePath,
+                // onLoad callback
+                (texture) => {
+                    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+                    const textureWorldSize = 4; // meters (Increased from 2)
+                    greenGeometry.computeBoundingBox();
+                    const size = greenGeometry.boundingBox.getSize(new THREE.Vector3());
+                    texture.repeat.set(size.x / textureWorldSize, size.y / textureWorldSize);
+                    // texture.needsUpdate = true;
+
+                    greenMesh.material = new THREE.MeshStandardMaterial({ // Changed to StandardMaterial
+                        map: texture,
+                        side: THREE.DoubleSide
+                    });
+                    greenMesh.material.needsUpdate = true;
+                    console.log(`Texture ${greenSurface.texturePath} loaded and applied to green.`);
+                },
+                 // onProgress callback (optional)
+                undefined,
+                // onError callback
+                (err) => {
+                    console.error(`Error loading green texture: ${greenSurface.texturePath}`, err);
+                    // Fallback to color on error
+                    greenMesh.material = new THREE.MeshStandardMaterial({ // Changed to StandardMaterial
+                        color: greenSurface?.color || '#3A9A3A',
+                        side: THREE.DoubleSide
+                    });
+                    greenMesh.material.needsUpdate = true;
+                }
+            );
+        } else {
+             // Apply color immediately if no texture path
+            greenMesh.material = new THREE.MeshStandardMaterial({ // Changed to StandardMaterial
+                color: greenSurface?.color || '#3A9A3A', // Fallback color
+                side: THREE.DoubleSide
+            });
+            console.log("Applied color to green.");
+        }
+        scene.add(greenMesh); // Add mesh to scene
         currentHoleObjects.push(greenMesh);
 
         // TODO: Revisit how to store green center/radius for polygon shapes if needed later
