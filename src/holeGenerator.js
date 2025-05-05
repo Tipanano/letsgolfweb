@@ -87,7 +87,7 @@ const basicHoleLayout = {
             { x: -15, z: 180 }, { x: -15, z: 150 }, { x: -30, z: 120 },
             // Close path back to start { x: -50, z: -15 } is implicit
         ],
-        surface: SURFACES.MEDIUM_ROUGH
+        surface: SURFACES.THICK_ROUGH
     },
     green: { // Define using control points
         controlPoints: greenControlPoints,

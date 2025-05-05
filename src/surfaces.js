@@ -40,7 +40,7 @@ export const SURFACES = {
     },
     height: 0.01, // Visual height
     texturePath: 'assets/textures/fairway.png', // Added texture path
-    ballLieOffset: -0.005 // Slightly into
+    ballLieOffset: -0.08 // Slightly into
   },
   LIGHT_ROUGH: {
     name: 'Light Rough',
@@ -54,7 +54,7 @@ export const SURFACES = {
     },
     height: 0.00, // Base rough height
     texturePath: 'assets/textures/rough.png', // Added texture path
-    ballLieOffset: -0.01 // Slightly into
+    ballLieOffset: -0.13 // Slightly into
   },
   MEDIUM_ROUGH: {
     name: 'Medium Rough',
@@ -68,7 +68,7 @@ export const SURFACES = {
     },
     height: 0.00, // Visual height (same as light rough for now)
     texturePath: 'assets/textures/rough.png', // Added texture path
-    ballLieOffset: -0.02 // Half hidden
+    ballLieOffset: -0.25 // Half hidden
   },
   THICK_ROUGH: {
     name: 'Thick Rough',
@@ -82,7 +82,7 @@ export const SURFACES = {
     },
     height: 0.00, // Visual height (same as medium rough for now)
     texturePath: 'assets/textures/rough.png', // Added texture path
-    ballLieOffset: -0.035 // Almost hidden
+    ballLieOffset: -0.335 // Almost hidden
   },
   BUNKER: {
     name: 'Bunker',
@@ -96,7 +96,7 @@ export const SURFACES = {
     },
     height: 0.04, // Visual height (highest)
     texturePath: 'assets/textures/bunker.png', // Added texture path
-    ballLieOffset: -0.01 // Slightly into
+    ballLieOffset: -0.12 // Slightly into
   },
   WATER: {
     name: 'Water',

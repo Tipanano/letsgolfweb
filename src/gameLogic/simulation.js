@@ -170,7 +170,8 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club) 
 
 // --- Ground Roll Simulation ---
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js'; // For Vector3 operations
-import { getSurfaceProperties } from '../surfaces.js'; // To get friction coefficients
+// Import getSurfaceProperties which implicitly uses SURFACES
+import { getSurfaceProperties } from '../surfaces.js';
 import { BALL_RADIUS } from '../visuals/core.js'; // For ground check and hole interaction
 import { getFlagPosition } from '../visuals/holeView.js'; // To get hole coordinates
 
@@ -372,11 +373,80 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
         }
     }
 
-    console.log(`Sim (Roll): Finished. HoledOut=${isHoledOut}, Steps: ${steps}, Final Pos: (${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)})`);
+    // --- Apply Ball Lie Offset based on final surface ---
+    if (!isHoledOut && surfaceProps && typeof surfaceProps.ballLieOffset === 'number') {
+        console.log('BALL LIE OFFESET STUFF are we doing this at all???')
+        if (surfaceProps.ballLieOffset === -1) { // Special case for water
+            console.log("Sim (Roll): Ball ended in water, setting Y low.");
+            // Set Y significantly below typical surface height, e.g., based on water surface height
+            position.y = (surfaceProps.height ?? 0) - BALL_RADIUS * 2; // Example: below water surface
+        } else {
+            const finalY = BALL_RADIUS + surfaceProps.ballLieOffset;
+            console.log(`Sim (Roll): Applying lie offset. Surface: ${surfaceType}, Offset: ${surfaceProps.ballLieOffset.toFixed(3)}, Final Y: ${finalY.toFixed(3)}`);
+            position.y = finalY;
+        }
+    } else if (isHoledOut) {
+        console.log("Sim (Roll): Ball holed out, skipping lie offset.");
+    } else {
+        console.warn(`Sim (Roll): Could not apply lie offset. HoledOut=${isHoledOut}, SurfaceProps=${!!surfaceProps}, Offset=${surfaceProps?.ballLieOffset}`);
+        // Keep position.y as BALL_RADIUS if offset couldn't be applied and not holed out
+        position.y = BALL_RADIUS;
+    }
+
+    // --- Apply Ball Lie Offset to the final position AND the last trajectory point ---
+    let finalAdjustedY = BALL_RADIUS; // Default to standard radius height
+    if (!isHoledOut && surfaceProps && typeof surfaceProps.ballLieOffset === 'number') {
+        if (surfaceProps.ballLieOffset === -1) { // Special case for water
+            console.log("Sim (Roll): Ball ended in water, setting Y low.");
+            finalAdjustedY = (surfaceProps.height ?? 0) - BALL_RADIUS * 2; // Example: below water surface
+        } else {
+            finalAdjustedY = BALL_RADIUS + surfaceProps.ballLieOffset;
+            console.log(`Sim (Roll): Applying lie offset. Surface: ${surfaceType}, Offset: ${surfaceProps.ballLieOffset.toFixed(3)}, Final Y: ${finalAdjustedY.toFixed(3)}`);
+        }
+        position.y = finalAdjustedY; // Update the final position vector
+
+        // Also update the last point in the trajectory array
+        if (rollTrajectoryPoints.length > 0) {
+            rollTrajectoryPoints[rollTrajectoryPoints.length - 1].y = finalAdjustedY;
+        }
+
+    } else if (isHoledOut) {
+        console.log("Sim (Roll): Ball holed out, using hole depth Y.");
+        finalAdjustedY = position.y; // Use the Y position set during hole-in check
+         // Update the last trajectory point for hole-in as well
+         if (rollTrajectoryPoints.length > 0) {
+            rollTrajectoryPoints[rollTrajectoryPoints.length - 1].y = finalAdjustedY;
+        }
+    } else {
+        console.warn(`Sim (Roll): Could not apply lie offset. HoledOut=${isHoledOut}, SurfaceProps=${!!surfaceProps}, Offset=${surfaceProps?.ballLieOffset}`);
+        position.y = finalAdjustedY; // Ensure final position uses the default BALL_RADIUS height
+        // Update the last trajectory point to default height too
+        if (rollTrajectoryPoints.length > 0) {
+            rollTrajectoryPoints[rollTrajectoryPoints.length - 1].y = finalAdjustedY;
+        }
+    }
+
+    // --- Final Logging Before Return ---
+    console.log("--- Sim (Roll) Final State ---");
+    console.log(`Surface Type: ${surfaceType}`);
+    console.log(`Surface Props:`, surfaceProps);
+    console.log(`Ball Radius: ${BALL_RADIUS.toFixed(3)}`);
+    console.log(`Calculated Lie Offset: ${surfaceProps?.ballLieOffset?.toFixed(3) ?? 'N/A'}`);
+    console.log(`Final Adjusted Y: ${finalAdjustedY.toFixed(3)}`);
+    console.log(`Final Position Vec: (${position.x.toFixed(3)}, ${position.y.toFixed(3)}, ${position.z.toFixed(3)})`);
+    if (rollTrajectoryPoints.length > 0) {
+        console.log(`Last Trajectory Point Y: ${rollTrajectoryPoints[rollTrajectoryPoints.length - 1].y.toFixed(3)}`);
+    } else {
+        console.log(`Last Trajectory Point Y: N/A (No roll points)`);
+    }
+    console.log("-----------------------------");
+
+
+    console.log(`Sim (Roll): Finished. HoledOut=${isHoledOut}, Steps: ${steps}, Final Pos Adjusted: (${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)})`);
 
     return {
-        finalPosition: position,
+        finalPosition: position, // Position now includes the lie offset adjustment
         isHoledOut: isHoledOut,
-        rollTrajectoryPoints: rollTrajectoryPoints // Return the collected points
+        rollTrajectoryPoints: rollTrajectoryPoints // Return the collected points (last point Y is now adjusted)
     };
 }

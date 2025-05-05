@@ -7,8 +7,10 @@ import {
     getBackswingStartTime, // <-- Added missing import
     getShotDirectionAngle, // <-- Gets RELATIVE angle
     getCurrentTargetLineAngle, // <-- Gets ABSOLUTE target line angle
+    // getCurrentHoleLayout is NOT in state.js
     IDEAL_BACKSWING_DURATION_MS // Removed PUTT_DISTANCE_FACTOR
 } from './state.js';
+import { getCurrentHoleLayout } from '../modes/playHole.js'; // <-- Import from correct module
 import { stopFullDownswingAnimation, stopChipDownswingAnimation /* Putt stopped in actions */ } from './animations.js';
 import { updateStatus, getBallPositionIndex, getBallPositionLevels } from '../ui.js';
 import { calculateImpactPhysics } from '../swingPhysics.js';
@@ -17,7 +19,7 @@ import { calculatePuttImpact } from '../puttPhysics.js';
 // Import both simulation functions and HOLE_RADIUS
 import { simulateFlightStepByStep, simulateGroundRoll, HOLE_RADIUS_METERS } from './simulation.js';
 // Removed Putt Trajectory import as roll simulation handles it
-import { clamp } from './utils.js';
+import { clamp, getSurfaceTypeAtPoint } from './utils.js'; // Import getSurfaceTypeAtPoint
 import { getCurrentGameMode } from '../main.js'; // Import mode checker
 import { getCurrentBallPosition as getPlayHoleBallPosition } from '../modes/playHole.js'; // Import position getter
 import { BALL_RADIUS, YARDS_TO_METERS } from '../visuals/core.js'; // Import BALL_RADIUS and conversion
@@ -125,21 +127,21 @@ export function calculateFullSwingShot() {
 
     // --- Run Ground Simulation (if not holed out) ---
     if (!isHoledOut) {
-        let surfaceType = 'rough'; // Default
-        // TODO: Implement proper surface detection based on holeLayout data
+        let surfaceType = 'OUT_OF_BOUNDS'; // Default to OOB
         if (currentMode === 'play-hole') {
-            const greenCenter = getGreenCenter();
-            const greenRadius = getGreenRadius();
-            if (greenCenter && greenRadius) {
-                const dxGreen = landingPositionObj.x - greenCenter.x;
-                const dzGreen = landingPositionObj.z - greenCenter.z;
-                surfaceType = (Math.sqrt(dxGreen*dxGreen + dzGreen*dzGreen) <= greenRadius) ? 'green' : 'fairway';
+            const currentHoleLayout = getCurrentHoleLayout(); // Get layout from state
+            if (currentHoleLayout) {
+                // Use the new utility function to determine surface type at landing position (meters)
+                surfaceType = getSurfaceTypeAtPoint(landingPositionObj, currentHoleLayout);
             } else {
-                 surfaceType = 'fairway'; // Fallback
+                console.warn("Calc (Full): Could not get hole layout for surface detection. Defaulting to FAIRWAY.");
+                surfaceType = 'FAIRWAY'; // Fallback if layout missing
             }
         } else {
-            surfaceType = 'fairway'; // Range mode etc.
+            surfaceType = 'FAIRWAY'; // Range mode etc.
         }
+        // Ensure surfaceType is uppercase for getSurfaceProperties lookup
+        surfaceType = surfaceType.toUpperCase().replace(' ', '_');
         console.log(`Calc (Full): Determined landing surface: ${surfaceType}`);
 
         const rollStartPosition = new THREE.Vector3(landingPositionObj.x, landingPositionObj.y, landingPositionObj.z);
@@ -349,21 +351,21 @@ export function calculateChipShot() {
 
     // --- Run Ground Simulation (if not holed out) ---
     if (!isHoledOut) {
-        let surfaceType = 'rough'; // Default
-        // TODO: Implement proper surface detection
+        let surfaceType = 'OUT_OF_BOUNDS'; // Default to OOB
         if (currentMode === 'play-hole') {
-            const greenCenter = getGreenCenter();
-            const greenRadius = getGreenRadius();
-            if (greenCenter && greenRadius) {
-                const dxGreen = landingPositionObj.x - greenCenter.x;
-                const dzGreen = landingPositionObj.z - greenCenter.z;
-                surfaceType = (Math.sqrt(dxGreen*dxGreen + dzGreen*dzGreen) <= greenRadius) ? 'green' : 'fairway';
-            } else {
-                 surfaceType = 'fairway'; // Fallback
-            }
+             const currentHoleLayout = getCurrentHoleLayout(); // Get layout from state
+             if (currentHoleLayout) {
+                 // Use the new utility function to determine surface type at landing position (meters)
+                 surfaceType = getSurfaceTypeAtPoint(landingPositionObj, currentHoleLayout);
+             } else {
+                 console.warn("Calc (Chip): Could not get hole layout for surface detection. Defaulting to FAIRWAY.");
+                 surfaceType = 'FAIRWAY'; // Fallback if layout missing
+             }
         } else {
-            surfaceType = 'fairway'; // Range mode etc.
+            surfaceType = 'FAIRWAY'; // Range mode etc.
         }
+         // Ensure surfaceType is uppercase for getSurfaceProperties lookup
+        surfaceType = surfaceType.toUpperCase().replace(' ', '_');
         console.log(`Calc (Chip): Determined landing surface: ${surfaceType}`);
 
         const rollStartPosition = new THREE.Vector3(landingPositionObj.x, landingPositionObj.y, landingPositionObj.z);

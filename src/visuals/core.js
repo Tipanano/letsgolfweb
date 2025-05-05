@@ -98,11 +98,12 @@ export function initCoreVisuals(canvasElement) {
     const ballMaterial = new THREE.MeshStandardMaterial({
         color: 0xffffff, // Keep white base color, texture will overlay
         map: ballTexture
-    });
-    ball = new THREE.Mesh(ballGeometry, ballMaterial);
-    ball.castShadow = true;
-    showBallAtAddress(); // Position the ball initially
-    scene.add(ball);
+     });
+     ball = new THREE.Mesh(ballGeometry, ballMaterial);
+     ball.castShadow = true;
+     // ball.renderOrder = 1; // REMOVED - Will use polygonOffset on terrain instead
+     showBallAtAddress(); // Position the ball initially
+     scene.add(ball);
 
     // Handle window resize
     window.addEventListener('resize', onWindowResize, false);
