@@ -1,6 +1,7 @@
 import { clubs } from '../clubs.js';
 import { setupTimingBarWindows, setBallPosition, getBallPositionLevels, setSwingSpeedControlState, updateTimingBarVisibility, setClubSelectValue } from '../ui.js';
-import { resetCameraPosition, setCameraForChipView, setCameraForPuttView } from '../visuals/core.js';
+// Import resetStaticCameraZoom along with other camera functions if needed, or just visuals module
+import { resetStaticCameraZoom } from '../visuals/core.js'; // Import the new zoom reset function
 import * as visuals from '../visuals.js'; // Import visuals main module
 import { resetUIForNewShot } from '../ui.js'; // Needed for resetSwingState
 
@@ -239,8 +240,9 @@ export function resetSwingState() { // Added 'export' keyword here
     currentTargetLineAngle = 0; // Reset target line angle
 
     resetUIForNewShot(); // Use the new reset function that preserves ball position
-    visuals.resetVisuals(); // Reset visuals (e.g., ball position)
-    console.log("Logic State: Full swing state reset (including visuals).");
+    visuals.resetVisuals(); // Reset visuals (e.g., ball position, tee)
+    resetStaticCameraZoom(); // Reset the static camera zoom level
+    console.log("Logic State: Full swing state reset (including visuals and zoom).");
 }
 
 // Resets only the core swing timing/state variables and animation IDs

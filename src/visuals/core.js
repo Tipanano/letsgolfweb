@@ -609,9 +609,9 @@ export function resetCameraPosition(angleToUse = 0) { // Accept angle parameter
     camera.position.copy(rotatedCamPos);
     camera.lookAt(rotatedLookAt);
     currentStaticView = 'range'; // Update stored static view type
-    staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // Reset zoom level
+    // staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // REMOVED: Don't reset zoom on aim/view change
     console.log(`Static camera set to: Range View (Angle: ${angleToUse.toFixed(1)})`);
-    updateStaticCameraPositionFromZoom(); // Apply initial zoom position
+    updateStaticCameraPositionFromZoom(); // Apply existing zoom level to new view
 }
 
 // Sets camera for Target view
@@ -640,9 +640,9 @@ export function setCameraForTargetView(targetZ = 150, angleToUse = 0) { // Accep
     camera.position.copy(rotatedCamPos);
     camera.lookAt(rotatedLookAt);
     currentStaticView = 'target'; // Update stored static view type
-    staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // Reset zoom level
+    // staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // REMOVED: Don't reset zoom on aim/view change
     console.log(`Static camera set to: Target View (Z=${targetZ.toFixed(1)}, Angle: ${angleToUse.toFixed(1)})`);
-    updateStaticCameraPositionFromZoom(); // Apply initial zoom position
+    updateStaticCameraPositionFromZoom(); // Apply existing zoom level to new view
 }
 
 // Sets camera for Chip view
@@ -666,9 +666,9 @@ export function setCameraForChipView(angleToUse = 0) { // Accept angle parameter
     camera.position.copy(rotatedCamPos);
     camera.lookAt(rotatedLookAt);
     currentStaticView = 'chip'; // Update stored static view type
-    staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // Reset zoom level
+    // staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // REMOVED: Don't reset zoom on aim/view change
     console.log(`Static camera set to: Chip View (Angle: ${angleToUse.toFixed(1)})`);
-    updateStaticCameraPositionFromZoom(); // Apply initial zoom position
+    updateStaticCameraPositionFromZoom(); // Apply existing zoom level to new view
 }
 
 // Sets camera for Putt view
@@ -692,9 +692,9 @@ export function setCameraForPuttView(angleToUse = 0) { // Accept angle parameter
     camera.position.copy(rotatedCamPos);
     camera.lookAt(rotatedLookAt);
     currentStaticView = 'putt'; // Update stored static view type
-    staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // Reset zoom level
+    // staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // REMOVED: Don't reset zoom on aim/view change
     console.log(`Static camera set to: Putt View (Angle: ${angleToUse.toFixed(1)})`);
-    updateStaticCameraPositionFromZoom(); // Apply initial zoom position
+    updateStaticCameraPositionFromZoom(); // Apply existing zoom level to new view
 }
 
 // Sets camera for Hole Tee view (overview)
@@ -719,9 +719,9 @@ export function setCameraForHoleTeeView(holeLengthYards = 400, angleToUse = 0) {
     camera.position.copy(rotatedCamPos);
     camera.lookAt(rotatedLookAt);
     currentStaticView = 'tee'; // Update stored static view type
-    staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // Reset zoom level
+    // staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // REMOVED: Don't reset zoom on aim/view change
     console.log(`Static camera set to: Hole Tee View (Angle: ${angleToUse.toFixed(1)}, looking towards Z=${(holeLengthMeters * 0.6).toFixed(1)})`);
-    updateStaticCameraPositionFromZoom(); // Apply initial zoom position
+    updateStaticCameraPositionFromZoom(); // Apply existing zoom level to new view
 }
 
 // Sets camera behind the ball, looking directly at a target, adjusting distance based on proximity
@@ -761,10 +761,10 @@ export function setCameraBehindBallLookingAtTarget(ballPosition, targetPosition,
     camera.lookAt(rotatedLookAt); // Look at the rotated target point
     currentStaticView = 'hole'; // Update stored static view type
     setActiveCameraMode(CameraMode.STATIC); // Ensure mode is static
-    staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // Reset zoom level
+    // staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // REMOVED: Don't reset zoom on aim/view change
 
     console.log(`Static camera set to: Hole View (Angle: ${angleToUse.toFixed(1)}, behind ball at ${ballPosition.z.toFixed(1)}, looking towards ${targetPosition.z.toFixed(1)})`);
-    updateStaticCameraPositionFromZoom(); // Apply initial zoom position
+    updateStaticCameraPositionFromZoom(); // Apply existing zoom level to new view
 }
 
 // Sets the initial position and lookAt for the follow camera, aiming at a target
@@ -871,10 +871,10 @@ export function setCameraBehindBall(targetPosition, viewType = 'range') { // Kee
     camera.position.copy(rotatedCamPos);
     camera.lookAt(rotatedLookAt);
     setActiveCameraMode(CameraMode.STATIC); // Ensure mode is static
-    staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // Reset zoom level
+    // staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // REMOVED: Don't reset zoom on aim/view change
 
     console.log(`Static camera set behind ball (Total Angle: ${totalAimAngle.toFixed(1)}) at (${targetPosVec3.x.toFixed(1)}, ${targetPosVec3.z.toFixed(1)}) with view type: ${currentStaticView}`);
-    updateStaticCameraPositionFromZoom(); // Apply initial zoom position
+    updateStaticCameraPositionFromZoom(); // Apply existing zoom level to new view
 }
 
 // Snaps the follow camera instantly to its starting offset relative to a target position
@@ -1052,6 +1052,15 @@ export function zoomCameraOut() {
         camera.updateProjectionMatrix();
         console.log(`FOV Zoom Out: FOV = ${camera.fov}`);
     }
+}
+
+// --- New function to explicitly reset static zoom ---
+export function resetStaticCameraZoom() {
+    staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL;
+    console.log("Static camera zoom level reset to default.");
+    // Optionally, call updateStaticCameraPositionFromZoom() here if the camera should
+    // immediately reflect the reset zoom level visually. Let's add it for consistency.
+    updateStaticCameraPositionFromZoom();
 }
 
 // --- Getters ---

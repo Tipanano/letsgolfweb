@@ -22,7 +22,7 @@ import { getDebugTimingData } from './utils.js';
 import { getCurrentGameMode } from '../main.js'; // Import mode checker
 import { getCurrentBallPosition as getPlayHoleBallPosition, getCurrentHoleLayout } from '../modes/playHole.js'; // Import position and layout getters for playHole
 import { getFlagPosition, setFlagstickVisibility } from '../visuals/holeView.js'; // Import flag position getter AND visibility setter
-import { getActiveCameraMode, setCameraBehindBall, snapFollowCameraToBall, CameraMode, removeTrajectoryLine, applyAimAngleToCamera, setCameraBehindBallLookingAtTarget, setInitialFollowCameraLookingAtTarget, setBallScale } from '../visuals/core.js'; // Import camera functions, line removal, aim application, AND setBallScale
+import { getActiveCameraMode, setCameraBehindBall, snapFollowCameraToBall, CameraMode, removeTrajectoryLine, applyAimAngleToCamera, setCameraBehindBallLookingAtTarget, setInitialFollowCameraLookingAtTarget, setBallScale, resetStaticCameraZoom } from '../visuals/core.js'; // Import camera functions, line removal, aim application, setBallScale, AND resetStaticCameraZoom
 import { getSurfaceTypeAtPoint } from './utils.js'; // Import surface checker
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js'; // Need THREE for Vector3
 
@@ -236,9 +236,8 @@ export function resetSwing() {
 export function prepareNextShot() {
     console.log("Action: Preparing next shot (resetting variables only).");
     stopAllAnimations(); // Stop any running animations
-
-    // *** ADD THIS LINE ***
     removeTrajectoryLine(); // Remove the visual trajectory line
+    resetStaticCameraZoom(); // Reset the static camera zoom level
 
     resetSwingVariablesOnly(); // Calls the variable-only reset in state.js
     resetUIForNewShot(); // Reset timing bars and other relevant UI elements
