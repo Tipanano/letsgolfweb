@@ -22,7 +22,7 @@ import { getDebugTimingData } from './utils.js';
 import { getCurrentGameMode } from '../main.js'; // Import mode checker
 import { getCurrentBallPosition as getPlayHoleBallPosition } from '../modes/playHole.js'; // Import position getter for playHole ball
 import { getFlagPosition } from '../visuals/holeView.js'; // Import flag position getter
-import { getActiveCameraMode, setCameraBehindBall, snapFollowCameraToBall, CameraMode, removeTrajectoryLine, applyAimAngleToCamera, setCameraBehindBallLookingAtTarget } from '../visuals/core.js'; // Import camera functions, line removal, and aim application
+import { getActiveCameraMode, setCameraBehindBall, snapFollowCameraToBall, CameraMode, removeTrajectoryLine, applyAimAngleToCamera, setCameraBehindBallLookingAtTarget, setInitialFollowCameraLookingAtTarget } from '../visuals/core.js'; // Import camera functions, line removal, and aim application
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js'; // Need THREE for Vector3
 
 // --- Action Functions for Input Handler ---
@@ -255,6 +255,7 @@ export function prepareNextShot() {
         const ballPos = ballPosData ? new THREE.Vector3(ballPosData.x, ballPosData.y, ballPosData.z) : null;
 
         // --- Set Default Aim Angle ---
+        let angleDeg = 0; // Initialize angleDeg
         if (ballPos && targetPos) {
             const dx = targetPos.x - ballPos.x;
             const dz = targetPos.z - ballPos.z;
@@ -262,7 +263,7 @@ export function prepareNextShot() {
             // atan2 gives angle in radians from -PI to PI
             const angleRad = Math.atan2(dx, dz);
             // Convert to degrees (0-360 or -180 to 180, doesn't matter as long as consistent)
-            const angleDeg = angleRad * (180 / Math.PI);
+            angleDeg = angleRad * (180 / Math.PI); // Assign calculated angle
             setShotDirectionAngle(angleDeg);
             console.log(`Action: Setting default aim angle to hole: ${angleDeg.toFixed(1)} degrees`);
         } else {
@@ -276,14 +277,16 @@ export function prepareNextShot() {
         if (ballPos && targetPos) { // Ensure we have positions before setting camera
             const distance = ballPos.distanceTo(targetPos);
             if (activeCamMode === CameraMode.STATIC) {
-                // Re-apply the specific 'hole' view using the correct function
-                setCameraBehindBallLookingAtTarget(ballPos, targetPos, distance);
+                // *** FIX 1: Pass the calculated angleDeg ***
+                setCameraBehindBallLookingAtTarget(ballPos, targetPos, distance, angleDeg);
             } else if (activeCamMode === CameraMode.FOLLOW_BALL) {
-                snapFollowCameraToBall(ballPos); // Snap follow cam to new position
+                 // *** FIX 2: Call with correct signature (no distance, no angle needed) ***
+                setInitialFollowCameraLookingAtTarget(ballPos, targetPos);
             } else if (activeCamMode === CameraMode.REVERSE_ANGLE || activeCamMode === CameraMode.GREEN_FOCUS) {
                 // If reverse or green view, switch back to the standard 'hole' static view
                 console.log(`Action: Switching from ${activeCamMode} to static hole view.`);
-                setCameraBehindBallLookingAtTarget(ballPos, targetPos, distance);
+                 // *** FIX 3: Pass the calculated angleDeg ***
+                setCameraBehindBallLookingAtTarget(ballPos, targetPos, distance, angleDeg);
             }
         } else {
              console.warn("Action: Cannot update camera position for next shot, missing ball or target position.");

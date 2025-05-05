@@ -4,6 +4,7 @@ import * as RangeVisuals from './visuals/range.js';
 import * as TargetVisuals from './visuals/targetView.js'; // Includes green getters
 import * as HoleVisuals from './visuals/holeView.js'; // Import the new hole view module (includes getFlagPosition)
 import { getCurrentShotType } from './gameLogic.js'; // Import shot type getter
+import { setShotDirectionAngle, getCurrentTargetLineAngle, getShotDirectionAngle } from './gameLogic/state.js'; // Import state setter for angle
 import { getCurrentGameMode } from './main.js'; // Import game mode getter
 
 // Store references from core visuals if needed
@@ -294,16 +295,19 @@ export function activateHoleViewCamera() {
     if (ballPosition && targetPosition) {
         // Calculate distance for camera adjustment
         const distance = ballPosition.distanceTo(targetPosition);
-        // Note: distanceTo includes Y difference, which is usually small.
-        // If precise XZ distance is needed later, use:
-        // const distanceXZ = new THREE.Vector2(ballPosition.x, ballPosition.z)
-        //    .distanceTo(new THREE.Vector2(targetPosition.x, targetPosition.z));
 
-        CoreVisuals.setCameraBehindBallLookingAtTarget(ballPosition, targetPosition, distance);
+        // --- Get Current Aim Angle (Don't Reset) ---
+        const currentTargetAngle = getCurrentTargetLineAngle();
+        const currentRelativeAngle = getShotDirectionAngle();
+        const totalAimAngle = currentTargetAngle + currentRelativeAngle;
+        console.log(`Visuals: Activating hole view with existing total aim angle: ${totalAimAngle.toFixed(1)}`);
+
+        // Call the core function, passing the existing total angle
+        CoreVisuals.setCameraBehindBallLookingAtTarget(ballPosition, targetPosition, distance, totalAimAngle);
     } else {
         console.warn("Could not activate hole view camera: Missing ball or target position.");
         // Fallback to default static view?
-        switchToStaticCamera();
+        switchToStaticCamera(); // Fallback remains the same
     }
 }
 

@@ -210,8 +210,8 @@ function updateCamera(timestamp) {
     const totalAimAngle = getCurrentTargetLineAngle() + getShotDirectionAngle();
 
     if (activeCameraMode === CameraMode.FOLLOW_BALL && isBallAnimating) {
-        // Base offset (behind and above)
-        const baseOffset = new THREE.Vector3(0, 3, -6);
+        // Base offset (behind, above, and slightly to the right)
+        const baseOffset = new THREE.Vector3(2, 3, -6); // Changed X from 0 to 2
         // Rotate the offset based on the TOTAL aim angle around the Y-axis using applyAxisAngle
         // Keep negation for reversed controls
         const rotatedOffset = baseOffset.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(-totalAimAngle));
@@ -283,7 +283,8 @@ export function applyAimAngleToCamera() {
                     const ballPosVec3 = ballPos instanceof THREE.Vector3 ? ballPos : new THREE.Vector3(ballPos.x, ballPos.y, ballPos.z);
                     const distance = ballPosVec3.distanceTo(targetPos);
                     // Re-apply the specific hole view function with current positions and the new angle
-                    setCameraBehindBallLookingAtTarget(ballPosVec3, targetPos, distance, totalAimAngle); // Pass total angle
+                    // *** FIX 1: Ensure totalAimAngle is passed ***
+                    setCameraBehindBallLookingAtTarget(ballPosVec3, targetPos, distance, totalAimAngle);
                 } else {
                     console.warn("applyAimAngleToCamera: Could not get ball/target position for hole view update. Resetting to range.");
                     resetCameraPosition(0); // Fallback if positions unavailable (reset with 0 angle)
@@ -294,24 +295,38 @@ export function applyAimAngleToCamera() {
                  resetCameraPosition(0); // Reset with 0 angle
                  break;
         }
-    } else if (activeCameraMode === CameraMode.FOLLOW_BALL) {
-        // If follow ball mode is active *before* the shot (not animating),
-        // update its position based on the aim angle relative to the stationary ball.
-        // Use the current ball position if available, otherwise default pivot.
-        const pivot = ball ? ball.position.clone() : BALL_PIVOT_POINT.clone();
+    } else if (activeCameraMode === CameraMode.FOLLOW_BALL && !isBallAnimating) {
+        // --- Follow Cam Aiming BEFORE Shot ---
+        // *** FIX 2: Replace logic for aiming before shot ***
+        const ballPos = ball ? ball.position.clone() : null; // Use current ball position
+        const targetPos = getFlagPosition(); // Get the actual target (flag)
 
-        // Base offset (behind and above)
-        const baseOffset = new THREE.Vector3(0, 3, -6);
-        // Rotate the offset using the TOTAL angle (keep negation for reversed controls)
-        const rotatedOffset = baseOffset.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(-totalAimAngle));
-        // Calculate position relative to the pivot point
-        const targetPosition = pivot.clone().add(rotatedOffset);
-        // Look at the pivot point (or slightly ahead based on angle?)
-        // For simplicity, look at the pivot (ball position)
-        const lookAtTarget = pivot;
+        if (ballPos && targetPos) {
+            const pivot = ballPos;
+            const distanceBehind = 6; // Use consistent offset
+            const cameraHeight = 3;   // Use consistent offset
 
-        camera.position.copy(targetPosition); // Snap position
-        camera.lookAt(lookAtTarget);          // Snap lookAt
+            // Calculate direction from target to ball (this implicitly includes currentTargetLineAngle)
+            // We need a base position assuming 0 degrees, then rotate by totalAimAngle
+            const baseDirection = new THREE.Vector3(0, 0, 1); // Standard direction (down +Z)
+            const baseOffsetVector = baseDirection.clone().multiplyScalar(-distanceBehind); // Go backwards along Z
+            baseOffsetVector.y = cameraHeight; // Add height
+
+            const baseCamPos = pivot.clone().add(baseOffsetVector); // Base position relative to pivot at 0 degrees
+
+            // Base LookAt: Should be a point far ahead along the 0-degree line from the pivot
+            const baseLookAtTargetPoint = pivot.clone().add(new THREE.Vector3(0, 0, 100)); // Look 100 units down +Z from pivot
+
+            // Rotate Position and LookAt around the ball (pivot) using the total angle
+            const rotatedCamPos = rotatePointAroundPivot(baseCamPos, pivot, totalAimAngle);
+            const rotatedLookAt = rotatePointAroundPivot(baseLookAtTargetPoint, pivot, totalAimAngle); // Rotate lookAt too!
+
+            camera.position.copy(rotatedCamPos); // Snap position
+            camera.lookAt(rotatedLookAt);        // Snap lookAt to rotated target point
+        } else {
+            console.warn("applyAimAngleToCamera (FOLLOW_BALL aiming): Could not get ball/target position for update.");
+            // Optional: Add fallback if needed
+        }
     }
     // Other modes (Reverse, Green) likely don't need aiming adjustments.
 }
@@ -503,13 +518,17 @@ export function resetCameraPosition(angleToUse = 0) { // Accept angle parameter
     // const aimAngle = getShotDirectionAngle(); // REMOVED - Use parameter
     const pivot = BALL_PIVOT_POINT;
 
-    // Base position and lookAt relative to pivot (0,0,0) before rotation
-    const baseCamPos = new THREE.Vector3(0, 18, -25);
-    const baseLookAt = new THREE.Vector3(0, 0, 80);
+    // Base position and lookAt relative to pivot (0,0,0) assuming 0 degrees
+    const baseCamPosOffset = new THREE.Vector3(0, 18, -25); // Offset from pivot
+    const baseLookAtOffset = new THREE.Vector3(0, 0, 80);  // Offset from pivot
+
+    // Calculate absolute base positions before rotation
+    const baseCamPos = pivot.clone().add(baseCamPosOffset);
+    const baseLookAtTargetPoint = pivot.clone().add(baseLookAtOffset);
 
     // Rotate points around the pivot using the provided angle
-    const rotatedCamPos = rotatePointAroundPivot(baseCamPos.add(pivot), pivot, angleToUse);
-    const rotatedLookAt = rotatePointAroundPivot(baseLookAt.add(pivot), pivot, angleToUse);
+    const rotatedCamPos = rotatePointAroundPivot(baseCamPos, pivot, angleToUse);
+    const rotatedLookAt = rotatePointAroundPivot(baseLookAtTargetPoint, pivot, angleToUse);
 
     camera.position.copy(rotatedCamPos);
     camera.lookAt(rotatedLookAt);
@@ -525,15 +544,20 @@ export function setCameraForTargetView(targetZ = 150, angleToUse = 0) { // Accep
     // const aimAngle = getShotDirectionAngle(); // REMOVED - Use parameter
     const pivot = BALL_PIVOT_POINT; // Assume aiming relative to the ball at the tee
 
-    // Base position and lookAt relative to pivot (0,0,0) before rotation
+    // Base position and lookAt relative to pivot (0,0,0) assuming 0 degrees
     const cameraHeight = 20;
     const cameraDistBack = 30; // Distance behind the target Z plane
-    const baseCamPos = new THREE.Vector3(0, cameraHeight, targetZ - cameraDistBack);
-    const baseLookAt = new THREE.Vector3(0, 0, targetZ / 1.5); // Look towards target Z
+    // Base offsets assume target is down +Z from pivot at 0 degrees
+    const baseCamPosOffset = new THREE.Vector3(0, cameraHeight, targetZ - cameraDistBack);
+    const baseLookAtOffset = new THREE.Vector3(0, 0, targetZ / 1.5); // Look towards target Z
+
+    // Calculate absolute base positions before rotation
+    const baseCamPos = pivot.clone().add(baseCamPosOffset);
+    const baseLookAtTargetPoint = pivot.clone().add(baseLookAtOffset);
 
     // Rotate points around the pivot using the provided angle
-    const rotatedCamPos = rotatePointAroundPivot(baseCamPos.add(pivot), pivot, angleToUse);
-    const rotatedLookAt = rotatePointAroundPivot(baseLookAt.add(pivot), pivot, angleToUse);
+    const rotatedCamPos = rotatePointAroundPivot(baseCamPos, pivot, angleToUse);
+    const rotatedLookAt = rotatePointAroundPivot(baseLookAtTargetPoint, pivot, angleToUse);
 
     camera.position.copy(rotatedCamPos);
     camera.lookAt(rotatedLookAt);
@@ -547,13 +571,17 @@ export function setCameraForChipView(angleToUse = 0) { // Accept angle parameter
     // const aimAngle = getShotDirectionAngle(); // REMOVED - Use parameter
     const pivot = ball ? ball.position.clone() : BALL_PIVOT_POINT.clone(); // Pivot around current ball pos if available
 
-    // Base position and lookAt relative to pivot before rotation
-    const baseCamPos = new THREE.Vector3(0, 4, -8);
-    const baseLookAt = new THREE.Vector3(0, 0, 20);
+    // Base position and lookAt relative to pivot assuming 0 degrees
+    const baseCamPosOffset = new THREE.Vector3(0, 4, -8); // Offset from pivot
+    const baseLookAtOffset = new THREE.Vector3(0, 0, 20); // Offset from pivot
+
+    // Calculate absolute base positions before rotation
+    const baseCamPos = pivot.clone().add(baseCamPosOffset);
+    const baseLookAtTargetPoint = pivot.clone().add(baseLookAtOffset);
 
     // Rotate points around the pivot using the provided angle
-    const rotatedCamPos = rotatePointAroundPivot(baseCamPos.add(pivot), pivot, angleToUse);
-    const rotatedLookAt = rotatePointAroundPivot(baseLookAt.add(pivot), pivot, angleToUse);
+    const rotatedCamPos = rotatePointAroundPivot(baseCamPos, pivot, angleToUse);
+    const rotatedLookAt = rotatePointAroundPivot(baseLookAtTargetPoint, pivot, angleToUse);
 
     camera.position.copy(rotatedCamPos);
     camera.lookAt(rotatedLookAt);
@@ -567,13 +595,17 @@ export function setCameraForPuttView(angleToUse = 0) { // Accept angle parameter
     // const aimAngle = getShotDirectionAngle(); // REMOVED - Use parameter
     const pivot = ball ? ball.position.clone() : BALL_PIVOT_POINT.clone(); // Pivot around current ball pos if available
 
-    // Use chip view settings for now
-    const baseCamPos = new THREE.Vector3(0, 4, -8);
-    const baseLookAt = new THREE.Vector3(0, 0, 20);
+    // Base position and lookAt relative to pivot assuming 0 degrees (using chip settings)
+    const baseCamPosOffset = new THREE.Vector3(0, 4, -8); // Offset from pivot
+    const baseLookAtOffset = new THREE.Vector3(0, 0, 20); // Offset from pivot
+
+    // Calculate absolute base positions before rotation
+    const baseCamPos = pivot.clone().add(baseCamPosOffset);
+    const baseLookAtTargetPoint = pivot.clone().add(baseLookAtOffset);
 
     // Rotate points around the pivot using the provided angle
-    const rotatedCamPos = rotatePointAroundPivot(baseCamPos.add(pivot), pivot, angleToUse);
-    const rotatedLookAt = rotatePointAroundPivot(baseLookAt.add(pivot), pivot, angleToUse);
+    const rotatedCamPos = rotatePointAroundPivot(baseCamPos, pivot, angleToUse);
+    const rotatedLookAt = rotatePointAroundPivot(baseLookAtTargetPoint, pivot, angleToUse);
 
     camera.position.copy(rotatedCamPos);
     camera.lookAt(rotatedLookAt);
@@ -588,13 +620,17 @@ export function setCameraForHoleTeeView(holeLengthYards = 400, angleToUse = 0) {
     const pivot = BALL_PIVOT_POINT; // Pivot around tee box
 
     const holeLengthMeters = holeLengthYards * YARDS_TO_METERS;
-    // Base position and lookAt relative to pivot before rotation
-    const baseCamPos = new THREE.Vector3(0, 30, -40);
-    const baseLookAt = new THREE.Vector3(0, 5, holeLengthMeters * 0.6);
+    // Base position and lookAt relative to pivot assuming 0 degrees
+    const baseCamPosOffset = new THREE.Vector3(0, 30, -40); // Offset from pivot
+    const baseLookAtOffset = new THREE.Vector3(0, 5, holeLengthMeters * 0.6); // Offset from pivot
+
+    // Calculate absolute base positions before rotation
+    const baseCamPos = pivot.clone().add(baseCamPosOffset);
+    const baseLookAtTargetPoint = pivot.clone().add(baseLookAtOffset);
 
     // Rotate points around the pivot using the provided angle
-    const rotatedCamPos = rotatePointAroundPivot(baseCamPos.add(pivot), pivot, angleToUse);
-    const rotatedLookAt = rotatePointAroundPivot(baseLookAt.add(pivot), pivot, angleToUse);
+    const rotatedCamPos = rotatePointAroundPivot(baseCamPos, pivot, angleToUse);
+    const rotatedLookAt = rotatePointAroundPivot(baseLookAtTargetPoint, pivot, angleToUse);
 
     camera.position.copy(rotatedCamPos);
     camera.lookAt(rotatedLookAt);
@@ -609,7 +645,7 @@ export function setCameraBehindBallLookingAtTarget(ballPosition, targetPosition,
     // const aimAngle = getShotDirectionAngle(); // REMOVED - Use parameter
     const pivot = ballPosition.clone(); // Pivot around the current ball position
 
-    // --- Calculate Base Position and LookAt (as before) ---
+    // --- Calculate Distance/Height (Remains the same) ---
     const maxDist = 50;
     const minDistBehind = 8;
     const maxDistBehind = 25;
@@ -620,16 +656,20 @@ export function setCameraBehindBallLookingAtTarget(ballPosition, targetPosition,
     const distanceBehind = THREE.MathUtils.lerp(minDistBehind, maxDistBehind, interpFactor);
     const cameraHeight = THREE.MathUtils.lerp(minHeight, maxHeight, interpFactor);
     console.log(`Distance: ${distanceToTarget.toFixed(1)}m, Interp: ${interpFactor.toFixed(2)}, DistBehind: ${distanceBehind.toFixed(1)}, Height: ${cameraHeight.toFixed(1)}`);
-    const direction = new THREE.Vector3(ballPosition.x - targetPosition.x, 0, ballPosition.z - targetPosition.z).normalize();
-    const baseCamPos = new THREE.Vector3()
-        .copy(ballPosition)
-        .addScaledVector(direction, distanceBehind)
-        .add(new THREE.Vector3(0, cameraHeight, 0));
-    const baseLookAt = targetPosition.clone();
 
-    // --- Rotate Position and LookAt around the ball (pivot) using the provided angle ---
+    // --- Calculate Base Position and LookAt (Relative to Pivot at 0 degrees) ---
+    // Assume 0 degrees means looking down positive Z axis from behind the ball
+    const baseDirection = new THREE.Vector3(0, 0, 1); // Direction FROM pivot at 0 degrees
+    const baseOffsetVector = baseDirection.clone().multiplyScalar(-distanceBehind); // Go backwards
+    baseOffsetVector.y = cameraHeight; // Add height
+    const baseCamPos = pivot.clone().add(baseOffsetVector); // Base position relative to pivot
+
+    // Base LookAt: Point far ahead along the 0-degree line from the pivot
+    const baseLookAtTargetPoint = pivot.clone().add(new THREE.Vector3(0, 0, 100)); // Look 100 units down +Z from pivot
+
+    // --- Rotate Position and LookAt around the ball (pivot) using the provided angleToUse ---
     const rotatedCamPos = rotatePointAroundPivot(baseCamPos, pivot, angleToUse);
-    const rotatedLookAt = rotatePointAroundPivot(baseLookAt, pivot, angleToUse); // Rotate the lookAt target as well
+    const rotatedLookAt = rotatePointAroundPivot(baseLookAtTargetPoint, pivot, angleToUse); // Rotate the baseLookAt target point as well
 
     camera.position.copy(rotatedCamPos);
     camera.lookAt(rotatedLookAt); // Look at the rotated target point
@@ -643,35 +683,34 @@ export function setCameraBehindBallLookingAtTarget(ballPosition, targetPosition,
 export function setInitialFollowCameraLookingAtTarget(ballPosition, targetPosition) {
     if (!camera || !ballPosition || !targetPosition) return;
 
-    // Calculate the total angle here
-    const totalAimAngle = getCurrentTargetLineAngle() + getShotDirectionAngle();
+    // Calculate the angle this view should use (typically 0 for initial setup, but use state for consistency)
+    // This function is usually called *before* aiming, so relative angle should be 0.
+    // It sets the camera based on the *target line* only.
+    const angleToUse = getCurrentTargetLineAngle(); // Use the absolute target line angle
     const pivot = ballPosition.clone(); // Pivot around the ball
 
     const distanceBehind = 6; // How far behind the ball
     const cameraHeight = 3;   // How high above the ball's plane
+    const offsetX = 2;        // How far to the right
 
-    // Calculate direction from target to ball (ignoring y for direction)
-    const direction = new THREE.Vector3(ballPosition.x - targetPosition.x, 0, ballPosition.z - targetPosition.z).normalize();
+    // --- Calculate Base Position and LookAt (Relative to Pivot at 0 degrees) ---
+    // Base offset includes X offset now
+    const baseOffsetVector = new THREE.Vector3(offsetX, cameraHeight, -distanceBehind);
+    const baseCamPos = pivot.clone().add(baseOffsetVector); // Base position relative to pivot at 0 degrees
 
-     // Calculate base camera position (before rotation)
-    const baseCamPos = new THREE.Vector3()
-        .copy(ballPosition)
-        .addScaledVector(direction, distanceBehind) // Move back along the direction vector
-        .add(new THREE.Vector3(0, cameraHeight, 0)); // Add height
+    // Base LookAt: Point far ahead along the 0-degree line from the pivot
+    const baseLookAtTargetPoint = pivot.clone().add(new THREE.Vector3(0, 0, 100)); // Look 100 units down +Z from pivot
 
-    // Base lookAt is the target position (before rotation)
-    const baseLookAt = targetPosition.clone();
-
-    // --- Rotate Position and LookAt around the ball (pivot) using the total angle ---
-    const rotatedCamPos = rotatePointAroundPivot(baseCamPos, pivot, totalAimAngle);
-    const rotatedLookAt = rotatePointAroundPivot(baseLookAt, pivot, totalAimAngle);
+    // --- Rotate Position and LookAt around the ball (pivot) using the angleToUse ---
+    const rotatedCamPos = rotatePointAroundPivot(baseCamPos, pivot, angleToUse);
+    const rotatedLookAt = rotatePointAroundPivot(baseLookAtTargetPoint, pivot, angleToUse); // Rotate lookAt too!
 
     camera.position.copy(rotatedCamPos);   // Set initial position
     camera.lookAt(rotatedLookAt); // Set initial lookAt
     currentStaticView = 'hole'; // Set flag to indicate pre-positioning
 
     // DO NOT change activeCameraMode here, let the calling function do that
-    console.log(`Initial follow camera position set (Total Angle: ${totalAimAngle.toFixed(1)}) behind ball at ${ballPosition.z.toFixed(1)}, looking towards ${targetPosition.z.toFixed(1)}`);
+    console.log(`Initial follow camera position set (Angle: ${angleToUse.toFixed(1)}) behind ball at ${ballPosition.z.toFixed(1)}, looking towards ${rotatedLookAt.z.toFixed(1)})`);
 }
 
 // Sets camera for Reverse Angle view - Aiming likely not applicable here
@@ -714,28 +753,32 @@ export function setCameraBehindBall(targetPosition, viewType = 'range') { // Kee
 
     const pivot = targetPosVec3.clone(); // Pivot around the target position (ball) - Use Vector3
 
-    let baseCamPos = new THREE.Vector3();
-    let baseLookAtPos = new THREE.Vector3();
+    let baseCamPosOffset = new THREE.Vector3();
+    let baseLookAtOffset = new THREE.Vector3();
 
-    // Determine base offset based on view type (relative to pivot)
+    // Determine base offset based on view type (relative to pivot, assuming 0 degrees)
     switch (viewType) {
         case 'chip':
         case 'putt':
-            baseCamPos.set(0, 4, -8);
-            baseLookAtPos.set(0, 0, 12); // Look a bit further than the ball
+            baseCamPosOffset.set(0, 4, -8);
+            baseLookAtOffset.set(0, 0, 12); // Look a bit further than the ball
             currentStaticView = viewType;
             break;
         case 'range':
         default:
-            baseCamPos.set(0, 18, -25);
-            baseLookAtPos.set(0, 0, 55); // Look further down
+            baseCamPosOffset.set(0, 18, -25);
+            baseLookAtOffset.set(0, 0, 55); // Look further down
             currentStaticView = 'range';
             break;
     }
 
+    // Calculate absolute base positions before rotation
+    const baseCamPos = pivot.clone().add(baseCamPosOffset);
+    const baseLookAtTargetPoint = pivot.clone().add(baseLookAtOffset);
+
     // Rotate points around the pivot using the total angle
-    const rotatedCamPos = rotatePointAroundPivot(baseCamPos.add(pivot), pivot, totalAimAngle); // baseCamPos is relative, add pivot before rotating
-    const rotatedLookAt = rotatePointAroundPivot(baseLookAtPos.add(pivot), pivot, totalAimAngle); // baseLookAtPos is relative, add pivot before rotating
+    const rotatedCamPos = rotatePointAroundPivot(baseCamPos, pivot, totalAimAngle);
+    const rotatedLookAt = rotatePointAroundPivot(baseLookAtTargetPoint, pivot, totalAimAngle);
 
     camera.position.copy(rotatedCamPos);
     camera.lookAt(rotatedLookAt);
@@ -749,7 +792,8 @@ export function snapFollowCameraToBall(targetPosition) { // Keep original signat
     if (!camera || !targetPosition || activeCameraMode !== CameraMode.FOLLOW_BALL) return;
 
      // Calculate total angle internally
-    const totalAimAngle = getCurrentTargetLineAngle() + getShotDirectionAngle();
+    let totalAimAngle = getCurrentTargetLineAngle() + getShotDirectionAngle()
+    totalAimAngle = 0.0; // TEMP - Disable for now
 
      // Ensure targetPosition is a THREE.Vector3
     const targetPosVec3 = targetPosition instanceof THREE.Vector3 ? targetPosition : new THREE.Vector3(targetPosition.x, targetPosition.y, targetPosition.z);
