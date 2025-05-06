@@ -1,7 +1,14 @@
+import { getWind, getTemperature } from './state.js'; // Import environment state getters
+
 // --- Step-by-Step Flight Simulation ---
 // Takes initial position, velocity, spin vector (RPM), and the selected club object.
 // Returns simulation results including landing position, carry distance, peak height, time of flight, landing angle, and trajectory points.
 export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club) {
+    // --- Get Environment Conditions at Start of Shot ---
+    const currentWind = getWind(); // { speed, direction }
+    const currentTemperature = getTemperature(); // degrees C
+    console.log(`Sim: Conditions - Temp: ${currentTemperature}°C, Wind: ${currentWind.speed.toFixed(1)}m/s @ ${currentWind.direction}°`);
+
     const trajectoryPoints = [initialPos];
     let position = { ...initialPos }; // Current position (copy)
     let velocity = { ...initialVel }; // Current velocity (copy)
@@ -16,10 +23,16 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club) 
     // const Cl = 0.03; // Lift coefficient (placeholder, related to spin). Reduced from 0.1, still higher than original 0.002. // Replaced by separate Cl values
     const Cl_backspin = 0.01; // Controls vertical lift (tune for height)
     const Cl_sidespin = 0.085; // Controls side force (tune for curve)
-    const airDensity = 1.225; // kg/m^3 (standard air density)
+    // Calculate air density based on temperature (using simplified Ideal Gas Law)
+    const pressure = 101325; // Standard pressure in Pa
+    const specificGasConstant = 287.05; // J/(kg·K) for dry air
+    const temperatureKelvin = currentTemperature + 273.15;
+    const airDensity = pressure / (specificGasConstant * temperatureKelvin);
+    console.log(`Sim: Calculated Air Density=${airDensity.toFixed(3)} kg/m^3`);
+    // const airDensity = 1.225; // kg/m^3 (standard air density) - REPLACED
     const ballArea = Math.PI * (0.04267 / 2) * (0.04267 / 2); // Cross-sectional area of golf ball (m^2)
     const ballMass = 0.04593; // kg (standard golf ball mass)
-    // Pre-calculate constant part of drag/lift force calculation
+    // Pre-calculate constant part of drag/lift force calculation (now uses calculated airDensity)
     const dragConst = -0.5 * airDensity * ballArea * Cd / ballMass;
     // const liftConst = 0.5 * airDensity * ballArea * Cl / ballMass; // Replaced by separate lift constants
     const liftConst_backspin = 0.5 * airDensity * ballArea * Cl_backspin / ballMass;
@@ -34,6 +47,16 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club) 
     console.log(`Sim: Initial Vel: (${velocity.x.toFixed(2)}, ${velocity.y.toFixed(2)}, ${velocity.z.toFixed(2)}) m/s`);
     console.log(`Sim: Spin Vec (RPM): (${spinVec.x.toFixed(0)}, ${spinVec.y.toFixed(0)}, ${spinVec.z.toFixed(0)})`);
 
+    // Convert wind speed (m/s) and direction (degrees from North) to a velocity vector
+    // Wind direction is where it comes FROM. So a 90deg (East) wind blows West (-X).
+    const windAngleRad = currentWind.direction * Math.PI / 180;
+    const windVel = {
+        x: -currentWind.speed * Math.sin(windAngleRad), // Negative sin for X component
+        y: 0, // Assume horizontal wind
+        z: -currentWind.speed * Math.cos(windAngleRad)  // Negative cos for Z component
+    };
+    console.log(`Sim: WindVel Vector = (${windVel.x.toFixed(2)}, ${windVel.y.toFixed(2)}, ${windVel.z.toFixed(2)}) m/s`);
+
     // Convert spin from RPM to rad/s - Use 'let' to allow decay
     // Assuming side spin is around Y axis, back spin around X axis relative to path
     // This needs refinement based on how side/back spin are defined relative to world coords
@@ -46,9 +69,20 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club) 
 
 
     while (position.y > 0.01 || time === 0) { // Loop until ball is near/below ground (allow at least one step)
-        // 1. Calculate Velocity Magnitude
-        const velMag = Math.sqrt(velocity.x**2 + velocity.y**2 + velocity.z**2);
-        if (velMag < 0.01) break; // Stop if ball stops mid-air
+        // 1. Calculate Relative Velocity (Ball Velocity - Wind Velocity)
+        const relativeVel = {
+            x: velocity.x - windVel.x,
+            y: velocity.y - windVel.y, // windVel.y is usually 0
+            z: velocity.z - windVel.z
+        };
+        const relativeVelMag = Math.sqrt(relativeVel.x**2 + relativeVel.y**2 + relativeVel.z**2);
+        if (relativeVelMag < 0.01) {
+            // If relative velocity is negligible, forces are minimal.
+            // We still need gravity, but drag/lift become zero.
+            // Let's check absolute velocity too, maybe it's just floating with the wind.
+            const absVelMag = Math.sqrt(velocity.x**2 + velocity.y**2 + velocity.z**2);
+            if (absVelMag < 0.01) break; // Stop if absolute velocity is also negligible
+        }
 
         // --- Air Spin Decay ---
         const decayFactor = dt; // Decay is per second, applied over dt
@@ -72,22 +106,24 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club) 
         }
         // We are ignoring rifle spin decay (spinRadPerSec.z) for now
 
-        // 2. Calculate Forces (as accelerations)
+        // 2. Calculate Forces (as accelerations) based on RELATIVE velocity
         const accel_gravity = { x: 0, y: -gravity, z: 0 };
 
-        // Drag Force: Fd = -0.5 * rho * A * Cd * v^2 * (v_unit) => a = F/m
-        const accel_drag = {
-            x: dragConst * velMag * velocity.x,
-            y: dragConst * velMag * velocity.y,
-            z: dragConst * velMag * velocity.z
-        };
+        // Drag Force: Opposes relative velocity. a = (dragConst * |Vrel|) * Vrel
+        let accel_drag = { x: 0, y: 0, z: 0 };
+        if (relativeVelMag > 0.01) {
+            accel_drag = {
+                x: dragConst * relativeVelMag * relativeVel.x,
+                y: dragConst * relativeVelMag * relativeVel.y,
+                z: dragConst * relativeVelMag * relativeVel.z
+            };
+        }
 
-        // Lift (Magnus) Force: Fl = 0.5 * rho * A * Cl * (w x v) => a = F/m
-        // Cross Product: w x v = (wy*vz - wz*vy, wz*vx - wx*vz, wx*vy - wy*vx)
+        // Lift (Magnus) Force: Based on cross product of spin and relative velocity. a = liftConst * (w x Vrel)
         const crossProd = {
-            x: spinRadPerSec.y * velocity.z - spinRadPerSec.z * velocity.y,
-            y: spinRadPerSec.z * velocity.x - spinRadPerSec.x * velocity.z,
-            z: spinRadPerSec.x * velocity.y - spinRadPerSec.y * velocity.x
+            x: spinRadPerSec.y * relativeVel.z - spinRadPerSec.z * relativeVel.y,
+            y: spinRadPerSec.z * relativeVel.x - spinRadPerSec.x * relativeVel.z,
+            z: spinRadPerSec.x * relativeVel.y - spinRadPerSec.y * relativeVel.x
         };
         // Lift (Magnus) Force: Split calculation using separate constants
         const accel_lift = {

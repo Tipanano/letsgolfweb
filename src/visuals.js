@@ -3,6 +3,7 @@ import * as CoreVisuals from './visuals/core.js'; // Includes CameraMode enum, c
 import * as RangeVisuals from './visuals/range.js';
 import * as TargetVisuals from './visuals/targetView.js'; // Includes green getters
 import * as HoleVisuals from './visuals/holeView.js'; // Import the new hole view module (includes getFlagPosition)
+import * as MeasurementView from './visuals/measurementView.js'; // Import the new measurement view module
 import { getCurrentShotType } from './gameLogic.js'; // Import shot type getter
 import { setShotDirectionAngle, getCurrentTargetLineAngle, getShotDirectionAngle } from './gameLogic/state.js'; // Import state setter for angle
 import { getCurrentGameMode } from './main.js'; // Import game mode getter
@@ -47,6 +48,15 @@ export function initVisuals(canvasElement) {
     TargetVisuals.setScene(coreScene, coreCanvasWidth, coreCanvasHeight);
     // RangeVisuals already accepts the scene
 
+    // Initialize MeasurementView
+    // TODO: We need a way to get all relevant course objects for raycasting.
+    // For now, passing an empty array. This will need to be updated.
+    // Potentially, core.js could expose a getter for all meshes that constitute the "ground".
+    // Or, individual modules like holeView, rangeView could register their ground meshes.
+    const courseObjectsForRaycasting = CoreVisuals.getCourseObjects ? CoreVisuals.getCourseObjects() : [];
+    MeasurementView.init(coreInitResult.renderer, coreScene, coreCanvas, courseObjectsForRaycasting);
+
+
     console.log("Main visuals module initialized.");
 
     // Explicitly initialize Range visuals and set camera for initial load
@@ -61,6 +71,8 @@ export function initVisuals(canvasElement) {
 
 function unloadCurrentView() {
     console.log(`Unloading view: ${currentVisualMode}`);
+    MeasurementView.deactivate(); // Always deactivate measurement view when switching
+
     if (currentVisualMode === VISUAL_MODES.RANGE) {
         RangeVisuals.removeRangeVisuals(coreScene);
     } else if (currentVisualMode === VISUAL_MODES.TARGET) {
@@ -78,7 +90,7 @@ export function switchToRangeView(initialScene = null) {
         console.error("switchToRangeView: Scene is not available!");
         return;
     }
-    if (currentVisualMode === VISUAL_MODES.RANGE && !initialScene) return; // Already in range view (unless it's the initial call)
+    if (currentVisualMode === VISUAL_MODES.RANGE && !initialScene && !MeasurementView.isViewActive()) return; // Already in range view (unless it's the initial call or measurement was active)
 
     unloadCurrentView(); // Unload previous view first (removes target elements etc.)
     console.log("Switching to Range View...");
@@ -99,7 +111,7 @@ export function switchToTargetView(targetDistance, initialScene = null) {
     }
 
     // Corrected Check: If already in target mode (and not the initial call), update and return.
-    if (currentVisualMode === VISUAL_MODES.TARGET && !initialScene) {
+    if (currentVisualMode === VISUAL_MODES.TARGET && !initialScene && !MeasurementView.isViewActive()) {
          console.log("Already in Target View, updating distance...");
          TargetVisuals.setTargetDistance(targetDistance);
          TargetVisuals.drawTargetView(); // Redraw with new distance
@@ -128,7 +140,7 @@ export function switchToHoleView(holeLayout, initialScene = null) {
         console.error("switchToHoleView: Scene is not available!");
         return;
     }
-    if (currentVisualMode === VISUAL_MODES.HOLE && !initialScene) return; // Already in hole view
+    if (currentVisualMode === VISUAL_MODES.HOLE && !initialScene && !MeasurementView.isViewActive()) return; // Already in hole view
 
     unloadCurrentView();
     console.log("Switching to Hole View...");
@@ -200,7 +212,13 @@ export function resetVisuals(position = null) {
 
     // Check current camera mode before resetting
     const currentCameraMode = CoreVisuals.getActiveCameraMode();
-    if (currentCameraMode === CoreVisuals.CameraMode.REVERSE_ANGLE || currentCameraMode === CoreVisuals.CameraMode.GREEN_FOCUS) {
+    const isMeasurementActive = MeasurementView.isViewActive();
+
+    if (isMeasurementActive) {
+        MeasurementView.deactivate(); // Ensure measurement view is off
+        // After deactivating measurement view, we likely want to go to a default static view.
+        switchToStaticCamera();
+    } else if (currentCameraMode === CoreVisuals.CameraMode.REVERSE_ANGLE || currentCameraMode === CoreVisuals.CameraMode.GREEN_FOCUS) {
         console.log(`Camera was ${currentCameraMode}, resetting to static view.`);
         switchToStaticCamera(); // Reset only if it was reverse or green focus
     } else {
@@ -266,6 +284,7 @@ export function animateBallFlightWithLanding(shotData) {
 
 // Switch to the appropriate static camera view based on current mode AND shot type
 export function switchToStaticCamera() {
+    MeasurementView.deactivate(); // Ensure measurement view is off
     const shotType = getCurrentShotType(); // Get current shot type from gameLogic
     let viewType = 'range'; // Default view
 
@@ -301,6 +320,7 @@ export function switchToStaticCamera() {
 
 // Activate the static hole view camera (behind ball, looking at flag/target, distance adjusted)
 export function activateHoleViewCamera() {
+    MeasurementView.deactivate(); // Ensure measurement view is off
     console.log("Activating Hole View Camera (Static, Distance Adjusted)");
     const ballPosition = CoreVisuals.ball?.position; // Get current ball position
     const targetPosition = HoleVisuals.getFlagPosition(); // Get flag position as target
@@ -327,6 +347,7 @@ export function activateHoleViewCamera() {
 
 // Activate the follow ball camera mode
 export function activateFollowBallCamera() {
+    MeasurementView.deactivate(); // Ensure measurement view is off
     console.log("Activating Follow Ball Camera");
     const currentMode = getCurrentGameMode();
 
@@ -349,6 +370,7 @@ export function activateFollowBallCamera() {
 
 // Activate the reverse angle camera
 export function activateReverseCamera() {
+    MeasurementView.deactivate(); // Ensure measurement view is off
     console.log("Activating Reverse Angle Camera");
     let positionZ = 300 * CoreVisuals.YARDS_TO_METERS; // Default 300 yards for Range
 
@@ -364,6 +386,7 @@ export function activateReverseCamera() {
 
 // Activate the green focus camera (works in Target and Hole modes)
 export function activateGreenCamera() {
+    MeasurementView.deactivate(); // Ensure measurement view is off
     console.log("Attempting to activate Green Focus Camera");
 
     let greenCenter = null;
@@ -390,8 +413,36 @@ export function activateGreenCamera() {
     }
 }
 
+// --- New Measurement Camera Activation ---
+export function activateMeasurementCamera() {
+    if (!CoreVisuals.ball || !HoleVisuals.getFlagPosition) {
+        console.error("Cannot activate measurement camera: Ball or flag position unavailable.");
+        return;
+    }
+    const ballPosition = CoreVisuals.ball.position.clone();
+    const flagPosition = HoleVisuals.getFlagPosition(); // Assuming this returns a THREE.Vector3
+
+    if (!ballPosition || !flagPosition) {
+        console.error("Measurement camera activation failed: Ball or flag position is null.");
+        return;
+    }
+
+    // Deactivate other visual elements if necessary (e.g., target lines from target view)
+    // unloadCurrentView(); // This might be too much, let's see.
+    // TargetVisuals.hideTargetElements();
+    // RangeVisuals.removeRangeVisuals(coreScene);
+
+
+    console.log("Activating Measurement Camera...");
+    MeasurementView.activate(ballPosition, flagPosition);
+    // No need to set currentVisualMode here, as MeasurementView manages its own active state
+    // and the main render loop will check MeasurementView.isViewActive()
+}
+
+
 // Set specific camera views, potentially used by modes like playHole
 export function setCameraView(viewType) {
+    MeasurementView.deactivate(); // Ensure measurement view is off
     console.log(`Setting camera view specifically to: ${viewType}`);
     switch (viewType) {
         case 'tee':

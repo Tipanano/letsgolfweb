@@ -1,5 +1,6 @@
 import { clubs } from './clubs.js'; // Import club data for populating dropdown
 import { YARDS_TO_METERS } from './visuals/core.js'; // Import conversion constant (Corrected Path)
+import { getWind, getTemperature } from './gameLogic/state.js'; // Import environment state getters (Corrected Path)
 
 // --- DOM Element References ---
 const statusText = document.getElementById('status-text');
@@ -83,6 +84,7 @@ const overlayPositionSpan = document.getElementById('overlay-position'); // Adde
 const overlayLastShotDistSpan = document.getElementById('overlay-last-shot-dist'); // Added
 const overlayBackSpinSpan = document.getElementById('overlay-back-spin'); // Added
 const overlaySideSpinSpan = document.getElementById('overlay-side-spin'); // Added
+const overlayTempSpan = document.getElementById('overlay-temp'); // Added for temperature
 
 
 // --- Constants from gameLogic (will be passed in or imported if needed) ---
@@ -683,6 +685,115 @@ export function resetClosestToFlagDisplay() {
 // export function showHoleOutMessage(score) { ... }
 
 
+// --- Environment Display Update ---
+
+// Helper function to get a wind direction arrow
+function getWindArrow(direction) {
+    // Normalize direction to 0-359.9 degrees
+    const normalizedDir = ((direction % 360) + 360) % 360;
+    // Determine the arrow based on 8 directions (N, NE, E, SE, S, SW, W, NW)
+    if (normalizedDir >= 337.5 || normalizedDir < 22.5) return '↓'; // North (Down arrow - wind from North)
+    if (normalizedDir >= 22.5 && normalizedDir < 67.5) return '↙'; // Northeast
+    if (normalizedDir >= 67.5 && normalizedDir < 112.5) return '←'; // East
+    if (normalizedDir >= 112.5 && normalizedDir < 157.5) return '↖'; // Southeast
+    if (normalizedDir >= 157.5 && normalizedDir < 202.5) return '↑'; // South
+    if (normalizedDir >= 202.5 && normalizedDir < 247.5) return '↗'; // Southwest
+    if (normalizedDir >= 247.5 && normalizedDir < 292.5) return '→'; // West
+    if (normalizedDir >= 292.5 && normalizedDir < 337.5) return '↘'; // Northwest
+    return '?'; // Should not happen
+}
+
+/**
+ * Updates the wind and temperature display in the UI overlay.
+ */
+function updateEnvironmentDisplay() {
+    if (!overlayWindSpan || !overlayTempSpan) return; // Elements might not exist
+
+    const windData = getWind();
+    const temperatureData = getTemperature();
+
+    const windSpeedText = windData.speed.toFixed(1);
+    const windArrow = getWindArrow(windData.direction);
+    const windDisplayText = `${windSpeedText} m/s ${windArrow}`;
+
+    const tempDisplayText = `${temperatureData.toFixed(0)}°C`;
+
+    // Update the DOM (only if text has changed to avoid unnecessary reflows)
+    if (overlayWindSpan.textContent !== windDisplayText) {
+        overlayWindSpan.textContent = windDisplayText;
+    }
+    if (overlayTempSpan.textContent !== tempDisplayText) {
+        overlayTempSpan.textContent = tempDisplayText;
+    }
+}
+
+// Start the periodic update for the environment display
+// Update interval (e.g., 5 times per second)
+setInterval(updateEnvironmentDisplay, 200);
+
+
 // Remove initial setup calls from here; they will be called explicitly from main.js
 // populateClubSelect();
 // setupBackswingBar();
+
+
+// --- Measurement Distance Label Functions ---
+
+const distanceLabelContainer = document.body; // Or a more specific container if available
+const distanceLabelClass = 'measurement-distance-label'; // CSS class for styling
+
+/**
+ * Creates or updates an HTML element to display distance text at a specific screen position.
+ * @param {string} id - Unique ID for the label element (e.g., 'dist-label-ball-click').
+ * @param {string} text - The text content (e.g., '150.5 yd').
+ * @param {number} screenX - The X coordinate on the screen.
+ * @param {number} screenY - The Y coordinate on the screen.
+ */
+export function createOrUpdateDistanceLabel(id, text, screenX, screenY) {
+    let labelElement = document.getElementById(id);
+
+    if (!labelElement) {
+        labelElement = document.createElement('div');
+        labelElement.id = id;
+        labelElement.classList.add(distanceLabelClass);
+        // Basic inline styles (consider moving to style.css)
+        labelElement.style.position = 'absolute';
+        labelElement.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+        labelElement.style.color = 'white';
+        labelElement.style.padding = '3px 6px';
+        labelElement.style.borderRadius = '4px';
+        labelElement.style.fontSize = '12px';
+        labelElement.style.pointerEvents = 'none'; // Prevent interaction
+        labelElement.style.whiteSpace = 'nowrap';
+        labelElement.style.zIndex = '100'; // Ensure it's above the canvas
+        distanceLabelContainer.appendChild(labelElement);
+    }
+
+    labelElement.textContent = text;
+    // Position the label centered horizontally above the point, offset slightly vertically
+    labelElement.style.left = `${screenX}px`;
+    labelElement.style.top = `${screenY + 30}px`; // Adjust vertical offset as needed
+    labelElement.style.transform = 'translateX(-50%)'; // Center horizontally
+    labelElement.style.display = 'block'; // Ensure it's visible
+}
+
+/**
+ * Removes a specific distance label element from the DOM.
+ * @param {string} id - The ID of the label element to remove.
+ */
+export function removeDistanceLabel(id) {
+    const labelElement = document.getElementById(id);
+    if (labelElement) {
+        labelElement.remove();
+    }
+}
+
+/**
+ * Hides all distance label elements by setting their display style to 'none'.
+ */
+export function hideAllDistanceLabels() {
+    const labels = document.querySelectorAll(`.${distanceLabelClass}`);
+    labels.forEach(label => {
+        label.style.display = 'none';
+    });
+}

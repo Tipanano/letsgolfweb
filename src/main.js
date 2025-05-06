@@ -2,6 +2,7 @@ import * as ui from './ui.js';
 import * as logic from './gameLogic.js'; // Game state and actions
 import * as visuals from './visuals.js';
 import * as inputHandler from './inputHandler.js'; // Import the new input handler
+import * as environment from './gameLogic/environment.js'; // Import environment simulation
 import * as closestToFlag from './modes/closestToFlag.js'; // Import the CTF mode logic
 import * as playHole from './modes/playHole.js'; // Import the Play Hole mode logic
 
@@ -81,8 +82,10 @@ ui.setInitialSwingSpeedDisplay(initialSwingSpeed);
 ui.setupBackswingBar(); // Setup backswing marker
 ui.setupTimingBarWindows(initialSwingSpeed / 100); // Setup downswing windows based on initial speed
 
-// Initialize game logic (which also calls ui.resetUI)
+// Initialize game logic (which also calls ui.resetUI and sets initial wind/temp state)
 logic.initializeGameLogic();
+// Set initial wind simulation parameters (can be overridden by modes later)
+environment.setWindParameters(5, 45, 3, 20, 2500); // Example: 5m/s base, 45deg, +/-3m/s speed, +/-20deg dir, 2.5s interval
 // Register the shot completion handler
 logic.registerShotCompletionCallback(handleShotCompletion);
 
@@ -98,6 +101,7 @@ if (canvas) {
     if (visualsInitialized) {
         // Initial view (Range) is now set within initVisuals on success
         visuals.showBallAtAddress(); // Show initial ball position
+        environment.startWindSimulation(); // Start dynamic wind updates
     } else {
          console.error("Visuals failed to initialize. Further visual operations skipped.");
          // Optionally display an error message to the user on the page
@@ -140,6 +144,12 @@ document.addEventListener('keyup', (event) => {
     // console.log(`main.js keyup: ${event.key} (code: ${event.code})`); // Log listener firing (optional)
     inputHandler.handleKeyUp(event); // Call the input handler
 });
+
+// Add mouse down listener for measurement view clicks
+canvas?.addEventListener('mousedown', (event) => {
+    inputHandler.handleMouseDown(event); // Call the input handler
+});
+
 
 console.log("Main script loaded, event listeners attached.");
 
@@ -186,8 +196,8 @@ function handleShotCompletion(shotData) {
             lastShotDist: shotData.totalDistance,
             backSpin: shotData.backSpin,
             sideSpin: shotData.sideSpin,
-            lie: 'Tee', // Assuming range is always off a tee for now
-            wind: 'Calm' // Placeholder
+            lie: 'Tee' // Assuming range is always off a tee for now
+            // Removed wind placeholder - live wind is handled separately
         });
     }
 

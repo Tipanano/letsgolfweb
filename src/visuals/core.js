@@ -2,9 +2,10 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.m
 import { TextureLoader } from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js'; // Import TextureLoader
 // Import both relative and target line angles
 import { getShotDirectionAngle, getCurrentTargetLineAngle } from '../gameLogic/state.js';
+import * as MeasurementView from './measurementView.js';
 // Import position getters needed for re-applying hole view camera
 import { getCurrentBallPosition as getPlayHoleBallPosition } from '../modes/playHole.js';
-import { getFlagPosition } from './holeView.js';
+import { getFlagPosition, getCurrentHoleObjects } from './holeView.js'; // Import getCurrentHoleObjects
 import { createTeeMesh } from './objects.js'; // Import the tee creator
 import { getSurfaceProperties } from '../surfaces.js'; // Import surface properties getter
 
@@ -236,7 +237,15 @@ function animate(timestamp) {
          }
      }
 
-    renderer.render(scene, camera);
+    // Determine which camera to use for rendering
+    const activeRenderCamera = MeasurementView.isViewActive() ? MeasurementView.getCamera() : camera;
+    if (activeRenderCamera) { // Ensure there's a camera to render with
+        renderer.render(scene, activeRenderCamera);
+    } else {
+        // This case should ideally not happen if MeasurementView.init ensures its camera is created
+        // and 'camera' (main perspective) is always available after core init.
+        console.warn("No active camera available for rendering.");
+    }
 }
 
 // --- Camera Update Function (called in animate loop) ---
@@ -1076,6 +1085,17 @@ export function resetStaticCameraZoom() {
 export function getActiveCameraMode() {
      return activeCameraMode;
 }
+
+// --- Course Objects Getter for Raycasting ---
+/**
+ * Returns an array of THREE.Object3D that constitute the currently loaded hole objects.
+ * These are used by MeasurementView for raycasting.
+ * @returns {Array<THREE.Object3D>}
+ */
+export function getCourseObjects() {
+    return getCurrentHoleObjects ? getCurrentHoleObjects() : [];
+}
+
 
 /**
  * Sets the visual scale of the golf ball.

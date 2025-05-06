@@ -1,12 +1,10 @@
-Allow different camera angles, reverse, green, follow ball, player, tee
+Allow different camera angles, live cam(start at player, then moves to a location close to where the ball lands and follows the ball)
+
+minimap, tap for distance from ball and distance to flag/hole
 
 Add bunkers, various roughs, water, path, pines, native 
 
-Better calculation of ball flight, use all the timings to figure out club path and face angle and use that to figure out ball flight instead
-
 On setup, allow for setting in to out or out to in, and club face angle
-
-Add wind and how it impacts ball flight
 
 better description of shot, "good strikes" are either high draw, high fade, low draw, regular straight etc. And then we have fat and thin shots as well
 

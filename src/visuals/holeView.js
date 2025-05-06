@@ -849,3 +849,12 @@ export function setFlagstickVisibility(visible) {
     }
     console.log(`Flagstick visibility set to: ${visible}`);
 }
+
+/**
+ * Returns the array of THREE.Object3D that make up the current hole.
+ * These are the objects that should be used for raycasting against the course.
+ * @returns {Array<THREE.Object3D>}
+ */
+export function getCurrentHoleObjects() {
+    return currentHoleObjects;
+}

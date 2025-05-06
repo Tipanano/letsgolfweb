@@ -15,6 +15,13 @@ export function clamp(value, min, max) {
 }
 
 /**
+ * Generates a random floating-point number between min (inclusive) and max (exclusive).
+ */
+export function getRandomInRange(min, max) {
+    return Math.random() * (max - min) + min;
+}
+
+/**
  * Helper to get current timing data for debug display.
  */
 export function getDebugTimingData() {

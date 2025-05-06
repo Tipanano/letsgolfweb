@@ -20,6 +20,10 @@ export let selectedClub = clubs['7I']; // Default club
 export let currentTargetLineAngle = 0; // Absolute angle (degrees) of the intended target line relative to Z-axis
 export let shotDirectionAngle = 0; // Angle in degrees RELATIVE to currentTargetLineAngle (player's fine-tuning adjustment)
 
+// --- Environmental State ---
+export let temperature = 20; // Degrees Celsius (Can be updated per hole/round)
+export let wind = { speed: 0, direction: 0 }; // Current instantaneous wind { speed: m/s, direction: degrees }
+
 // --- Timing Variables ---
 export let backswingStartTime = null;
 export let backswingEndTime = null;
@@ -137,8 +141,28 @@ export function setDownswingPhaseStartTime(time) {
     downswingPhaseStartTime = time;
 }
 
+export function setTemperature(temp) {
+    temperature = temp;
+    // Optionally, update UI if temp is displayed live
+    // console.log(`Logic State: Temperature set to: ${temp}°C`); // Reduce logging noise
+}
+
+// Sets the *current* wind conditions. Called frequently by the dynamic wind simulation.
+export function setWind(speed, direction) {
+    // Add validation/clamping if needed
+    // const changed = wind.speed !== speed || wind.direction !== direction; // Check if needed for events
+    wind = { speed, direction };
+    // Avoid logging here as it will be called very often
+    // if (changed) { /* trigger UI update event? */ } // Consider event system later if polling is inefficient
+}
+
+
 // --- Initialization ---
 export function initializeGameLogic() {
+    // Set initial environmental conditions (can be overridden later, e.g., by hole data or weather system)
+    setTemperature(20); // Default temperature
+    setWind(0, 0); // Default no wind
+
     // Initial swing speed setup is handled by UI calling setSwingSpeed
     resetSwingState(); // Call the local reset function
     console.log("Game Logic State Initialized.");
@@ -307,3 +331,5 @@ export const getDownswingPhaseStartTime = () => downswingPhaseStartTime;
 export const getOnShotCompleteCallback = () => onShotCompleteCallback; // Getter for the callback
 export const getShotDirectionAngle = () => shotDirectionAngle; // Gets the RELATIVE adjustment angle
 export const getCurrentTargetLineAngle = () => currentTargetLineAngle; // Gets the ABSOLUTE target line angle
+export const getTemperature = () => temperature;
+export const getWind = () => wind; // Gets the current wind object { speed, direction }

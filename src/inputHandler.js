@@ -4,8 +4,9 @@ import * as GameLogic from './gameLogic.js'; // Import game logic functions/gett
 // Import specific state functions needed for aiming
 import { getGameState, getCurrentShotType, getShotDirectionAngle, setShotDirectionAngle, setRelativeShotDirectionAngle, getCurrentTargetLineAngle } from './gameLogic/state.js'; // Added new state functions
 import * as Visuals from './visuals.js'; // Import high-level visuals functions
+import * as MeasurementView from './visuals/measurementView.js'; // Import MeasurementView
 // Import specific core camera functions
-import { applyAimAngleToCamera, zoomCameraIn, zoomCameraOut, YARDS_TO_METERS } from './visuals/core.js';
+import { applyAimAngleToCamera, zoomCameraIn, zoomCameraOut, YARDS_TO_METERS, ball } from './visuals/core.js'; // Added ball import
 // Import specific UI functions needed for input feedback (markers, status updates)
 import {
     adjustBallPosition,
@@ -19,6 +20,7 @@ import {
 import { getCurrentGameMode } from './main.js'; // Import the function to get the current game mode
 import { prepareNextShot } from './gameLogic/actions.js';
 import { getCurrentBallPosition, getCurrentHoleLayout } from './modes/playHole.js'; // Import playHole getters (Adjusted path)
+import { getFlagPosition } from './visuals/holeView.js'; // Import flag position getter
 // --- Constants for Aiming ---
 const AIM_INCREMENT_FULL = 0.5; // Degrees per key press
 const AIM_INCREMENT_CHIP = 0.2; // Degrees per key press
@@ -52,6 +54,10 @@ export function handleKeyDown(event) {
         return; // Consume event
     } else if (event.key === '4') {
         Visuals.activateGreenCamera();
+        return; // Consume event
+    } else if (event.key === '0') {
+        // Activate Measurement Camera View
+        Visuals.activateMeasurementCamera();
         return; // Consume event
     }
 
@@ -344,4 +350,35 @@ function handlePuttKeyUp(event, gameState) {
      if (event.key === 'w' && gameState === 'backswing') {
         GameLogic.endBackswing(); // Re-use same action function
     }
+}
+
+// --- Mouse Click Handler ---
+export function handleMouseDown(event) {
+    // Check if the measurement view is active
+    if (MeasurementView.isViewActive()) {
+        // Prevent default browser actions if needed (e.g., text selection)
+        // event.preventDefault();
+
+        // Get canvas and mouse coordinates
+        const canvas = event.target; // Assuming the event target is the canvas
+        if (!canvas) return;
+
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = event.clientX - rect.left;
+        const mouseY = event.clientY - rect.top;
+
+        // Get current ball and flag positions (needed for context in handleCourseClick)
+        // Ensure these are THREE.Vector3 instances
+        const currentBallPosition = ball ? ball.position.clone() : null;
+        const currentFlagPosition = getFlagPosition ? getFlagPosition() : null; // Already a Vector3 or null
+
+        if (!currentBallPosition || !currentFlagPosition) {
+            console.warn("handleMouseDown: Could not get ball or flag position for measurement click.");
+            return;
+        }
+
+        // Call the handler in MeasurementView
+        MeasurementView.handleCourseClick(mouseX, mouseY, currentBallPosition, currentFlagPosition);
+    }
+    // If measurement view is not active, do nothing (or handle other potential mouse interactions)
 }
