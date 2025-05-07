@@ -32,8 +32,8 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club) 
     // --- Simulation Constants (Tunable) ---
     //const Cd = 0.26; // Drag coefficient (placeholder)
 
-    const SPIN_TO_DRAG_FACTOR = 0.00002; // START POSITIVE e.g. 0.0000005 to see drag reduction with spin
-    const Cd_base = 0.21; // Start with your current working value from the "old code" DRAG COEFFICIENT
+    const SPIN_TO_DRAG_FACTOR = 0.0002; // START POSITIVE e.g. 0.0000005 to see drag reduction with spin
+    const Cd_base = 0.18; // Start with your current working value from the "old code" DRAG COEFFICIENT
     const MINIMUM_EFFECTIVE_CD = 0.01; // Minimum allowed effective drag coefficient
 
     // const Cl = 0.03; // Lift coefficient (placeholder, related to spin). Reduced from 0.1, still higher than original 0.002. // Replaced by separate Cl values

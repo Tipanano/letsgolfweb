@@ -17,6 +17,7 @@ const BACKSWING_BAR_MAX_DURATION_MS = 1500; // Max duration shown on bar (Added 
 const BACKSWING_POWER_SENSITIVITY = 1.0; // How much duration affects PCHS (linear = 1.0)
 const OVERSWING_PCHS_BONUS_FACTOR = 0.1; // Max % PCHS bonus for reaching max overswing duration
 const OVERSWING_DIFFICULTY_PENALTY = 0.15; // Max % ACHS penalty for reaching max overswing duration
+const SWING_SPEED_REDUCTION_EFFECT_FACTOR = 0.3; // 1.0 = full effect, 0.5 = half effect, 0.0 = no effect
 
 // Transition & Speed Efficiency
 const IDEAL_TRANSITION_OFFSET_MS = -150; // Ideal 'j' press relative to ideal backswing end
@@ -145,9 +146,11 @@ function calculatePotentialCHS(backswingDuration, swingSpeed, clubBaseSpeed) {
     }
 
     // Base PCHS calculation
-    let potentialCHS = clubBaseSpeed * powerFactor * swingSpeed; // Apply slider speed last
+    let modifiedSwingSpeedFactor = 1.0 - ((1.0 - swingSpeed) * SWING_SPEED_REDUCTION_EFFECT_FACTOR)
 
-    console.log(`PCHS Calc: Duration=${backswingDuration.toFixed(0)}, Ideal=${scaledIdealDuration.toFixed(0)}, Factor=${powerFactor.toFixed(2)}, Base=${clubBaseSpeed}, PCHS=${potentialCHS.toFixed(1)}`);
+    let potentialCHS = clubBaseSpeed * powerFactor * modifiedSwingSpeedFactor; // Apply slider speed last
+
+    console.log(`PCHS Calc: Duration=${backswingDuration.toFixed(0)}, Ideal=${scaledIdealDuration.toFixed(0)}, Factor=${powerFactor.toFixed(2)}, Base=${clubBaseSpeed}, PCHS=${potentialCHS.toFixed(1)}, swingSpeed=${swingSpeed}`);    
     return potentialCHS;
 }
 
