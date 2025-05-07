@@ -22,6 +22,8 @@ const hipInitiationOffsetText = document.getElementById('hip-initiation-offset')
 
 const progressBackswing = document.getElementById('progress-backswing');
 const idealBackswingMarker = document.getElementById('ideal-backswing-marker');
+const hipInitiationMarker = document.getElementById('hip-initiation-marker'); // Added for hip initiation timing
+const postShotIdealJWindowOnBackswing = document.getElementById('post-shot-ideal-j-window-on-backswing'); // Added for J press feedback
 // Remapped: a=Rotation, j=Arms, d=Wrists
 const progressA = document.getElementById('progress-a'); // Rotation bar
 const progressJ = document.getElementById('progress-j'); // Arms bar
@@ -160,7 +162,7 @@ export function updateBackswingBar(elapsedTime, swingSpeed) {
     const maxDurationAdjusted = BACKSWING_BAR_MAX_DURATION_MS / swingSpeed;
 
     if (elapsedTime > maxDurationAdjusted) {
-        progressBackswing.style.backgroundColor = '#dc3545'; // Red
+        progressBackswing.style.backgroundColor = '#FFA500'; // Orange (was Red #dc3545)
     } else if (elapsedTime > idealDurationAdjusted) {
         progressBackswing.style.backgroundColor = '#ffc107'; // Yellow
     } else {
@@ -169,11 +171,15 @@ export function updateBackswingBar(elapsedTime, swingSpeed) {
 }
 
 // Function to visually mark hip initiation on the backswing bar
-export function markHipInitiationOnBackswingBar() {
-    // Change color to indicate hips have started moving
-    // Using a slightly darker green or a different distinct color
-    progressBackswing.style.backgroundColor = '#1e7e34'; // Darker Green
-    console.log("UI: Marked hip initiation on backswing bar.");
+export function markHipInitiationOnBackswingBar(hipPressTime, swingSpeed) {
+    if (!hipInitiationMarker) return; // Element might not exist
+
+    const effectiveBackswingDuration = BACKSWING_BAR_MAX_DURATION_MS / swingSpeed;
+    const markerPercent = Math.min(100, Math.max(0, (hipPressTime / effectiveBackswingDuration) * 100));
+
+    hipInitiationMarker.style.left = `${markerPercent}%`;
+    hipInitiationMarker.style.display = 'block';
+    console.log(`UI: Marked hip initiation at ${hipPressTime.toFixed(0)}ms (${markerPercent.toFixed(1)}%) on backswing bar.`);
 }
 
 export function updateTimingBars(elapsedTime, swingSpeed) {
@@ -297,6 +303,8 @@ export function resetUI() {
     markerA.style.display = 'none'; // Rotation ('a') -> marker-a
     markerJ.style.display = 'none'; // Arms ('d') -> marker-j
     markerD.style.display = 'none'; // Wrists ('u') -> marker-d
+    if (hipInitiationMarker) hipInitiationMarker.style.display = 'none'; // Hide hip marker
+    if (postShotIdealJWindowOnBackswing) postShotIdealJWindowOnBackswing.style.display = 'none'; // Hide J press feedback window
     nextShotButton.style.display = 'none'; // Hide button on reset
 
     // Reset result details
@@ -344,6 +352,8 @@ export function resetUIForNewShot() {
     markerA.style.display = 'none'; // Rotation ('a') -> marker-a
     markerJ.style.display = 'none'; // Arms ('d') -> marker-j
     markerD.style.display = 'none'; // Wrists ('u') -> marker-d
+    if (hipInitiationMarker) hipInitiationMarker.style.display = 'none'; // Hide hip marker
+    if (postShotIdealJWindowOnBackswing) postShotIdealJWindowOnBackswing.style.display = 'none'; // Hide J press feedback window
     nextShotButton.style.display = 'none'; // Hide button on reset
 
     // Reset result details
@@ -552,6 +562,55 @@ export function setInitialSwingSpeedDisplay(percentage) {
 
 // Initial setup call for ball position
 updateBallPositionDisplay();
+
+// --- Post-Shot Feedback Window on Backswing Bar ---
+/**
+ * Displays a window on the backswing bar indicating the ideal timing for the 'J' press (transition).
+ * @param {number} windowStartMs - The start time of the window in ms, relative to the beginning of the backswing.
+ * @param {number} windowWidthMs - The width of the window in ms.
+ * @param {number} shotSwingSpeed - The swing speed factor (0.3-1.0) used for that shot.
+ */
+export function displayIdealJPressWindowOnBackswing(windowStartMs, windowWidthMs, shotSwingSpeed) {
+    if (!postShotIdealJWindowOnBackswing) {
+        console.warn("UI: 'post-shot-ideal-j-window-on-backswing' element not found.");
+        return;
+    }
+    if (typeof windowStartMs !== 'number' || typeof windowWidthMs !== 'number' || typeof shotSwingSpeed !== 'number') {
+        console.warn("UI: Invalid parameters for displayIdealJPressWindowOnBackswing.");
+        postShotIdealJWindowOnBackswing.style.display = 'none'; // Ensure it's hidden if params invalid
+        return;
+    }
+
+    // BACKSWING_BAR_MAX_DURATION_MS is a const in this file (1500)
+    const effectiveBackswingDuration = BACKSWING_BAR_MAX_DURATION_MS / shotSwingSpeed;
+
+    let leftPercent = (windowStartMs / effectiveBackswingDuration) * 100;
+    let widthPercent = (windowWidthMs / effectiveBackswingDuration) * 100;
+
+    // Clamp values to prevent visual errors and ensure the window is on the bar
+    leftPercent = Math.max(0, leftPercent);
+    widthPercent = Math.max(0, widthPercent);
+
+    if (leftPercent + widthPercent > 100) {
+        widthPercent = 100 - leftPercent;
+    }
+    if (leftPercent > 100) { // If start is already off the bar, hide it
+        postShotIdealJWindowOnBackswing.style.display = 'none';
+        console.log(`UI: Ideal J press window starts beyond backswing bar (Left: ${leftPercent.toFixed(1)}%), hiding.`);
+        return;
+    }
+    if (widthPercent <= 0) { // If width is zero or negative, hide it
+        postShotIdealJWindowOnBackswing.style.display = 'none';
+        console.log(`UI: Ideal J press window has zero or negative width (${widthPercent.toFixed(1)}%), hiding.`);
+        return;
+    }
+
+
+    postShotIdealJWindowOnBackswing.style.left = `${leftPercent}%`;
+    postShotIdealJWindowOnBackswing.style.width = `${widthPercent}%`;
+    postShotIdealJWindowOnBackswing.style.display = 'block';
+    console.log(`UI: Displaying ideal J press window on backswing at ${leftPercent.toFixed(1)}% width ${widthPercent.toFixed(1)}% (StartMs: ${windowStartMs.toFixed(0)}, WidthMs: ${windowWidthMs.toFixed(0)}, ShotSpeed: ${shotSwingSpeed})`);
+}
 
 
 // --- NEW Visual Overlay UI Function ---

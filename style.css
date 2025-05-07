@@ -334,3 +334,37 @@ body:not(.mode-range) #instructions {
 body.mode-closest-to-flag #closest-to-flag-info {
     display: block; /* Show only in this mode */
 }
+
+/* --- Added for Backswing Bar Markers --- */
+
+/* Generic style for line markers on timing bars */
+.timing-marker {
+    position: absolute;
+    top: -1px; /* Align with top edge or slightly above */
+    bottom: -1px; /* Align with bottom edge or slightly below */
+    width: 2px; /* Thickness of the marker line */
+    background-color: #007bff; /* Blue, distinct from ideal window and progress */
+    z-index: 3; /* Ensure it's above progress and ideal windows */
+    display: none; /* Hidden by default, JS will show it */
+    /* 'left' position will be set by JS */
+}
+
+/* Specific styling for the hip initiation marker, if needed, */
+/* otherwise it will use .timing-marker styles. */
+/* #hip-initiation-marker { */
+    /* background-color: #another_color; */ /* Example: Different color if desired */
+/* } */
+
+/* Style for the post-shot ideal J press feedback window on the backswing bar */
+.ideal-timing-feedback-backswing {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    background-color: rgba(70, 130, 180, 0.35); /* Steel Blue, semi-transparent */
+    border-left: 1px dashed steelblue;
+    border-right: 1px dashed steelblue;
+    z-index: 1; /* Below other markers, above progress fill if progress has lower z-index */
+    display: none; /* Initially hidden */
+    box-sizing: border-box;
+    /* 'left' and 'width' will be set by JS */
+}

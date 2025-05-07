@@ -19,7 +19,7 @@ const OVERSWING_PCHS_BONUS_FACTOR = 0.1; // Max % PCHS bonus for reaching max ov
 const OVERSWING_DIFFICULTY_PENALTY = 0.15; // Max % ACHS penalty for reaching max overswing duration
 
 // Transition & Speed Efficiency
-const IDEAL_TRANSITION_OFFSET_MS = -50; // Ideal 'j' press relative to ideal backswing end
+const IDEAL_TRANSITION_OFFSET_MS = -150; // Ideal 'j' press relative to ideal backswing end
 const TRANSITION_TIMING_SENSITIVITY = 350; // ms deviation window for transition affecting ACHS
 const MAX_TRANSITION_SPEED_LOSS = 0.3; // Max % ACHS loss from poor transition timing
 
@@ -296,7 +296,7 @@ function calculateStrikeQuality(wristsDev, attackAngle, baseAoA, swingSpeed) {
 
     // Check intermediate wrist timing for Flip/Punch
     // Use half the threshold?
-    if (wristsDev < -scaledFatThinThreshold / 2) return "Flip"; // Early-ish
+    if (wristsDev < -scaledFatThinThreshold / 2) return "High"; // Early-ish
     if (wristsDev > scaledFatThinThreshold / 2) return "Punch"; // Late-ish
 
     return "Center";
@@ -644,6 +644,22 @@ export function calculateImpactPhysics(timingInputs, club, swingSpeed, ballPosit
 
 
     // --- Assemble Result Object ---
+    // First, calculate the ideal J press window parameters for UI feedback
+    let idealJWindowStartOnBackswing = null;
+    let idealJWindowWidthOnBackswing = null;
+
+    if (timingInputs.backswingDuration && typeof timingInputs.backswingDuration === 'number' && timingInputs.backswingDuration > 0 && swingSpeed > 0) {
+        const idealJPressCenterMs_from_backswingStart = 
+            timingInputs.backswingDuration + (IDEAL_TRANSITION_OFFSET_MS * (timingInputs.backswingDuration / IDEAL_BACKSWING_DURATION_MS));
+        
+        idealJWindowWidthOnBackswing = 50 / swingSpeed; // Base width 50ms, scaled by swingSpeed
+        idealJWindowStartOnBackswing = idealJPressCenterMs_from_backswingStart - (idealJWindowWidthOnBackswing / 2);
+
+        console.log(`Physics: Ideal J Window for UI - Center: ${idealJPressCenterMs_from_backswingStart.toFixed(0)}ms, Start: ${idealJWindowStartOnBackswing.toFixed(0)}ms, Width: ${idealJWindowWidthOnBackswing.toFixed(0)}ms (from backswing start)`);
+    } else {
+        console.warn("Physics: Could not calculate ideal J window for UI due to invalid backswingDuration or swingSpeed.");
+    }
+
     const impactResult = {
         // Input Deviations (for potential UI display/logging)
         transitionDev: transitionDev,
@@ -668,6 +684,10 @@ export function calculateImpactPhysics(timingInputs, club, swingSpeed, ballPosit
         spinAxisTilt: spinAxisTilt, // degrees tilt from horizontal
         backSpin: backSpin, // RPM
         sideSpin: sideSpin, // RPM (positive = slice spin, negative = hook spin)
+
+        // Ideal J Press Window parameters for UI feedback on backswing bar
+        idealJWindowStartOnBackswing: idealJWindowStartOnBackswing,
+        idealJWindowWidthOnBackswing: idealJWindowWidthOnBackswing,
     };
 
     console.log("--- Impact Physics Calculation Complete ---");

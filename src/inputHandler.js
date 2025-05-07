@@ -205,8 +205,18 @@ function handleFullSwingKeyDown(event, gameState) {
 
     // Capture 'j' (Hip Initiation)
     if (event.key === 'j' && (gameState === 'backswing' || gameState === 'backswingPausedAtTop') && !GameLogic.getHipInitiationTime()) {
-        GameLogic.recordHipInitiation(); // Call action function
-        markHipInitiationOnBackswingBar(); // Update UI directly
+        const hipInitiationTimestamp = performance.now(); // Get the precise time of 'j' press
+        GameLogic.recordHipInitiation(hipInitiationTimestamp); // Pass timestamp to action
+
+        const backswingStartTime = GameLogic.getBackswingStartTime();
+        if (backswingStartTime) {
+            const hipPressTimeOffset = hipInitiationTimestamp - backswingStartTime;
+            // swingSpeed is already defined at the top of handleFullSwingKeyDown
+            markHipInitiationOnBackswingBar(hipPressTimeOffset, swingSpeed); 
+        } else {
+            console.warn("InputHandler: Could not mark hip initiation on bar, backswingStartTime not available.");
+        }
+        
         updateStatus("Hips Initiated..."); // Update UI directly
 
         // If paused at top, pressing 'j' starts the downswing phase immediately

@@ -8,11 +8,11 @@ import {
     getShotDirectionAngle, // <-- Gets RELATIVE angle
     getCurrentTargetLineAngle, // <-- Gets ABSOLUTE target line angle
     // getCurrentHoleLayout is NOT in state.js
-    IDEAL_BACKSWING_DURATION_MS // Removed PUTT_DISTANCE_FACTOR
-} from './state.js';
+    IDEAL_BACKSWING_DURATION_MS
+} from './state.js'; // Removed PUTT_DISTANCE_FACTOR, IDEAL_BACKSWING_DURATION_MS is fine as is.
 import { getCurrentHoleLayout } from '../modes/playHole.js'; // <-- Import from correct module
 import { stopFullDownswingAnimation, stopChipDownswingAnimation /* Putt stopped in actions */ } from './animations.js';
-import { updateStatus, getBallPositionIndex, getBallPositionLevels } from '../ui.js';
+import { updateStatus, getBallPositionIndex, getBallPositionLevels, displayIdealJPressWindowOnBackswing } from '../ui.js'; // Added displayIdealJPressWindowOnBackswing
 import { calculateImpactPhysics } from '../swingPhysics.js';
 import { calculateChipImpact } from '../chipPhysics.js';
 import { calculatePuttImpact } from '../puttPhysics.js';
@@ -272,6 +272,18 @@ export function calculateFullSwingShot() {
     // Update internal state
     setGameState('result');
     console.log("Calc (Full): Shot calculation complete.");
+
+    // --- Display Ideal J Press Window on Backswing Bar (Transition Timing Feedback) ---
+    if (impactResult && typeof impactResult.idealJWindowStartOnBackswing === 'number' && typeof impactResult.idealJWindowWidthOnBackswing === 'number') {
+        // swingSpeed is the variable already in scope in this function, holding the speed for the current shot.
+        displayIdealJPressWindowOnBackswing(
+            impactResult.idealJWindowStartOnBackswing,
+            impactResult.idealJWindowWidthOnBackswing,
+            swingSpeed 
+        );
+    } else {
+        console.warn("Calc (Full): Could not display ideal J press window on backswing bar due to missing/invalid data from impactResult.");
+    }
 
     // --- Call Registered Callback ---
     const callback = getOnShotCompleteCallback();
