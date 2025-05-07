@@ -18,7 +18,9 @@ const IDEAL_CHIP_ROTATION_OFFSET_MS = 50;  // Ideal 'a' press time after 'w' rel
 // REMOVED: const IDEAL_CHIP_HIT_OFFSET_MS = 150; // Ideal 'i' press time is now dynamic (matches backswing duration)
 const CHIP_TIMING_SENSITIVITY_MS = 75;   // Window (+/- ms) around ideal for timing effects (applies to both rotation and hit deviations)
 const CHIP_TIMING_QUALITY_FACTOR = 0.25; // Max % reduction in speed/spin due to *hit* timing deviation (for near misses)
-const CHIP_TIMING_SPIN_FACTOR = 15;    // Side spin RPM per ms of *hit* deviation (Currently disabled)
+// const CHIP_TIMING_SPIN_FACTOR = 15;    // Side spin RPM per ms of *hit* deviation (REMOVED/REPLACED by new factor)
+const CHIP_ROTATION_SIDESPIN_FACTOR = 2.0; // RPM of sidespin per ms of rotation deviation
+const MAX_CHIP_SIDESPIN_RPM = 750;       // Max sidespin RPM for a chip shot
 // Strike Quality Thresholds (ms deviation for hit timing)
 const CHIP_DUFF_THRESHOLD_MS = 150;  // Very early hit
 const CHIP_FAT_THRESHOLD_MS = 50;    // Early hit
@@ -224,8 +226,21 @@ export function calculateChipImpact(backswingDuration, rotationOffset, hitOffset
     // Apply quality modifier from timing
     backSpin *= qualityModifier;
 
-    // 7. Calculate Side Spin (Assume 0 for chips initially)
-    let sideSpin = 0;
+    // 7. Calculate Side Spin (NEW CALCULATION)
+    // Late rotation ('a' pressed after ideal) = open face tendency = slice spin (positive for righty)
+    // Early rotation ('a' pressed before ideal) = closed face tendency = hook spin (negative for righty)
+    let sideSpin = rotationDeviation * CHIP_ROTATION_SIDESPIN_FACTOR;
+
+    // Apply the general spinMultiplier (from hit quality) to sidespin as well
+    sideSpin *= spinMultiplier;
+
+    // Also apply the general qualityModifier (from hit timing)
+    sideSpin *= qualityModifier;
+
+    // Clamp to maximum chip sidespin
+    sideSpin = clamp(sideSpin, -MAX_CHIP_SIDESPIN_RPM, MAX_CHIP_SIDESPIN_RPM);
+
+    console.log(`Chip SideSpin Calc: RotDev=${rotationDeviation.toFixed(0)}, Factor=${CHIP_ROTATION_SIDESPIN_FACTOR}, InitialSS=${(rotationDeviation * CHIP_ROTATION_SIDESPIN_FACTOR).toFixed(0)}, SpinMult=${spinMultiplier.toFixed(2)}, QualityMod=${qualityModifier.toFixed(2)}, FinalSS=${sideSpin.toFixed(0)}`);
 
     // --- Apply Surface Flight Modifications ---
     const surfaceProps = getSurfaceProperties(currentSurface);
@@ -264,7 +279,8 @@ export function calculateChipImpact(backswingDuration, rotationOffset, hitOffset
     // Clamp final values
     launchAngle = clamp(launchAngle, 1, 60);
     backSpin = clamp(backSpin, 100, 6000); // Allow slightly lower min spin
-    sideSpin = clamp(sideSpin, -1500, 1500);
+    // sideSpin is already clamped by MAX_CHIP_SIDESPIN_RPM, but clamping again here is safe if other factors were to change it post-surface mod.
+    sideSpin = clamp(sideSpin, -MAX_CHIP_SIDESPIN_RPM, MAX_CHIP_SIDESPIN_RPM);
 
 
     // --- Assemble Result Object (matching structure of full swing where possible) ---

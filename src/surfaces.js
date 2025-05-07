@@ -7,7 +7,7 @@ export const SURFACES = {
     bounce: 0.4,
     rollOut: 0.90,
     flightModification: {
-      spinReduction: 0.1,
+      spinReduction: 0.0,
       launchAngleChange: 0,
       velocityReduction: 0.00
     },

@@ -50,9 +50,23 @@ export function calculateFullSwingShot() {
     const swingSpeed = getSwingSpeed();
     const backswingStartTime = getBackswingStartTime();
     const selectedClub = getSelectedClub();
-    const scaledIdealBackswingDuration = IDEAL_BACKSWING_DURATION_MS / swingSpeed;
-    const idealBackswingEndTime = backswingStartTime ? backswingStartTime + scaledIdealBackswingDuration : null;
-    const timingInputs = { backswingDuration, hipInitiationTime: getHipInitiationTime(), rotationStartTime: getRotationStartTime(), rotationInitiationTime: getRotationInitiationTime(), armsStartTime: getArmsStartTime(), wristsStartTime: getWristsStartTime(), downswingPhaseStartTime: getDownswingPhaseStartTime(), idealBackswingEndTime };
+
+    // Calculate the ACTUAL timestamp when the player's backswing ended (e.g., 'w' release)
+    // This is crucial for the new adaptive timing logic in swingPhysics.js
+    const actualBackswingReleaseTimestamp = backswingStartTime ? backswingStartTime + backswingDuration : null;
+
+    // The field `idealBackswingEndTime` in `timingInputs` is now expected by `swingPhysics.js`
+    // to hold this actual release timestamp for the new transition logic.
+    const timingInputs = {
+        backswingDuration, // Actual duration
+        hipInitiationTime: getHipInitiationTime(),
+        rotationStartTime: getRotationStartTime(),
+        rotationInitiationTime: getRotationInitiationTime(),
+        armsStartTime: getArmsStartTime(),
+        wristsStartTime: getWristsStartTime(),
+        downswingPhaseStartTime: getDownswingPhaseStartTime(),
+        idealBackswingEndTime: actualBackswingReleaseTimestamp // Pass actual end time
+    };
 
     // --- Call the full swing physics calculation module ---
     // --- Determine Initial Position and Surface ---

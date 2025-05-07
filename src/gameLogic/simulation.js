@@ -5,9 +5,12 @@ import { getWind, getTemperature } from './state.js'; // Import environment stat
 // Returns simulation results including landing position, carry distance, peak height, time of flight, landing angle, and trajectory points.
 export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club) {
     // --- Get Environment Conditions at Start of Shot ---
-    const currentWind = getWind(); // { speed, direction }
+    let currentWind = getWind(); // { speed, direction }
     const currentTemperature = getTemperature(); // degrees C
     console.log(`Sim: Conditions - Temp: ${currentTemperature}°C, Wind: ${currentWind.speed.toFixed(1)}m/s @ ${currentWind.direction}°`);
+
+    currentWind.speed = 0 // Temporarily disable wind for testing
+
 
     const trajectoryPoints = [initialPos];
     let position = { ...initialPos }; // Current position (copy)
@@ -18,11 +21,24 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club) 
     const gravity = 9.81;
     let peakHeight = initialPos.y;
 
+
+    // Get the club-specific effective Cl for backspin
+    const club_Cl_backspin_eff = club.clBackspinEff || 0.1; // Use club's value, or a default if undefined
+
+    // Calculate the lift constant for backspin using the club's specific Cl
+    // This will now be constant throughout the simulation for this shot,
+    // as it's based on the selected club, not dynamically changing with spin.
+ 
     // --- Simulation Constants (Tunable) ---
-    const Cd = 0.32; // Drag coefficient (placeholder)
+    //const Cd = 0.26; // Drag coefficient (placeholder)
+
+    const SPIN_TO_DRAG_FACTOR = 0.0002; // START POSITIVE e.g. 0.0000005 to see drag reduction with spin
+    const Cd_base = 0.21; // Start with your current working value from the "old code" DRAG COEFFICIENT
+    const MINIMUM_EFFECTIVE_CD = 0.01; // Minimum allowed effective drag coefficient
+
     // const Cl = 0.03; // Lift coefficient (placeholder, related to spin). Reduced from 0.1, still higher than original 0.002. // Replaced by separate Cl values
-    const Cl_backspin = 0.01; // Controls vertical lift (tune for height)
-    const Cl_sidespin = 0.085; // Controls side force (tune for curve)
+    //const Cl_backspin = 0.025; // Controls vertical lift (tune for height)
+    const Cl_sidespin = 0.065; // Controls side force (tune for curve)
     // Calculate air density based on temperature (using simplified Ideal Gas Law)
     const pressure = 101325; // Standard pressure in Pa
     const specificGasConstant = 287.05; // J/(kg·K) for dry air
@@ -33,10 +49,13 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club) 
     const ballArea = Math.PI * (0.04267 / 2) * (0.04267 / 2); // Cross-sectional area of golf ball (m^2)
     const ballMass = 0.04593; // kg (standard golf ball mass)
     // Pre-calculate constant part of drag/lift force calculation (now uses calculated airDensity)
-    const dragConst = -0.5 * airDensity * ballArea * Cd / ballMass;
+    //const dragConst = -0.5 * airDensity * ballArea * Cd / ballMass;
     // const liftConst = 0.5 * airDensity * ballArea * Cl / ballMass; // Replaced by separate lift constants
-    const liftConst_backspin = 0.5 * airDensity * ballArea * Cl_backspin / ballMass;
+    //const liftConst_backspin = 0.5 * airDensity * ballArea * Cl_backspin / ballMass;
     const liftConst_sidespin = 0.5 * airDensity * ballArea * Cl_sidespin / ballMass;
+    const club_liftConst_backspin = 0.5 * airDensity * ballArea * club_Cl_backspin_eff / ballMass;
+
+
     // Air Spin Decay Constants (Tunable)
     const AIR_BACKSPIN_DECAY_RATE_RPM_PER_SECOND = 500; // RPM per second - Needs tuning!
     const AIR_SIDESPIN_DECAY_RATE_RPM_PER_SECOND = 400; // RPM per second - Needs tuning!
@@ -68,7 +87,7 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club) 
      console.log(`Sim: Initial Spin rad/s: (${spinRadPerSec.x.toFixed(2)}, ${spinRadPerSec.y.toFixed(2)}, ${spinRadPerSec.z.toFixed(2)})`);
 
 
-    while (position.y > 0.01 || time === 0) { // Loop until ball is near/below ground (allow at least one step)
+     while (position.y > 0.01 || time === 0) { // Loop until ball is near/below ground (allow at least one step)
         // 1. Calculate Relative Velocity (Ball Velocity - Wind Velocity)
         const relativeVel = {
             x: velocity.x - windVel.x,
@@ -78,8 +97,6 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club) 
         const relativeVelMag = Math.sqrt(relativeVel.x**2 + relativeVel.y**2 + relativeVel.z**2);
         if (relativeVelMag < 0.01) {
             // If relative velocity is negligible, forces are minimal.
-            // We still need gravity, but drag/lift become zero.
-            // Let's check absolute velocity too, maybe it's just floating with the wind.
             const absVelMag = Math.sqrt(velocity.x**2 + velocity.y**2 + velocity.z**2);
             if (absVelMag < 0.01) break; // Stop if absolute velocity is also negligible
         }
@@ -106,39 +123,68 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club) 
         }
         // We are ignoring rifle spin decay (spinRadPerSec.z) for now
 
-        // 2. Calculate Forces (as accelerations) based on RELATIVE velocity
+        // --- Calculate Effective Drag Coefficient for this step ---
+        // Higher spin will now REDUCE effectiveCd if SPIN_TO_DRAG_FACTOR is positive
+        let effectiveCd = Cd_base - (Math.abs(spinRadPerSec.x) * SPIN_TO_DRAG_FACTOR);
+        effectiveCd = Math.max(MINIMUM_EFFECTIVE_CD, effectiveCd); // Clamp to minimum
+        // For debugging:
+        // console.log(`Cd_base: ${Cd_base.toFixed(4)}, SpinFactor: ${(Math.abs(spinRadPerSec.x) * SPIN_TO_DRAG_FACTOR).toFixed(6)}, effectiveCd: ${effectiveCd.toFixed(4)}`);
+
+        // --- Pre-calculate drag force factor for THIS step using effectiveCd ---
+        const currentDragForceFactor = -0.5 * airDensity * ballArea * effectiveCd / ballMass;
+
+        // 2. Calculate Forces (as accelerations)
         const accel_gravity = { x: 0, y: -gravity, z: 0 };
 
-        // Drag Force: Opposes relative velocity. a = (dragConst * |Vrel|) * Vrel
+        // Drag Force:
         let accel_drag = { x: 0, y: 0, z: 0 };
-        if (relativeVelMag > 0.01) {
+        if (relativeVelMag > 0.01) { // Only apply drag if there's significant relative velocity
             accel_drag = {
-                x: dragConst * relativeVelMag * relativeVel.x,
-                y: dragConst * relativeVelMag * relativeVel.y,
-                z: dragConst * relativeVelMag * relativeVel.z
+                x: currentDragForceFactor * relativeVelMag * relativeVel.x,
+                y: currentDragForceFactor * relativeVelMag * relativeVel.y,
+                z: currentDragForceFactor * relativeVelMag * relativeVel.z
             };
         }
 
-        // Lift (Magnus) Force: Based on cross product of spin and relative velocity. a = liftConst * (w x Vrel)
+        // Lift (Magnus) Force: (Using your "old code" structure EXACTLY for lift)
+        /*
         const crossProd = {
             x: spinRadPerSec.y * relativeVel.z - spinRadPerSec.z * relativeVel.y,
             y: spinRadPerSec.z * relativeVel.x - spinRadPerSec.x * relativeVel.z,
             z: spinRadPerSec.x * relativeVel.y - spinRadPerSec.y * relativeVel.x
         };
-        // Lift (Magnus) Force: Split calculation using separate constants
         const accel_lift = {
-            x: liftConst_sidespin * crossProd.x, // Horizontal force primarily from sidespin (crossProd.x involves spin.y)
-            y: liftConst_backspin * crossProd.y, // Vertical force primarily from backspin (crossProd.y involves spin.x)
-            z: liftConst_backspin * (spinRadPerSec.x * velocity.y) - liftConst_sidespin * (spinRadPerSec.y * velocity.x) // Apply respective constants to z-components
+            x: liftConst_sidespin * crossProd.x,
+            y: liftConst_backspin * crossProd.y,
+            // THIS IS EXACTLY FROM YOUR "OLD" WORKING CODE'S LIFT.Z CALCULATION:
+            z: liftConst_backspin * (spinRadPerSec.x * velocity.y) - liftConst_sidespin * (spinRadPerSec.y * velocity.x)
+        };
+        */
+
+        // Lift (Magnus) Force - Alternative for Z-component
+        const crossProd = {
+            x: spinRadPerSec.y * relativeVel.z - spinRadPerSec.z * relativeVel.y,
+            y: spinRadPerSec.z * relativeVel.x - spinRadPerSec.x * relativeVel.z,
+            z: spinRadPerSec.x * relativeVel.y - spinRadPerSec.y * relativeVel.x // This is (spin x relativeVel)_z
+        };
+        const accel_lift = {
+            x: liftConst_sidespin * crossProd.x,
+            y: club_liftConst_backspin * crossProd.y,
+            // Z-component of acceleration due to lift/Magnus:
+            // This version uses the Z-component of the (spin x relativeVel) cross product,
+            // and typically this would be scaled by liftConst_sidespin as it contributes to lateral deviation.
+            z: liftConst_sidespin * crossProd.z
+            // which expands to:
+            // z: liftConst_sidespin * (spinRadPerSec.x * relativeVel.y - spinRadPerSec.y * relativeVel.x)
         };
 
-        // Additive "cheat" lift based on club's liftFactor
-        const cheatLiftAccelY = (club?.liftFactor || 0) * 0.25; // Scaled boost (Added null check for club)
+        // Additive "cheat" lift (Identical to your old code)
+        const cheatLiftAccelY = (club?.liftFactor || 0) * 0.25;
 
         // 3. Net Acceleration
         const accel_net = {
             x: accel_gravity.x + accel_drag.x + accel_lift.x,
-            y: accel_gravity.y + accel_drag.y + accel_lift.y + cheatLiftAccelY, // Added cheat lift
+            y: accel_gravity.y + accel_drag.y + accel_lift.y, //+ cheatLiftAccelY, experimental
             z: accel_gravity.z + accel_drag.z + accel_lift.z
         };
 

@@ -26,9 +26,9 @@ const MAX_TRANSITION_SPEED_LOSS = 0.3; // Max % ACHS loss from poor transition t
 // Arms/Rotation & Path/Speed Efficiency
 const IDEAL_ROTATION_OFFSET_MS = 50; // Ideal 'a' press relative to downswing start
 const IDEAL_ARMS_OFFSET_MS = 100; // Ideal 'd' press relative to downswing start
-const RELATIVE_ARMS_ROTATION_PATH_SENSITIVITY = 0.5; // Degrees of path change per ms of relative diff (d vs a)
-const MAX_RELATIVE_PATH_CHANGE = 6.0; // Max degrees path change from relative timing
-const ABSOLUTE_ARMS_ROTATION_TIMING_SENSITIVITY = 200; // ms deviation window for absolute timing affecting path/speed
+const RELATIVE_ARMS_ROTATION_PATH_SENSITIVITY = 1.0; // Degrees of path change per ms of relative diff (d vs a)
+const MAX_RELATIVE_PATH_CHANGE = 10.0; // Max degrees path change from relative timing
+const ABSOLUTE_ARMS_ROTATION_TIMING_SENSITIVITY = 300; // ms deviation window for absolute timing affecting path/speed
 const MAX_ABSOLUTE_PATH_SHIFT = 6.0; // Max additional degrees path change from poor absolute timing
 const MAX_ABSOLUTE_SPEED_LOSS = 0.4; // Max % ACHS loss from poor absolute arms/rotation timing
 
@@ -41,7 +41,7 @@ const MAX_DYNAMIC_LOFT_CHANGE = 15.0; // Max degrees dynamic loft change
 const WRIST_FAT_THIN_THRESHOLD_MS = 100; // ms deviation threshold for Fat/Thin strike
 
 // Attack Angle
-const BALLPOS_AOA_SENSITIVITY = 10.0; // Max degrees AoA change from ball position (-1 to +1 factor)
+const BALLPOS_AOA_SENSITIVITY = 5.0; // Max degrees AoA change from ball position (-1 to +1 factor)
 const MAX_NON_TEE_AOA_BONUS = 1.0; // Max degrees positive AoA bonus from ball position when *not* on tee
 // const ARMS_AOA_SENSITIVITY = 0.0; // How much arms timing affects AoA (set to 0 based on new rules?)
 
@@ -54,9 +54,18 @@ const BUNKER_FAT_STRIKE_SMASH_PENALTY = 0.10; // Reduced penalty for fat shots f
 
 // Spin Calculation Factors (Placeholders - Need Refinement)
 const SPIN_AXIS_SENSITIVITY = 6.0; // How much face-to-path affects spin axis tilt
-const BACKSPIN_LOFT_FACTOR = 60; // Backspin per degree of dynamic loft
-const BACKSPIN_SPEED_FACTOR = 30; // Backspin per mph of ACHS
-const BACKSPIN_AOA_FACTOR = -500; // Backspin per degree of positive AoA
+
+// Backspin Factors
+const BACKSPIN_LOFT_FACTOR = 120; // Backspin per degree of dynamic loft
+const BACKSPIN_SPEED_FACTOR = 40; // Backspin per mph of ACHS
+const BACKSPIN_AOA_FACTOR =  0; // Backspin per degree of positive AoA
+
+// Sidespin Calculation Factors (NEW - Placeholders, need refinement)
+const SIDESPIN_FACE_TO_PATH_FACTOR = 100; // Base sidespin RPM per degree of face-to-path
+const SIDESPIN_SPEED_FACTOR = 10;         // Additional sidespin RPM per mph of ACHS (scaled by face-to-path)
+const SIDESPIN_LOFT_DAMPENING_FACTOR = 0.02; // How much dynamic loft reduces sidespin
+
+// Common Spin Strike Modifiers
 const FAT_STRIKE_SPIN_MOD = 0.8; // Multiplier for backspin
 const THIN_STRIKE_SPIN_MOD = 0.5; // Multiplier for backspin
 const FLIP_STRIKE_SPIN_MOD = 1.2; // Multiplier for backspin (adds spin)
@@ -83,11 +92,16 @@ function clamp(value, min, max) {
  * @param {number} downswingStartTime - The timestamp when the downswing phase began.
  * @param {number} idealOffset - The ideal offset (ms) for this action relative to downswing start.
  * @param {number} swingSpeed - The swing speed multiplier (0.3 to 1.0).
+ * @param {number} actualBackswingDuration - The player's actual backswing duration in ms.
+ * @param {number} idealBackswingBaseMs - The game's base ideal backswing duration (e.g., IDEAL_BACKSWING_DURATION_MS).
  * @param {number} [penaltyTime=5000] - Time added if actualTime is null (missed input).
  * @returns {number} The timing deviation in milliseconds. Positive means late, negative means early.
  */
-function calculateTimingDeviation(actualTime, downswingStartTime, idealOffset, swingSpeed, penaltyTime = 5000) {
-    const scaledIdealOffset = idealOffset / swingSpeed;
+function calculateTimingDeviation(actualTime, downswingStartTime, idealOffset, swingSpeed, actualBackswingDuration, idealBackswingBaseMs, penaltyTime = 5000) {
+    const idealBackswingForTempo = idealBackswingBaseMs / swingSpeed;
+    const durationScalingFactor = actualBackswingDuration / idealBackswingForTempo;
+    // Ideal offset is scaled first by swingSpeed (overall tempo), then by the ratio of actual backswing length to the ideal length for that tempo.
+    const scaledIdealOffset = (idealOffset / swingSpeed) * durationScalingFactor;
     const effectiveTime = actualTime !== null ? actualTime : downswingStartTime + penaltyTime;
     const actualOffset = effectiveTime - downswingStartTime;
     return actualOffset - scaledIdealOffset;
@@ -142,12 +156,14 @@ function calculatePotentialCHS(backswingDuration, swingSpeed, clubBaseSpeed) {
  * based on transition timing, absolute arms/rotation timing, and overswing penalty.
  * @param {number} backswingDuration - Actual duration of the backswing in ms.
  */
-function calculateActualCHS(potentialCHS, transitionDev, armsDev, rotationDev, backswingDuration, swingSpeed) { // Added backswingDuration
+function calculateActualCHS(potentialCHS, transitionDev, armsDev, rotationDev, backswingDuration, swingSpeed, scaledTransitionSensitivity) {
     // Transition Efficiency: Perfect timing = 1.0, max loss at edge of sensitivity window
-    const transitionLoss = clamp(Math.abs(transitionDev) / (TRANSITION_TIMING_SENSITIVITY / swingSpeed), 0, 1) * MAX_TRANSITION_SPEED_LOSS;
+    // Use the scaledTransitionSensitivity passed in.
+    const transitionLoss = clamp(Math.abs(transitionDev) / scaledTransitionSensitivity, 0, 1) * MAX_TRANSITION_SPEED_LOSS;
     const transitionEfficiency = 1.0 - transitionLoss;
 
     // Absolute Sequence Efficiency: Average deviation of arms and rotation
+    // The sensitivity for this is already scaled within calculateTimingDeviation via durationScalingFactor
     const absoluteAvgDev = (Math.abs(armsDev) + Math.abs(rotationDev)) / 2;
     const sequenceLoss = clamp(absoluteAvgDev / (ABSOLUTE_ARMS_ROTATION_TIMING_SENSITIVITY / swingSpeed), 0, 1) * MAX_ABSOLUTE_SPEED_LOSS;
     const sequenceEfficiency = 1.0 - sequenceLoss;
@@ -325,7 +341,7 @@ function calculateBallSpeed(actualCHS, smashFactor) {
  */
 function calculateLaunchAngle(dynamicLoft, attackAngle) {
     // Blend dynamic loft (75%) and attack angle (25%)
-    const launchAngle = dynamicLoft * 0.8 + attackAngle * 1;
+    const launchAngle = dynamicLoft * 0.7 + attackAngle * 1;
     console.log(`Launch Calc: DynLoft=${dynamicLoft.toFixed(1)}, AoA=${attackAngle.toFixed(1)}, BlendLaunch=${launchAngle.toFixed(1)}`);
     // Add clamping based on club type later if needed (e.g., min/max launch)
     return launchAngle;
@@ -363,13 +379,45 @@ function calculateSpinAxis(faceAngleRelativeToPath, dynamicLoft) {
  * @param {string} currentSurface - The surface the ball is on.
  * @returns {number} The final backspin in RPM.
  */
-function calculateBackSpin(dynamicLoft, actualCHS, attackAngle, strikeQuality, currentSurface) {
-    // Base spin calculation (needs significant tuning)
-    // Higher loft, higher speed = more spin. Steeper AoA (more negative) = more spin.
-    let baseSpin = 1000 + // Base minimum spin
+function calculateBackSpin(dynamicLoft, actualCHS, attackAngle, strikeQuality, currentSurface, staticClubLoft) {
+    const LOW_LOFT_THRESHOLD = 15.0; // Woods and Driver
+    const HIGH_LOFT_THRESHOLD = 49.0; // Wedges
+    const BASE_SPEED_FACTOR = BACKSPIN_SPEED_FACTOR; // Original 20
+
+    let speedFactorMultiplier = 1.0;
+
+    if (staticClubLoft < LOW_LOFT_THRESHOLD) {
+        // Reduce significantly for very low lofts
+        // Example: at 10 deg (Driver), multiplier might be 0.3
+        // Scale linearly from, say, 0.2 at 0 loft to 0.7 at LOW_LOFT_THRESHOLD
+        const minMultiplierLow = 0.15; // Multiplier for extremely low loft (e.g. theoretical 0 deg)
+        const maxMultiplierLow = 0.5; // Multiplier at the LOW_LOFT_THRESHOLD
+        speedFactorMultiplier = minMultiplierLow + (maxMultiplierLow - minMultiplierLow) * (staticClubLoft / LOW_LOFT_THRESHOLD);
+    } else if (staticClubLoft > HIGH_LOFT_THRESHOLD) {
+        // Optionally, slightly increase for very high lofts, or keep at 1.0
+        // Example: at 60 deg (Lob Wedge), multiplier might be 1.1
+        const minMultiplierHigh = 1.0; // Multiplier at the HIGH_LOFT_THRESHOLD
+        const maxMultiplierHigh = 1.1; // Multiplier for very high lofts (e.g., 60+ deg)
+        const range = 65.0 - HIGH_LOFT_THRESHOLD; // Assume max loft around 65 for scaling
+        speedFactorMultiplier = minMultiplierHigh + (maxMultiplierHigh - minMultiplierHigh) * ((staticClubLoft - HIGH_LOFT_THRESHOLD) / range);
+        speedFactorMultiplier = Math.min(speedFactorMultiplier, maxMultiplierHigh); // Cap it
+    } else {
+        // Interpolate between LOW_LOFT_THRESHOLD (e.g., 0.7x) and HIGH_LOFT_THRESHOLD (1.0x)
+        const lowThreshMultiplier = 0.6; // Multiplier at LOW_LOFT_THRESHOLD
+        const highThreshMultiplier = 1.0; // Multiplier at HIGH_LOFT_THRESHOLD
+        const loftRange = HIGH_LOFT_THRESHOLD - LOW_LOFT_THRESHOLD;
+        speedFactorMultiplier = lowThreshMultiplier + (highThreshMultiplier - lowThreshMultiplier) * ((staticClubLoft - LOW_LOFT_THRESHOLD) / loftRange);
+    }
+
+    // Ensure multiplier is not negative or excessively high
+    speedFactorMultiplier = Math.max(0.1, Math.min(speedFactorMultiplier, 1.5));
+
+    const dynamicSpeedFactor = BASE_SPEED_FACTOR * speedFactorMultiplier;
+
+    let baseSpin = /*1000 +*/
                    (dynamicLoft * BACKSPIN_LOFT_FACTOR) +
-                   (actualCHS * BACKSPIN_SPEED_FACTOR) +
-                   (attackAngle * BACKSPIN_AOA_FACTOR); // Note: More negative AoA increases spin
+                   (actualCHS * dynamicSpeedFactor) + // Use the new dynamic factor
+                   (attackAngle * BACKSPIN_AOA_FACTOR);
 
     // Apply modifier based on strike quality and surface
     let strikeMod = 1.0;
@@ -391,8 +439,43 @@ function calculateBackSpin(dynamicLoft, actualCHS, attackAngle, strikeQuality, c
     // Clamp backspin to reasonable limits
     backSpin = clamp(backSpin, 500, 12000);
 
-    console.log(`BackSpin Calc: DynLoft=${dynamicLoft.toFixed(1)}, ACHS=${actualCHS.toFixed(1)}, AoA=${attackAngle.toFixed(1)}, BaseSpin=${baseSpin.toFixed(0)}, Strike=${strikeQuality}, Surface=${currentSurface}, Mod=${strikeMod.toFixed(2)}, FinalSpin=${backSpin.toFixed(0)}`);
-    return backSpin; // RPM
+    console.log(`BackSpin Calc: StaticLoft=${staticClubLoft.toFixed(1)}, SpeedFactorMultiplier=${speedFactorMultiplier.toFixed(2)}, DynamicSpeedFactor=${dynamicSpeedFactor.toFixed(1)}, DynLoft=${dynamicLoft.toFixed(1)}, ACHS=${actualCHS.toFixed(1)}, AoA=${attackAngle.toFixed(1)}, BaseSpin=${baseSpin.toFixed(0)}, Strike=${strikeQuality}, Surface=${currentSurface}, Mod=${strikeMod.toFixed(2)}, FinalSpin=${backSpin.toFixed(0)}`); // Added strikeMod for logging
+    return backSpin;
+}
+
+/**
+ * Calculates the Side Spin rate (RPM) based on face-to-path, speed, and dynamic loft.
+ * @param {number} faceAngleRelativeToPath - Clubface angle relative to path (degrees).
+ * @param {number} actualCHS - Calculated actual club head speed (mph).
+ * @param {number} dynamicLoft - Calculated dynamic loft (degrees).
+ * @param {string} strikeQuality - Calculated strike quality.
+ * @returns {number} The side spin in RPM (positive for slice spin for a righty, negative for hook).
+ */
+function calculateSideSpin(faceAngleRelativeToPath, actualCHS, dynamicLoft, strikeQuality) {
+    let baseSideSpin = faceAngleRelativeToPath * SIDESPIN_FACE_TO_PATH_FACTOR;
+    let speedContribution = 0;
+    
+    // Apply loft dampening: higher loft clubs tend to generate less sidespin for the same face-to-path
+    let loftDampening = Math.max(0.1, 1.0 - (dynamicLoft * SIDESPIN_LOFT_DAMPENING_FACTOR));
+
+    let totalSideSpin;
+
+    if (Math.abs(faceAngleRelativeToPath) > 0.1) { // Only add speed contribution if face is not perfectly square
+        // Speed contribution is scaled by how open/closed the face is relative to path
+        speedContribution = (actualCHS * SIDESPIN_SPEED_FACTOR) * (faceAngleRelativeToPath / 5.0); // Normalize faceAngle (e.g. div by 5 deg as a reference)
+        totalSideSpin = (baseSideSpin + speedContribution) * loftDampening;
+    } else {
+        totalSideSpin = baseSideSpin * loftDampening; // No significant face/path, so speed doesn't add much sidespin
+    }
+
+    // TODO: Consider strikeQuality modifiers for sidespin (e.g., gear effect for toe/heel)
+    // Example: if (strikeQuality === "Toe") totalSideSpin *= 1.2; (more slice/hook)
+    // Example: if (strikeQuality === "Heel" && totalSideSpin !== 0) totalSideSpin *= 1.2 * -Math.sign(totalSideSpin); // Exaggerate hook for heel, slice for toe (simplified)
+
+    totalSideSpin = clamp(totalSideSpin, -5000, 5000);
+
+    console.log(`SideSpin Calc (New): FaceToPath=${faceAngleRelativeToPath.toFixed(1)}, ACHS=${actualCHS.toFixed(1)}, DynLoft=${dynamicLoft.toFixed(1)}, BaseSS=${baseSideSpin.toFixed(0)}, SpeedCont=${speedContribution.toFixed(0)}, LoftDamp=${loftDampening.toFixed(2)}, TotalSS=${totalSideSpin.toFixed(0)}`);
+    return totalSideSpin;
 }
 
 
@@ -422,24 +505,57 @@ export function calculateImpactPhysics(timingInputs, club, swingSpeed, ballPosit
 
     // Calculate Deviations (relative to downswing start)
     const rotationTime = timingInputs.rotationStartTime ?? timingInputs.rotationInitiationTime; // Use whichever 'a' press happened
-    const rotationDev = calculateTimingDeviation(rotationTime, timingInputs.downswingPhaseStartTime, IDEAL_ROTATION_OFFSET_MS, swingSpeed);
-    const armsDev = calculateTimingDeviation(timingInputs.armsStartTime, timingInputs.downswingPhaseStartTime, IDEAL_ARMS_OFFSET_MS, swingSpeed);
-    const wristsDev = calculateTimingDeviation(timingInputs.wristsStartTime, timingInputs.downswingPhaseStartTime, IDEAL_WRISTS_OFFSET_MS, swingSpeed);
+    // Pass actualBackswingDuration and IDEAL_BACKSWING_DURATION_MS for scaling calculations
+    const rotationDev = calculateTimingDeviation(rotationTime, timingInputs.downswingPhaseStartTime, IDEAL_ROTATION_OFFSET_MS, swingSpeed, timingInputs.backswingDuration, IDEAL_BACKSWING_DURATION_MS);
+    const armsDev = calculateTimingDeviation(timingInputs.armsStartTime, timingInputs.downswingPhaseStartTime, IDEAL_ARMS_OFFSET_MS, swingSpeed, timingInputs.backswingDuration, IDEAL_BACKSWING_DURATION_MS);
+    const wristsDev = calculateTimingDeviation(timingInputs.wristsStartTime, timingInputs.downswingPhaseStartTime, IDEAL_WRISTS_OFFSET_MS, swingSpeed, timingInputs.backswingDuration, IDEAL_BACKSWING_DURATION_MS);
 
-    // Calculate Transition Deviation (relative to ideal backswing end)
-    const idealTransitionTime = timingInputs.idealBackswingEndTime + (IDEAL_TRANSITION_OFFSET_MS / swingSpeed);
-    const actualTransitionTime = timingInputs.hipInitiationTime ?? timingInputs.downswingPhaseStartTime; // Use 'j' press or fallback to downswing start
-    const transitionDev = actualTransitionTime - idealTransitionTime;
+    // --- New Transition Deviation Logic ---
+    // CRITICAL ASSUMPTION: timingInputs.idealBackswingEndTime is now expected to be the timestamp of the ACTUAL 'w' key release (end of player's chosen backswing).
+    // If it's not, the calling code needs to be updated to provide this, perhaps as timingInputs.actualBackswingReleaseTime.
+    const actualBackswingReleaseTimestamp = timingInputs.idealBackswingEndTime; // Assuming this field now holds the actual release time.
+    
+    const baseIdealBackswingForTempo = IDEAL_BACKSWING_DURATION_MS / swingSpeed;
+    const durationScalingFactor = timingInputs.backswingDuration / baseIdealBackswingForTempo;
 
-    console.log(`Deviations: Trans=${transitionDev.toFixed(0)}, Rot=${rotationDev.toFixed(0)}, Arms=${armsDev.toFixed(0)}, Wrists=${wristsDev.toFixed(0)}`);
+    // Ideal 'j' press offset is scaled by overall tempo (swingSpeed) and by the player's chosen backswing length.
+    const scaledIdealTransitionOffset = (IDEAL_TRANSITION_OFFSET_MS / swingSpeed) * durationScalingFactor;
+    
+    const idealTransitionPressTime = actualBackswingReleaseTimestamp + scaledIdealTransitionOffset; // Ideal 'j' press time relative to actual backswing end.
+    
+    const actualTransitionPressTime = timingInputs.hipInitiationTime ?? actualBackswingReleaseTimestamp; // If 'j' not pressed, effectively at end of actual backswing.
+    
+    const transitionDev = actualTransitionPressTime - idealTransitionPressTime;
+    
+    // The sensitivity window for transition should also scale.
+    const scaledTransitionSensitivity = TRANSITION_TIMING_SENSITIVITY * durationScalingFactor;
+    // Ensure sensitivity is not zero if durationScalingFactor is very small.
+    const finalScaledTransitionSensitivity = Math.max(50, scaledTransitionSensitivity); // Min sensitivity window, e.g. 50ms
+
+    console.log(`Deviations: Trans=${transitionDev.toFixed(0)} (Ideal J Time: ${idealTransitionPressTime.toFixed(0)} based on Actual BS End: ${actualBackswingReleaseTimestamp.toFixed(0)}, ScaledOffset: ${scaledIdealTransitionOffset.toFixed(0)}), Rot=${rotationDev.toFixed(0)}, Arms=${armsDev.toFixed(0)}, Wrists=${wristsDev.toFixed(0)}`);
+    console.log(`Transition Params: durationScalingFactor=${durationScalingFactor.toFixed(2)}, finalScaledTransitionSensitivity=${finalScaledTransitionSensitivity.toFixed(0)}`);
 
     // --- Calculate Core Parameters ---
     const potentialCHS = calculatePotentialCHS(timingInputs.backswingDuration, swingSpeed, club.basePotentialSpeed);
-    // Pass backswingDuration to calculateActualCHS for overswing penalty
-    const actualCHS = calculateActualCHS(potentialCHS, transitionDev, armsDev, rotationDev, timingInputs.backswingDuration, swingSpeed);
-    const clubPathAngle = calculateClubPathAngle(armsDev, rotationDev, swingSpeed);
-    const faceAngleRelPath = calculateFaceAngleRelativeToPath(wristsDev, swingSpeed);
-    const absoluteFaceAngle = clubPathAngle + faceAngleRelPath;
+    // Pass backswingDuration and the new scaledTransitionSensitivity to calculateActualCHS
+    const actualCHS = calculateActualCHS(potentialCHS, transitionDev, armsDev, rotationDev, timingInputs.backswingDuration, swingSpeed, finalScaledTransitionSensitivity);
+    const clubPathAngle = calculateClubPathAngle(armsDev, rotationDev, swingSpeed); // Path relative to target line
+
+    // Calculate face angle relative to target line, influenced by wrist timing
+    // If wrists are perfect, this is 0 (face square to target).
+    // Positive = open to target, Negative = closed to target.
+    const dynamicFaceAngleToTarget = calculateFaceAngleRelativeToPath(wristsDev, swingSpeed);
+
+    // Absolute face angle is now directly the dynamicFaceAngleToTarget
+    const absoluteFaceAngle = dynamicFaceAngleToTarget;
+
+    // Face-to-Path is the difference between where the face points (rel to target) and where the path goes (rel to target)
+    // This is the critical angle for sidespin.
+    // Example: Path -5 (left), Face_to_Target 0 (square) => Face-to-Path = 0 - (-5) = +5 (open to path)
+    // Example: Path -5 (left), Face_to_Target -2 (closed) => Face-to-Path = -2 - (-5) = +3 (open to path)
+    // Example: Path +5 (right), Face_to_Target 0 (square) => Face-to-Path = 0 - 5 = -5 (closed to path)
+    const faceAngleRelPath = dynamicFaceAngleToTarget - clubPathAngle;
+
     const attackAngle = calculateAttackAngle(club.baseAoA, ballPositionFactor, currentSurface); // Pass currentSurface
     const dynamicLoft = calculateDynamicLoft(club.loft, wristsDev, attackAngle, swingSpeed);
     const strikeQuality = calculateStrikeQuality(wristsDev, attackAngle, club.baseAoA, swingSpeed);
@@ -447,7 +563,9 @@ export function calculateImpactPhysics(timingInputs, club, swingSpeed, ballPosit
     const smashFactor = calculateSmashFactor(club.baseSmash, strikeQuality, currentSurface);
     let ballSpeed = calculateBallSpeed(actualCHS, smashFactor); // Calculate initial ball speed
     let launchAngle = calculateLaunchAngle(dynamicLoft, attackAngle); // Calculate initial launch angle
-    let backSpin = calculateBackSpin(dynamicLoft, actualCHS, attackAngle, strikeQuality, currentSurface); // Calculate initial backspin
+    let backSpin = calculateBackSpin(dynamicLoft, actualCHS, attackAngle, strikeQuality, currentSurface, club.loft);
+
+
 
     // --- Apply Surface Flight Modifications ---
     const surfaceProps = getSurfaceProperties(currentSurface);
@@ -482,29 +600,47 @@ export function calculateImpactPhysics(timingInputs, club, swingSpeed, ballPosit
         console.log(`Post-Surface Mod: BallSpeed=${ballSpeed.toFixed(1)}, BackSpin=${backSpin.toFixed(0)}, LaunchAngle=${launchAngle.toFixed(1)}`);
     }
 
-    // --- Calculate Spin Axis and Side Spin (AFTER potential backspin reduction) ---
-    const spinAxisTilt = calculateSpinAxis(faceAngleRelPath, dynamicLoft); // Tilt depends on face/path/loft, not surface directly
-    let sideSpin = spinAxisTilt * 150; // Example: 1 degree tilt = 150 RPM side spin
+    // --- Calculate Side Spin (New Method) ---
+    let sideSpin = calculateSideSpin(faceAngleRelPath, actualCHS, dynamicLoft, strikeQuality);
 
-    // Apply spin reduction to side spin as well
+    // Apply surface flight modifications to side spin as well (if applicable)
+    // This re-uses the same spinReduction factor calculated for backspin, for consistency.
     if (flightMod && flightMod.spinReduction) {
-         let spinReductionFactor = flightMod.spinReduction;
-         if (Array.isArray(spinReductionFactor)) {
-             // If it was randomized for backspin, we should ideally use the *same* random factor
-             // For simplicity now, let's just re-randomize or use the midpoint? Re-randomize is easier.
-             const [min, max] = spinReductionFactor;
-             spinReductionFactor = min + Math.random() * (max - min);
+         let spinReductionFactorForSideSpin = flightMod.spinReduction; // Assuming it's a single value or already determined
+         if (Array.isArray(flightMod.spinReduction)) {
+             // If spinReduction was an array [min, max] and randomized for backspin,
+             // we should ideally use the *same* random factor.
+             // For simplicity, if it's an array, let's re-evaluate or use a consistent interpretation.
+             // This part might need refinement if backspin's reduction factor isn't stored/passed.
+             // Let's assume flightMod.spinReduction is the factor to apply (could be a re-randomized one if array).
+             // To be truly consistent, the randomized factor from backspin should be passed or re-used.
+             // For now, if it's an array, we'll just take the first element as an example, or average.
+             // This is a placeholder for potentially more robust handling of shared random factors.
+             if (Array.isArray(flightMod.spinReduction) && flightMod.spinReduction.length === 2) {
+                // If backspin randomized it, we don't have that exact value here.
+                // Re-randomizing or taking midpoint. For now, let's just log and use a simple approach.
+                // console.warn("Sidespin reduction from array: using new random value or midpoint logic might be needed for perfect consistency with backspin's random reduction.");
+                const [min, max] = flightMod.spinReduction;
+                spinReductionFactorForSideSpin = min + Math.random() * (max - min); // Re-randomize for side spin
+             } else if (typeof flightMod.spinReduction === 'number') {
+                spinReductionFactorForSideSpin = flightMod.spinReduction;
+             } else {
+                spinReductionFactorForSideSpin = 0; // Default if not a number or expected array
+             }
+         } else if (typeof flightMod.spinReduction === 'number') {
+            spinReductionFactorForSideSpin = flightMod.spinReduction;
+         } else {
+            spinReductionFactorForSideSpin = 0;
          }
-         sideSpin *= (1 - spinReductionFactor);
-         console.log(`Post-Surface Mod SideSpin: ${sideSpin.toFixed(0)} (ReductionFactor: ${spinReductionFactor.toFixed(3)})`);
+
+         sideSpin *= (1 - spinReductionFactorForSideSpin);
+         console.log(`Post-Surface Mod SideSpin: ${sideSpin.toFixed(0)} (ReductionFactor: ${spinReductionFactorForSideSpin.toFixed(3)})`);
     }
 
-    console.log(`SideSpin Calc: Tilt=${spinAxisTilt.toFixed(1)}, Final SideSpin=${sideSpin.toFixed(0)}`);
-
-
-    // --- Assemble Result Object ---
-
-    console.log(`SideSpin Calc: Tilt=${spinAxisTilt.toFixed(1)}, SideSpin=${sideSpin.toFixed(0)}`);
+    // The old spinAxisTilt calculation might still be useful if you want to visualize it,
+    // but it's no longer the direct source of sideSpin RPM.
+    const spinAxisTilt = calculateSpinAxis(faceAngleRelPath, dynamicLoft); // Keep for informational/visual purposes if needed
+    // console.log(`SpinAxis Tilt (Informational): ${spinAxisTilt.toFixed(1)} deg`);
 
 
     // --- Assemble Result Object ---
