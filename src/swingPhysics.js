@@ -644,14 +644,14 @@ export function calculateImpactPhysics(timingInputs, club, swingSpeed, ballPosit
 
 
     // --- Assemble Result Object ---
-    // First, calculate the ideal J press window parameters for UI feedback
+    // Calculate ideal J press window for backswing bar UI feedback
     let idealJWindowStartOnBackswing = null;
     let idealJWindowWidthOnBackswing = null;
 
     if (timingInputs.backswingDuration && typeof timingInputs.backswingDuration === 'number' && timingInputs.backswingDuration > 0 && swingSpeed > 0) {
-        const idealJPressCenterMs_from_backswingStart = 
+        const idealJPressCenterMs_from_backswingStart =
             timingInputs.backswingDuration + (IDEAL_TRANSITION_OFFSET_MS * (timingInputs.backswingDuration / IDEAL_BACKSWING_DURATION_MS));
-        
+
         idealJWindowWidthOnBackswing = 50 / swingSpeed; // Base width 50ms, scaled by swingSpeed
         idealJWindowStartOnBackswing = idealJPressCenterMs_from_backswingStart - (idealJWindowWidthOnBackswing / 2);
 
@@ -659,6 +659,25 @@ export function calculateImpactPhysics(timingInputs, club, swingSpeed, ballPosit
     } else {
         console.warn("Physics: Could not calculate ideal J window for UI due to invalid backswingDuration or swingSpeed.");
     }
+
+    // Calculate ideal window parameters for downswing events (rotation, arms, wrists) for UI feedback
+    const downswingFeedbackWindowWidth = 50 / swingSpeed; // Consistent width for feedback windows
+
+    // Helper to get the scaled ideal offset which is the center of the window
+    const getIdealCenter = (actualTime, idealOffset) => {
+        // Recalculate scaledIdealOffset as it's done in calculateTimingDeviation
+        const idealBackswingForTempo = IDEAL_BACKSWING_DURATION_MS / swingSpeed;
+        const currentDurationScalingFactor = timingInputs.backswingDuration / idealBackswingForTempo;
+        return (idealOffset / swingSpeed) * currentDurationScalingFactor;
+    };
+
+    const idealRotationCenterMs = getIdealCenter(rotationTime, IDEAL_ROTATION_OFFSET_MS);
+    const idealArmsCenterMs = getIdealCenter(timingInputs.armsStartTime, IDEAL_ARMS_OFFSET_MS);
+    const idealWristsCenterMs = getIdealCenter(timingInputs.wristsStartTime, IDEAL_WRISTS_OFFSET_MS);
+
+    const idealRotationWindowStart = idealRotationCenterMs - (downswingFeedbackWindowWidth / 2);
+    const idealArmsWindowStart = idealArmsCenterMs - (downswingFeedbackWindowWidth / 2);
+    const idealWristsWindowStart = idealWristsCenterMs - (downswingFeedbackWindowWidth / 2);
 
     const impactResult = {
         // Input Deviations (for potential UI display/logging)
@@ -688,6 +707,14 @@ export function calculateImpactPhysics(timingInputs, club, swingSpeed, ballPosit
         // Ideal J Press Window parameters for UI feedback on backswing bar
         idealJWindowStartOnBackswing: idealJWindowStartOnBackswing,
         idealJWindowWidthOnBackswing: idealJWindowWidthOnBackswing,
+
+        // Ideal Downswing Event Window parameters for UI feedback
+        idealRotationWindowStart: idealRotationWindowStart,
+        idealRotationWindowWidth: downswingFeedbackWindowWidth,
+        idealArmsWindowStart: idealArmsWindowStart,
+        idealArmsWindowWidth: downswingFeedbackWindowWidth,
+        idealWristsWindowStart: idealWristsWindowStart,
+        idealWristsWindowWidth: downswingFeedbackWindowWidth,
     };
 
     console.log("--- Impact Physics Calculation Complete ---");

@@ -130,27 +130,20 @@ export function setupTimingBarWindows(swingSpeed) {
     // Ideal timings (match gameLogic.js)
     const idealWindowWidthMs = 50 / swingSpeed;
     const idealRotationStart = 50 / swingSpeed;  // Triggered by 'a'
-    const idealArmsStart = 100 / swingSpeed;     // Triggered by 'j'
-    const idealWristsStart = 200 / swingSpeed;   // Triggered by 'd'
-    const effectiveDownswingDuration = DOWNSWING_TIMING_BAR_DURATION_MS / swingSpeed;
+    // Ideal timings (match gameLogic.js) - These are base offsets
+    // const idealWindowWidthMs = 50 / swingSpeed; // This width is now calculated in swingPhysics and passed for feedback
+    // const idealRotationStart = 50 / swingSpeed;  // Triggered by 'a'
+    // const idealArmsStart = 100 / swingSpeed;     // Triggered by 'j'
+    // const idealWristsStart = 200 / swingSpeed;   // Triggered by 'd'
+    // const effectiveDownswingDuration = DOWNSWING_TIMING_BAR_DURATION_MS / swingSpeed;
 
-    const calculateWindow = (idealStart) => {
-        const startMs = idealStart - idealWindowWidthMs / 2;
-        const endMs = idealStart + idealWindowWidthMs / 2;
-        const leftPercent = Math.max(0, (startMs / effectiveDownswingDuration) * 100);
-        const rightPercent = Math.min(100, (endMs / effectiveDownswingDuration) * 100);
-        const widthPercent = Math.max(0, rightPercent - leftPercent);
-        return { left: leftPercent, width: widthPercent };
-    };
+    // The ideal windows (window-a, window-j, window-d) will now be hidden by default
+    // and only shown post-shot with dynamically calculated positions.
+    if (windowA) windowA.style.display = 'none';
+    if (windowJ) windowJ.style.display = 'none';
+    if (windowD) windowD.style.display = 'none';
 
-    // Calculate window positions based on NEW key assignments (a=Rotation, d=Arms, u=Wrists)
-    const winA = calculateWindow(idealRotationStart); // Rotation window ('a') -> window-a
-    const winJ = calculateWindow(idealArmsStart);     // Arms window ('d') -> window-j
-    const winD = calculateWindow(idealWristsStart);   // Wrists window ('u') -> window-d
-
-    windowA.style.left = `${winA.left}%`; windowA.style.width = `${winA.width}%`; // Rotation ('a') -> window-a
-    windowJ.style.left = `${winJ.left}%`; windowJ.style.width = `${winJ.width}%`; // Arms ('d') -> window-j
-    windowD.style.left = `${winD.left}%`; windowD.style.width = `${winD.width}%`; // Wrists ('u') -> window-d
+    // console.log("UI: setupTimingBarWindows called - downswing ideal windows are now hidden by default, shown post-shot.");
 }
 
 export function updateBackswingBar(elapsedTime, swingSpeed) {
@@ -305,6 +298,12 @@ export function resetUI() {
     markerD.style.display = 'none'; // Wrists ('u') -> marker-d
     if (hipInitiationMarker) hipInitiationMarker.style.display = 'none'; // Hide hip marker
     if (postShotIdealJWindowOnBackswing) postShotIdealJWindowOnBackswing.style.display = 'none'; // Hide J press feedback window
+    
+    // Hide post-shot downswing feedback windows
+    if (windowA) windowA.style.display = 'none';
+    if (windowJ) windowJ.style.display = 'none';
+    if (windowD) windowD.style.display = 'none';
+
     nextShotButton.style.display = 'none'; // Hide button on reset
 
     // Reset result details
@@ -354,6 +353,12 @@ export function resetUIForNewShot() {
     markerD.style.display = 'none'; // Wrists ('u') -> marker-d
     if (hipInitiationMarker) hipInitiationMarker.style.display = 'none'; // Hide hip marker
     if (postShotIdealJWindowOnBackswing) postShotIdealJWindowOnBackswing.style.display = 'none'; // Hide J press feedback window
+
+    // Hide post-shot downswing feedback windows
+    if (windowA) windowA.style.display = 'none';
+    if (windowJ) windowJ.style.display = 'none';
+    if (windowD) windowD.style.display = 'none';
+
     nextShotButton.style.display = 'none'; // Hide button on reset
 
     // Reset result details
@@ -474,10 +479,12 @@ export function updateTimingBarVisibility(shotType) { // Consider renaming later
         wristsTimingContainer.style.display = (isFullSwing || isChip || isPutt) ? '' : 'none';
     }
 
-    // Timing Windows (a, j, d) Visibility: Show only for Full
-    if (windowA) windowA.style.display = isFullSwing ? '' : 'none';
-    if (windowJ) windowJ.style.display = isFullSwing ? '' : 'none';
-    if (windowD) windowD.style.display = isFullSwing ? '' : 'none';
+    // Timing Windows (window-a, window-j, window-d) are now handled by displayDownswingFeedbackWindows post-shot.
+    // They should be hidden by default by setupTimingBarWindows and resetUI functions.
+    // So, no specific visibility change needed here based on shotType during the swing itself.
+    // if (windowA) windowA.style.display = isFullSwing ? '' : 'none'; // OLD LOGIC
+    // if (windowJ) windowJ.style.display = isFullSwing ? '' : 'none'; // OLD LOGIC
+    // if (windowD) windowD.style.display = isFullSwing ? '' : 'none'; // OLD LOGIC
 
     // Ball Position Control Visibility: Show for Full & Chip, Hide for Putt
     if (ballPositionControl) {
@@ -563,53 +570,106 @@ export function setInitialSwingSpeedDisplay(percentage) {
 // Initial setup call for ball position
 updateBallPositionDisplay();
 
-// --- Post-Shot Feedback Window on Backswing Bar ---
+
+// --- Post-Shot Feedback Window Functions ---
+
 /**
  * Displays a window on the backswing bar indicating the ideal timing for the 'J' press (transition).
- * @param {number} windowStartMs - The start time of the window in ms, relative to the beginning of the backswing.
- * @param {number} windowWidthMs - The width of the window in ms.
+ * @param {number} windowStartMs - The start time of the window (ms) relative to the beginning of the backswing.
+ * @param {number} windowWidthMs - The width of the window (ms).
  * @param {number} shotSwingSpeed - The swing speed factor (0.3-1.0) used for that shot.
  */
 export function displayIdealJPressWindowOnBackswing(windowStartMs, windowWidthMs, shotSwingSpeed) {
     if (!postShotIdealJWindowOnBackswing) {
-        console.warn("UI: 'post-shot-ideal-j-window-on-backswing' element not found.");
+        // console.warn("UI: 'post-shot-ideal-j-window-on-backswing' element not found.");
         return;
     }
-    if (typeof windowStartMs !== 'number' || typeof windowWidthMs !== 'number' || typeof shotSwingSpeed !== 'number') {
-        console.warn("UI: Invalid parameters for displayIdealJPressWindowOnBackswing.");
-        postShotIdealJWindowOnBackswing.style.display = 'none'; // Ensure it's hidden if params invalid
+    if (typeof windowStartMs !== 'number' || typeof windowWidthMs !== 'number' || typeof shotSwingSpeed !== 'number' || shotSwingSpeed <= 0) {
+        console.warn("UI: Invalid parameters for displayIdealJPressWindowOnBackswing.", { windowStartMs, windowWidthMs, shotSwingSpeed });
+        postShotIdealJWindowOnBackswing.style.display = 'none';
         return;
     }
 
-    // BACKSWING_BAR_MAX_DURATION_MS is a const in this file (1500)
     const effectiveBackswingDuration = BACKSWING_BAR_MAX_DURATION_MS / shotSwingSpeed;
+    if (effectiveBackswingDuration <= 0) {
+        postShotIdealJWindowOnBackswing.style.display = 'none';
+        return;
+    }
 
     let leftPercent = (windowStartMs / effectiveBackswingDuration) * 100;
     let widthPercent = (windowWidthMs / effectiveBackswingDuration) * 100;
 
-    // Clamp values to prevent visual errors and ensure the window is on the bar
     leftPercent = Math.max(0, leftPercent);
     widthPercent = Math.max(0, widthPercent);
-
-    if (leftPercent + widthPercent > 100) {
-        widthPercent = 100 - leftPercent;
-    }
-    if (leftPercent > 100) { // If start is already off the bar, hide it
+    if (leftPercent + widthPercent > 100) widthPercent = 100 - leftPercent;
+    if (leftPercent >= 100 || widthPercent <= 0) {
         postShotIdealJWindowOnBackswing.style.display = 'none';
-        console.log(`UI: Ideal J press window starts beyond backswing bar (Left: ${leftPercent.toFixed(1)}%), hiding.`);
         return;
     }
-    if (widthPercent <= 0) { // If width is zero or negative, hide it
-        postShotIdealJWindowOnBackswing.style.display = 'none';
-        console.log(`UI: Ideal J press window has zero or negative width (${widthPercent.toFixed(1)}%), hiding.`);
-        return;
-    }
-
 
     postShotIdealJWindowOnBackswing.style.left = `${leftPercent}%`;
     postShotIdealJWindowOnBackswing.style.width = `${widthPercent}%`;
     postShotIdealJWindowOnBackswing.style.display = 'block';
-    console.log(`UI: Displaying ideal J press window on backswing at ${leftPercent.toFixed(1)}% width ${widthPercent.toFixed(1)}% (StartMs: ${windowStartMs.toFixed(0)}, WidthMs: ${windowWidthMs.toFixed(0)}, ShotSpeed: ${shotSwingSpeed})`);
+}
+
+/**
+ * Displays feedback windows on the downswing timing bars (rotation, arms, wrists)
+ * showing the ideal timing for that specific shot.
+ * @param {number} rotationStartMs - Ideal start time for rotation window (ms from downswing start).
+ * @param {number} rotationWidthMs - Ideal width for rotation window (ms).
+ * @param {number} armsStartMs - Ideal start time for arms window (ms from downswing start).
+ * @param {number} armsWidthMs - Ideal width for arms window (ms).
+ * @param {number} wristsStartMs - Ideal start time for wrists window (ms from downswing start).
+ * @param {number} wristsWidthMs - Ideal width for wrists window (ms).
+ * @param {number} shotSwingSpeed - The swing speed factor (0.3-1.0) used for that shot.
+ */
+export function displayDownswingFeedbackWindows(rotationStartMs, rotationWidthMs, armsStartMs, armsWidthMs, wristsStartMs, wristsWidthMs, shotSwingSpeed) {
+    const elements = [
+        { el: windowA, start: rotationStartMs, width: rotationWidthMs, name: "Rotation" },
+        { el: windowJ, start: armsStartMs, width: armsWidthMs, name: "Arms" },
+        { el: windowD, start: wristsStartMs, width: wristsWidthMs, name: "Wrists" }
+    ];
+
+    if (typeof shotSwingSpeed !== 'number' || shotSwingSpeed <= 0) {
+        console.warn("UI: Invalid shotSwingSpeed for displayDownswingFeedbackWindows.", { shotSwingSpeed });
+        elements.forEach(item => { if (item.el) item.el.style.display = 'none'; });
+        return;
+    }
+
+    const effectiveDownswingDuration = DOWNSWING_TIMING_BAR_DURATION_MS / shotSwingSpeed;
+    if (effectiveDownswingDuration <= 0) {
+        elements.forEach(item => { if (item.el) item.el.style.display = 'none'; });
+        return;
+    }
+
+    elements.forEach(item => {
+        if (!item.el) {
+            // console.warn(`UI: Feedback window element for ${item.name} not found.`);
+            return;
+        }
+        if (typeof item.start !== 'number' || typeof item.width !== 'number') {
+            console.warn(`UI: Invalid start/width for ${item.name} feedback window.`, item);
+            item.el.style.display = 'none';
+            return;
+        }
+
+        let leftPercent = (item.start / effectiveDownswingDuration) * 100;
+        let widthPercent = (item.width / effectiveDownswingDuration) * 100;
+
+        leftPercent = Math.max(0, leftPercent);
+        widthPercent = Math.max(0, widthPercent);
+        if (leftPercent + widthPercent > 100) widthPercent = 100 - leftPercent;
+        
+        if (leftPercent >= 100 || widthPercent <= 0) {
+            item.el.style.display = 'none';
+            return;
+        }
+
+        item.el.style.left = `${leftPercent}%`;
+        item.el.style.width = `${widthPercent}%`;
+        item.el.style.display = 'block';
+        // console.log(`UI: Displaying ${item.name} feedback window at ${leftPercent.toFixed(1)}% width ${widthPercent.toFixed(1)}%`);
+    });
 }
 
 

@@ -12,7 +12,7 @@ import {
 } from './state.js'; // Removed PUTT_DISTANCE_FACTOR, IDEAL_BACKSWING_DURATION_MS is fine as is.
 import { getCurrentHoleLayout } from '../modes/playHole.js'; // <-- Import from correct module
 import { stopFullDownswingAnimation, stopChipDownswingAnimation /* Putt stopped in actions */ } from './animations.js';
-import { updateStatus, getBallPositionIndex, getBallPositionLevels, displayIdealJPressWindowOnBackswing } from '../ui.js'; // Added displayIdealJPressWindowOnBackswing
+import { updateStatus, getBallPositionIndex, getBallPositionLevels, displayIdealJPressWindowOnBackswing, displayDownswingFeedbackWindows } from '../ui.js'; // Added displayDownswingFeedbackWindows
 import { calculateImpactPhysics } from '../swingPhysics.js';
 import { calculateChipImpact } from '../chipPhysics.js';
 import { calculatePuttImpact } from '../puttPhysics.js';
@@ -279,10 +279,25 @@ export function calculateFullSwingShot() {
         displayIdealJPressWindowOnBackswing(
             impactResult.idealJWindowStartOnBackswing,
             impactResult.idealJWindowWidthOnBackswing,
-            swingSpeed 
+            swingSpeed
         );
     } else {
         console.warn("Calc (Full): Could not display ideal J press window on backswing bar due to missing/invalid data from impactResult.");
+    }
+
+    // --- Display Ideal Downswing Event Windows ---
+    if (impactResult &&
+        typeof impactResult.idealRotationWindowStart === 'number' && typeof impactResult.idealRotationWindowWidth === 'number' &&
+        typeof impactResult.idealArmsWindowStart === 'number' && typeof impactResult.idealArmsWindowWidth === 'number' &&
+        typeof impactResult.idealWristsWindowStart === 'number' && typeof impactResult.idealWristsWindowWidth === 'number') {
+        displayDownswingFeedbackWindows(
+            impactResult.idealRotationWindowStart, impactResult.idealRotationWindowWidth,
+            impactResult.idealArmsWindowStart, impactResult.idealArmsWindowWidth,
+            impactResult.idealWristsWindowStart, impactResult.idealWristsWindowWidth,
+            swingSpeed // Pass the swingSpeed used for this shot's calculations
+        );
+    } else {
+        console.warn("Calc (Full): Could not display ideal downswing event windows due to missing/invalid data from impactResult.");
     }
 
     // --- Call Registered Callback ---
