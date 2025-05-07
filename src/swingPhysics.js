@@ -35,8 +35,8 @@ const MAX_ABSOLUTE_SPEED_LOSS = 0.4; // Max % ACHS loss from poor absolute arms/
 
 // Wrists & Face/Loft/Strike
 const IDEAL_WRISTS_OFFSET_MS = 200; // Ideal 'i' press relative to downswing start
-const WRIST_TIMING_FACE_SENSITIVITY = 0.15; // Degrees of face-relative-to-path change per ms deviation
-const MAX_FACE_ANGLE_CHANGE = 8.0; // Max degrees face change from wrist timing
+const WRIST_TIMING_FACE_SENSITIVITY = 0.5; // Degrees of face-relative-to-path change per ms deviation
+const MAX_FACE_ANGLE_CHANGE = 12.0; // Max degrees face change from wrist timing
 const WRIST_TIMING_LOFT_SENSITIVITY = 0.3; // Degrees of dynamic loft change per ms deviation
 const MAX_DYNAMIC_LOFT_CHANGE = 15.0; // Max degrees dynamic loft change
 const WRIST_FAT_THIN_THRESHOLD_MS = 100; // ms deviation threshold for Fat/Thin strike
@@ -64,7 +64,7 @@ const BACKSPIN_AOA_FACTOR =  0; // Backspin per degree of positive AoA
 // Sidespin Calculation Factors (NEW - Placeholders, need refinement)
 const SIDESPIN_FACE_TO_PATH_FACTOR = 100; // Base sidespin RPM per degree of face-to-path
 const SIDESPIN_SPEED_FACTOR = 10;         // Additional sidespin RPM per mph of ACHS (scaled by face-to-path)
-const SIDESPIN_LOFT_DAMPENING_FACTOR = 0.02; // How much dynamic loft reduces sidespin
+const SIDESPIN_LOFT_DAMPENING_FACTOR = 0.008; // How much dynamic loft reduces sidespin
 
 // Common Spin Strike Modifiers
 const FAT_STRIKE_SPIN_MOD = 0.8; // Multiplier for backspin
@@ -383,7 +383,7 @@ function calculateSpinAxis(faceAngleRelativeToPath, dynamicLoft) {
  * @returns {number} The final backspin in RPM.
  */
 function calculateBackSpin(dynamicLoft, actualCHS, attackAngle, strikeQuality, currentSurface, staticClubLoft) {
-    const LOW_LOFT_THRESHOLD = 15.0; // Woods and Driver
+    const LOW_LOFT_THRESHOLD = 18.1; // Woods and Driver
     const HIGH_LOFT_THRESHOLD = 49.0; // Wedges
     const BASE_SPEED_FACTOR = BACKSPIN_SPEED_FACTOR; // Original 20
 
@@ -393,21 +393,21 @@ function calculateBackSpin(dynamicLoft, actualCHS, attackAngle, strikeQuality, c
         // Reduce significantly for very low lofts
         // Example: at 10 deg (Driver), multiplier might be 0.3
         // Scale linearly from, say, 0.2 at 0 loft to 0.7 at LOW_LOFT_THRESHOLD
-        const minMultiplierLow = 0.15; // Multiplier for extremely low loft (e.g. theoretical 0 deg)
-        const maxMultiplierLow = 0.5; // Multiplier at the LOW_LOFT_THRESHOLD
+        const minMultiplierLow = 0.1; // Multiplier for extremely low loft (e.g. theoretical 0 deg)
+        const maxMultiplierLow = 0.3; // Multiplier at the LOW_LOFT_THRESHOLD
         speedFactorMultiplier = minMultiplierLow + (maxMultiplierLow - minMultiplierLow) * (staticClubLoft / LOW_LOFT_THRESHOLD);
     } else if (staticClubLoft > HIGH_LOFT_THRESHOLD) {
         // Optionally, slightly increase for very high lofts, or keep at 1.0
         // Example: at 60 deg (Lob Wedge), multiplier might be 1.1
-        const minMultiplierHigh = 1.0; // Multiplier at the HIGH_LOFT_THRESHOLD
-        const maxMultiplierHigh = 1.1; // Multiplier for very high lofts (e.g., 60+ deg)
+        const minMultiplierHigh = 1.3; // Multiplier at the HIGH_LOFT_THRESHOLD
+        const maxMultiplierHigh = 1.4; // Multiplier for very high lofts (e.g., 60+ deg)
         const range = 65.0 - HIGH_LOFT_THRESHOLD; // Assume max loft around 65 for scaling
         speedFactorMultiplier = minMultiplierHigh + (maxMultiplierHigh - minMultiplierHigh) * ((staticClubLoft - HIGH_LOFT_THRESHOLD) / range);
         speedFactorMultiplier = Math.min(speedFactorMultiplier, maxMultiplierHigh); // Cap it
     } else {
         // Interpolate between LOW_LOFT_THRESHOLD (e.g., 0.7x) and HIGH_LOFT_THRESHOLD (1.0x)
-        const lowThreshMultiplier = 0.6; // Multiplier at LOW_LOFT_THRESHOLD
-        const highThreshMultiplier = 1.0; // Multiplier at HIGH_LOFT_THRESHOLD
+        const lowThreshMultiplier = 0.35; // Multiplier at LOW_LOFT_THRESHOLD
+        const highThreshMultiplier = 1.3; // Multiplier at HIGH_LOFT_THRESHOLD
         const loftRange = HIGH_LOFT_THRESHOLD - LOW_LOFT_THRESHOLD;
         speedFactorMultiplier = lowThreshMultiplier + (highThreshMultiplier - lowThreshMultiplier) * ((staticClubLoft - LOW_LOFT_THRESHOLD) / loftRange);
     }

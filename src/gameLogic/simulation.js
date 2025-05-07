@@ -32,13 +32,13 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club) 
     // --- Simulation Constants (Tunable) ---
     //const Cd = 0.26; // Drag coefficient (placeholder)
 
-    const SPIN_TO_DRAG_FACTOR = 0.0002; // START POSITIVE e.g. 0.0000005 to see drag reduction with spin
-    const Cd_base = 0.18; // Start with your current working value from the "old code" DRAG COEFFICIENT
-    const MINIMUM_EFFECTIVE_CD = 0.01; // Minimum allowed effective drag coefficient
+    const SPIN_TO_DRAG_FACTOR = 0.00015; // START POSITIVE e.g. 0.0000005 to see drag reduction with spin
+    const Cd_base = 0.22; // Start with your current working value from the "old code" DRAG COEFFICIENT
+    const MINIMUM_EFFECTIVE_CD = 0.0001; // Minimum allowed effective drag coefficient
 
     // const Cl = 0.03; // Lift coefficient (placeholder, related to spin). Reduced from 0.1, still higher than original 0.002. // Replaced by separate Cl values
     //const Cl_backspin = 0.025; // Controls vertical lift (tune for height)
-    const Cl_sidespin = 0.065; // Controls side force (tune for curve)
+    const Cl_sidespin = 0.040; // Controls side force (tune for curve)
     // Calculate air density based on temperature (using simplified Ideal Gas Law)
     const pressure = 101325; // Standard pressure in Pa
     const specificGasConstant = 287.05; // J/(kg·K) for dry air
