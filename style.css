@@ -228,12 +228,21 @@ h1, h2 {
     padding: 10px;
     box-sizing: border-box;
     color: white; /* Example text color */
-    text-shadow: 1px 1px 2px black; /* Make text readable */
+    text-shadow: 1px 1px 2px black; /* Default text shadow for overlay */
     display: flex;
     flex-direction: column;
     justify-content: space-between; /* Push elements to top/bottom */
     align-items: stretch; /* Make children stretch full width */
-    font-size: 1.1em; /* Slightly larger font for overlay */
+    /* font-size is now part of .overlay-text-item */
+}
+
+/* NEW Common class for all overlay text items */
+.overlay-text-item {
+    font-size: 1.1em;
+    font-weight: normal; /* Ensure consistent normal weight */
+    color: white; /* Ensure consistent color */
+    text-shadow: 1px 1px 2px black; /* Ensure consistent shadow */
+    margin-bottom: 2px; /* Consistent spacing */
 }
 
 /* Positioning for overlay elements */
@@ -252,10 +261,10 @@ h1, h2 {
     text-align: right;
 }
 
-/* Add some spacing between lines within blocks if needed */
-.overlay-top-left div, .overlay-top-right div, .overlay-bottom-left div {
-    margin-bottom: 2px; /* Small space between lines */
-}
+/* Remove individual styling if .overlay-text-item is applied directly to child divs */
+/* .overlay-top-left div, .overlay-top-right div, .overlay-bottom-left div { */
+    /* margin-bottom: 2px; /* Now part of .overlay-text-item */
+/* } */
 
 /* --- Overlay Mode Visibility --- */
 /* Hide all mode-specific overlay sections by default */
@@ -367,4 +376,133 @@ body.mode-closest-to-flag #closest-to-flag-info {
     display: none; /* Initially hidden */
     box-sizing: border-box;
     /* 'left' and 'width' will be set by JS */
+}
+
+/* --- Main Menu & Game View --- */
+#main-menu {
+    display: flex; /* Use flexbox for centering */
+    flex-direction: column; /* Stack items vertically */
+    align-items: center; /* Center items horizontally */
+    justify-content: center; /* Center items vertically */
+    min-height: 80vh; /* Take up most of the viewport height */
+    text-align: center;
+    padding: 20px;
+}
+
+#main-menu h2 {
+    margin-bottom: 30px;
+}
+
+#main-menu > div { /* Style for the direct children divs within main-menu */
+    margin-bottom: 20px;
+    padding: 20px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    background-color: #f9f9f9;
+    width: 80%;
+    max-width: 400px; /* Max width for menu sections */
+}
+
+#main-menu button {
+    padding: 10px 15px;
+    font-size: 1em;
+    margin: 5px;
+    cursor: pointer;
+}
+
+#game-view {
+    /* Initially hidden by inline style, but can be controlled here too */
+    /* display: none; */
+}
+
+/* When game-view is active, make visuals larger */
+#game-view #visuals-container {
+    min-height: 600px; /* Increased height */
+    /* flex-grow: 1; already set, ensure it expands */
+}
+
+#game-view #golf-canvas {
+    height: 600px; /* Increased height */
+    /* width: 100%; already set */
+}
+
+/* --- Shot Result Pop-up --- */
+#shot-result {
+    position: fixed; /* Fixed position to overlay on content */
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%); /* Center the pop-up */
+    width: 80%;
+    max-width: 450px; /* Max width for the pop-up */
+    background-color: #fff;
+    border: 2px solid #005f40; /* Dark green border */
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    z-index: 1002; /* Ensure it's above other game elements */
+    display: none; /* Hidden by default, shown by JS */
+}
+
+#shot-result h2 {
+    margin-top: 0;
+    text-align: center;
+}
+
+#shot-result p {
+    margin: 8px 0;
+}
+
+#shot-result #next-shot-button {
+    display: block; /* Make button take full width */
+    width: 50%;
+    padding: 10px;
+    margin: 20px auto 0; /* Center button */
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    font-size: 1em;
+}
+
+/* --- Shot Summary Widget (NEW) --- */
+#shot-summary-widget {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    /* color, text-shadow, font-size are handled by .overlay-text-item if applied to children */
+    text-align: right;
+    z-index: 6;
+    pointer-events: auto;
+    background-color: transparent;
+    padding: 0;
+    border-radius: 0;
+}
+
+/* #shot-summary-widget div will now use .overlay-text-item */
+/* #shot-summary-widget div { */
+    /* margin-bottom: 2px; */ /* Handled by .overlay-text-item */
+    /* font-weight: normal; */ /* Handled by .overlay-text-item */
+/* } */
+
+#shot-summary-widget button#show-details-button {
+    background-color: transparent;
+    color: white;
+    text-shadow: 1px 1px 2px black;
+    border: none;
+    border-radius: 0;
+    width: auto;
+    height: auto;
+    font-size: 1.2em; /* Button can be slightly larger/bolder */
+    font-weight: bold;
+    line-height: normal;
+    text-align: center;
+    padding: 0 5px; /* Minimal padding if needed */
+    cursor: pointer;
+    margin-top: 0px; /* Adjust as needed, or align with flex */
+    display: inline; /* Make it flow with text if desired, or keep as block/inline-block */
+}
+
+#shot-summary-widget button#show-details-button:hover {
+    color: #aaa; /* Simple hover effect, or remove if not desired */
+    background-color: transparent;
 }

@@ -9,16 +9,35 @@
 <body>
     <h1>Let's Golf!</h1>
 
-    <!-- Mode Selection (Temporary) -->
-    <div id="mode-selection" style="background: #eee; padding: 10px; margin-bottom: 15px; border-radius: 5px;">
-        <strong>Select Mode:</strong>
-        <button id="mode-btn-range">Range</button>
-        <button id="mode-btn-closest">Closest to Flag</button>
-        <button id="mode-btn-hole">Play Hole</button>
+    <!-- Main Menu -->
+    <div id="main-menu">
+        <h2>Main Menu</h2>
+        <!-- Mode Selection -->
+        <div id="mode-selection" style="background: #eee; padding: 10px; margin-bottom: 15px; border-radius: 5px;">
+            <strong>Select Mode:</strong>
+            <button id="mode-btn-range">Range</button>
+            <button id="mode-btn-closest">Closest to Flag</button>
+            <button id="mode-btn-hole">Play Hole</button>
+        </div>
+        <!-- User Authentication Placeholder -->
+        <div id="user-auth-placeholder" style="background: #eee; padding: 10px; margin-bottom: 15px; border-radius: 5px;">
+            <strong>User Account (Placeholder)</strong><br>
+            <button id="login-btn-placeholder">Login</button>
+            <button id="register-btn-placeholder">Register</button>
+        </div>
+        <!-- Manual Placeholder -->
+        <div id="manual-placeholder" style="background: #eee; padding: 10px; border-radius: 5px;">
+            <strong>Game Manual (Placeholder)</strong><br>
+            <button id="manual-btn-placeholder">View Short Manual</button>
+        </div>
     </div>
 
-    <!-- Closest to Flag Info Panel (Hidden by default) -->
-    <div id="closest-to-flag-info" class="mode-info-panel">
+    <!-- Game View (Initially Hidden) -->
+    <div id="game-view" style="display: none;">
+        <button id="back-to-menu-button" style="position: absolute; top: 5px; right: 5px; z-index: 1001; padding: 5px 10px;">Menu</button>
+
+        <!-- Closest to Flag Info Panel (Hidden by default) -->
+        <div id="closest-to-flag-info" class="mode-info-panel">
         <h2>Closest to the Flag</h2>
         <p>Target Distance: <strong id="ctf-target-distance">N/A</strong> yards</p>
         <p>Shots Taken: <strong id="ctf-shots-taken">0</strong></p>
@@ -92,29 +111,35 @@
                     <div class="overlay-top">
                         <!-- Play Hole / CTF Top Left -->
                         <div class="overlay-top-left mode-play-hole mode-closest-to-flag">
-                            <div>Hole: <span id="overlay-hole-num">N/A</span> Par: <span id="overlay-par">N/A</span></div>
-                            <div>Shot: <span id="overlay-shot-num">N/A</span> <span id="overlay-for-score-text"></span></div>
+                            <div class="overlay-text-item">Hole: <span id="overlay-hole-num">N/A</span> Par: <span id="overlay-par">N/A</span></div>
+                            <div class="overlay-text-item">Shot: <span id="overlay-shot-num">N/A</span> <span id="overlay-for-score-text"></span></div>
                         </div>
                         <!-- Range Top Left -->
                         <div class="overlay-top-left mode-range">
-                             <div>Last Shot: <span id="overlay-last-shot-dist">N/A</span> yd</div>
-                             <div>Spin: <span id="overlay-back-spin">N/A</span> / <span id="overlay-side-spin">N/A</span> rpm</div>
+                             <div class="overlay-text-item">Last Shot: <span id="overlay-last-shot-dist">N/A</span> yd</div>
+                             <div class="overlay-text-item">Spin: <span id="overlay-back-spin">N/A</span> / <span id="overlay-side-spin">N/A</span> rpm</div>
                         </div>
                         <!-- Common Top Right -->
                         <div class="overlay-top-right">
-                            <div class="mode-play-hole mode-closest-to-flag">To Flag: <span id="overlay-dist-flag">N/A</span> yd</div>
-                            <div>Wind: <span id="overlay-wind">N/A</span></div>
-                            <div>Temp: <span id="overlay-temp">N/A</span></div>
-                            <div>Lie: <span id="overlay-lie">N/A</span></div>
+                            <div class="overlay-text-item mode-play-hole mode-closest-to-flag">To Flag: <span id="overlay-dist-flag">N/A</span> yd</div>
+                            <div class="overlay-text-item">Wind: <span id="overlay-wind">N/A</span></div>
+                            <div class="overlay-text-item">Temp: <span id="overlay-temp">N/A</span></div>
+                            <div class="overlay-text-item">Lie: <span id="overlay-lie">N/A</span></div>
                         </div>
                     </div>
                     <div class="overlay-bottom">
                          <!-- Play Hole Bottom Left -->
                         <div class="overlay-bottom-left mode-play-hole">
-                            <div>Player: <span id="overlay-player-name">Player 1</span></div>
-                            <div>Total: <span id="overlay-total-score">N/A</span> (<span id="overlay-position">N/A</span>)</div>
+                            <div class="overlay-text-item">Player: <span id="overlay-player-name">Player 1</span></div>
+                            <div class="overlay-text-item">Total: <span id="overlay-total-score">N/A</span> (<span id="overlay-position">N/A</span>)</div>
                         </div>
                         <!-- Range / CTF might not need bottom left, or could show something else -->
+                    </div>
+                    <!-- NEW Shot Summary Widget -->
+                    <div id="shot-summary-widget" style="display: none;">
+                        <div class="overlay-text-item">Carry: <span id="summary-carry">N/A</span> yd</div>
+                        <div class="overlay-text-item">Roll: <span id="summary-roll">N/A</span> yd</div>
+                        <button id="show-details-button">+</button> <!-- Button style is separate -->
                     </div>
                 </div>
             </div>
@@ -189,6 +214,8 @@
         <p>Arms Start Offset: <span id="arms-start-offset">N/A</span> ms</p>
         <p>Wrists Start Offset: <span id="wrists-start-offset">N/A</span> ms</p>
     </div>
+
+    </div> <!-- End #game-view -->
 
     <script type="module" src="src/main.js"></script>
     <script type="module" src="src/tools.js"></script>

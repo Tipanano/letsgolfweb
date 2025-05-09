@@ -3,6 +3,15 @@ import { YARDS_TO_METERS } from './visuals/core.js'; // Import conversion consta
 import { getWind, getTemperature } from './gameLogic/state.js'; // Import environment state getters (Corrected Path)
 
 // --- DOM Element References ---
+// --- DOM Element References ---
+// Views
+const mainMenuDiv = document.getElementById('main-menu');
+const gameViewDiv = document.getElementById('game-view');
+
+// Buttons
+const backToMenuButton = document.getElementById('back-to-menu-button');
+
+// Other UI Elements
 const statusText = document.getElementById('status-text');
 const swingSpeedSlider = document.getElementById('swing-speed-slider');
 const swingSpeedValueSpan = document.getElementById('swing-speed-value');
@@ -53,6 +62,13 @@ const carryDistanceText = document.getElementById('carry-distance-text');
 const rolloutDistanceText = document.getElementById('result-rollout'); // Added
 const totalDistanceText = document.getElementById('result-total-distance'); // Added
 const launchAngleText = document.getElementById('launch-angle-text'); // Added for Launch Angle
+const shotResultDiv = document.getElementById('shot-result'); // Reference for the pop-up
+// Shot Summary Widget Elements
+const shotSummaryWidget = document.getElementById('shot-summary-widget');
+const summaryCarrySpan = document.getElementById('summary-carry');
+const summaryRollSpan = document.getElementById('summary-roll');
+const showDetailsButton = document.getElementById('show-details-button');
+
 
 // Ball Position Elements
 const ballPositionControl = document.getElementById('ball-position-control');
@@ -271,7 +287,18 @@ export function updateResultDisplay(resultData) {
     rolloutDistanceText.textContent = formatNum(resultData.rolloutDistance, 1);
     totalDistanceText.textContent = formatNum(resultData.totalDistance, 1);
     launchAngleText.textContent = formatNum(resultData.launchAngle, 1); // Added Launch Angle display
-    nextShotButton.style.display = 'inline-block';
+
+    // Populate and show the shot summary widget
+    if (shotSummaryWidget && summaryCarrySpan && summaryRollSpan) {
+        summaryCarrySpan.textContent = formatNum(resultData.carryDistance, 1);
+        summaryRollSpan.textContent = formatNum(resultData.rolloutDistance, 1);
+        shotSummaryWidget.style.display = 'block'; // Or 'flex' if styled with flex
+    }
+
+    // DO NOT show the full shot result pop-up here automatically
+    // if (shotResultDiv) {
+    //     shotResultDiv.style.display = 'block';
+    // }
 }
 
 export function updateDebugTimingInfo(timingData) {
@@ -304,7 +331,15 @@ export function resetUI() {
     if (windowJ) windowJ.style.display = 'none';
     if (windowD) windowD.style.display = 'none';
 
-    nextShotButton.style.display = 'none'; // Hide button on reset
+    // Hide shot result pop-up and its button
+    if (shotResultDiv) {
+        shotResultDiv.style.display = 'none';
+    }
+    // Hide shot summary widget
+    if (shotSummaryWidget) {
+        shotSummaryWidget.style.display = 'none';
+    }
+    // nextShotButton.style.display = 'none'; // Button is inside shotResultDiv
 
     // Reset result details
     resultText.textContent = 'Hit the ball!';
@@ -359,7 +394,15 @@ export function resetUIForNewShot() {
     if (windowJ) windowJ.style.display = 'none';
     if (windowD) windowD.style.display = 'none';
 
-    nextShotButton.style.display = 'none'; // Hide button on reset
+    // Hide shot result pop-up and its button
+    if (shotResultDiv) {
+        shotResultDiv.style.display = 'none';
+    }
+    // Hide shot summary widget
+    if (shotSummaryWidget) {
+        shotSummaryWidget.style.display = 'none';
+    }
+    // nextShotButton.style.display = 'none'; // Button is inside shotResultDiv
 
     // Reset result details
     resultText.textContent = 'Hit the ball!';
@@ -558,9 +601,6 @@ export function addShotTypeChangeListener(callback) {
     });
 }
 
-export function addNextShotClickListener(callback) {
-    nextShotButton.addEventListener('click', callback);
-}
 
 // Export function to set the initial display value for the slider text
 export function setInitialSwingSpeedDisplay(percentage) {
@@ -848,7 +888,10 @@ function updateEnvironmentDisplay() {
 
 // Start the periodic update for the environment display
 // Update interval (e.g., 5 times per second)
-setInterval(updateEnvironmentDisplay, 200);
+// Consider moving this to main.js if it's better controlled there
+if (overlayWindSpan && overlayTempSpan) { // Only run if elements exist
+    setInterval(updateEnvironmentDisplay, 200);
+}
 
 
 // Remove initial setup calls from here; they will be called explicitly from main.js
@@ -914,5 +957,73 @@ export function hideAllDistanceLabels() {
     const labels = document.querySelectorAll(`.${distanceLabelClass}`);
     labels.forEach(label => {
         label.style.display = 'none';
+    });
+}
+
+// --- View Switching Functions ---
+export function showMainMenu() {
+    if (mainMenuDiv) mainMenuDiv.style.display = 'flex'; // Or 'block' based on its CSS
+    if (gameViewDiv) gameViewDiv.style.display = 'none';
+    if (shotResultDiv) shotResultDiv.style.display = 'none'; // Ensure shot result is hidden
+    console.log("UI: Switched to Main Menu");
+}
+
+export function showGameView() {
+    if (mainMenuDiv) mainMenuDiv.style.display = 'none';
+    if (gameViewDiv) gameViewDiv.style.display = 'block'; // Or 'flex'
+    console.log("UI: Switched to Game View");
+}
+
+// --- Event Listener Setup for Menu Navigation ---
+export function addBackToMenuClickListener(callback) {
+    if (backToMenuButton) {
+        backToMenuButton.addEventListener('click', () => {
+            showMainMenu(); // Show main menu
+            if (callback) callback(); // Call additional callback if provided (e.g., to reset game state)
+        });
+    }
+}
+
+// Initial state: Show main menu by default when script loads
+// This might be better handled in main.js after all initializations
+// showMainMenu();
+
+// --- Event Listener for Show Details Button & Click-Outside-to-Close for Pop-up ---
+
+// Function to hide the shot result pop-up and remove the global click listener
+function hideShotResultPopup() {
+    if (shotResultDiv) {
+        shotResultDiv.style.display = 'none';
+    }
+    document.removeEventListener('click', handleClickOutsideShotResultPopup, true); // Use capture phase
+}
+
+// Global click listener function
+function handleClickOutsideShotResultPopup(event) {
+    if (shotResultDiv && shotResultDiv.style.display !== 'none') {
+        // Check if the click is outside the shotResultDiv and not on the showDetailsButton
+        if (!shotResultDiv.contains(event.target) && event.target !== showDetailsButton) {
+            hideShotResultPopup();
+        }
+    }
+}
+
+if (showDetailsButton) {
+    showDetailsButton.addEventListener('click', (event) => {
+        event.stopPropagation(); // Prevent this click from being caught by the document listener immediately
+        if (shotResultDiv) {
+            shotResultDiv.style.display = 'block'; // Or 'flex'
+            // Add the global click listener when the pop-up is shown
+            // Use true for capture phase to catch clicks on other elements before they might stop propagation
+            document.addEventListener('click', handleClickOutsideShotResultPopup, true);
+        }
+    });
+}
+
+// Modify the NextShotClickListener to also remove the global listener
+export function addNextShotClickListener(callback) {
+    nextShotButton.addEventListener('click', () => {
+        hideShotResultPopup(); // This now also removes the global listener
+        callback(); // Call original callback
     });
 }

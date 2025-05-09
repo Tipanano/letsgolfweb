@@ -1,4 +1,5 @@
 import * as ui from './ui.js';
+import { showMainMenu, showGameView, addBackToMenuClickListener } from './ui.js'; // Import specific functions
 import * as logic from './gameLogic.js'; // Game state and actions
 import * as visuals from './visuals.js';
 import * as inputHandler from './inputHandler.js'; // Import the new input handler
@@ -34,27 +35,40 @@ function setGameMode(newMode) {
     currentMode = newMode;
     ui.setGameModeClass(currentMode); // Update UI (body class, etc.)
 
+    // Initialize visuals system if it hasn't been already
+    if (!visualsSystemInitialized && canvas) {
+        visualsSystemInitialized = visuals.initVisuals(canvas);
+        if (visualsSystemInitialized) {
+            environment.startWindSimulation(); // Start wind updates once visuals are ready
+            console.log("Visuals system initialized.");
+        } else {
+            console.error("Visuals system failed to initialize. Game may not display correctly.");
+            // Optionally, inform the user via an on-page message
+            return; // Stop further mode setup if visuals failed
+        }
+    } else if (!canvas) {
+        console.error("Canvas element not found, cannot initialize visuals for mode.");
+        return; // Stop if canvas is missing
+    }
+
+
     // Initialize new mode, switch visuals, and reset overlay
     if (currentMode === GAME_MODES.RANGE) {
         visuals.switchToRangeView();
-        // Reset overlay for Range mode (clear hole info, show default range info)
-        ui.updateVisualOverlayInfo('range', { lie: 'Tee', wind: 'Calm' });
-        // Reset basic swing state specifically for Range mode
-        logic.resetSwing();
+        ui.updateVisualOverlayInfo('range', { lie: 'Tee' /* wind is live */ });
+        logic.resetSwing(); // Reset swing state for Range mode
+        visuals.showBallAtAddress(); // Ensure ball is shown
     } else if (currentMode === GAME_MODES.CLOSEST_TO_FLAG) {
-        closestToFlag.initializeMode(); // This should call updateVisualOverlayInfo internally now
-        visuals.switchToTargetView(closestToFlag.getTargetDistance()); // Pass target distance
-        // CTF initializeMode should handle its initial overlay update
+        closestToFlag.initializeMode(); 
+        visuals.switchToTargetView(closestToFlag.getTargetDistance());
+        visuals.showBallAtAddress(); // Ensure ball is shown
     } else if (currentMode === GAME_MODES.PLAY_HOLE) {
-        playHole.initializeMode(); // This now calls updateVisualOverlayInfo internally
-        // No need to call visuals.switchToHoleView here directly
-        // playHole.initializeMode handles its initial overlay update
+        playHole.initializeMode(); 
+        // visuals.switchToHoleView() is likely called by playHole.initializeMode or subsequent logic
+        visuals.showBallAtAddress(); // Ensure ball is shown
     }
-
-    // REMOVED: logic.resetSwing(); // Moved into RANGE mode block, other modes handle their own reset.
-
-    // Ensure visuals are reset/redrawn for the new mode
-    // visuals.resetVisuals(); // This call seems redundant as mode init functions handle visual setup/reset.
+    
+    console.log(`Game mode ${currentMode} initialized and visuals set up.`);
 }
 
 // Function to get the current game mode (needed by inputHandler)
@@ -64,7 +78,6 @@ export function getCurrentGameMode() {
 
 // --- Initial Setup ---
 
-// Get initial values from UI (slider) and set them in logic
 // Populate the club select dropdown first
 ui.populateClubSelect();
 
@@ -89,25 +102,16 @@ environment.setWindParameters(5, 45, 3, 20, 2500); // Example: 5m/s base, 45deg,
 // Register the shot completion handler
 logic.registerShotCompletionCallback(handleShotCompletion);
 
-// Set initial UI state for the default mode
-ui.setGameModeClass(currentMode);
-// DO NOT initialize the view here; it's handled within visuals.initVisuals now.
+// Set initial UI state for the default mode (will be overridden by showMainMenu initially)
+ui.setGameModeClass(currentMode); 
 
-// Initialize visuals (canvas context etc.)
+// Canvas and Visuals Initialization (deferred)
 const canvas = document.getElementById('golf-canvas');
-let visualsInitialized = false; // Flag to track success
-if (canvas) {
-    visualsInitialized = visuals.initVisuals(canvas); // Store the return value
-    if (visualsInitialized) {
-        // Initial view (Range) is now set within initVisuals on success
-        visuals.showBallAtAddress(); // Show initial ball position
-        environment.startWindSimulation(); // Start dynamic wind updates
-    } else {
-         console.error("Visuals failed to initialize. Further visual operations skipped.");
-         // Optionally display an error message to the user on the page
-    }
-} else {
-    console.error("Golf canvas element not found!");
+let visualsSystemInitialized = false; // Flag to ensure visuals are initialized only once
+
+if (!canvas) {
+    console.error("Golf canvas element not found! Game cannot start.");
+    // Optionally display a more user-friendly error on the page
 }
 
 // --- Connect UI Event Listeners to Logic ---
@@ -129,9 +133,42 @@ ui.addNextShotClickListener(() => {
 });
 
 // --- Connect Mode Selection Buttons ---
-document.getElementById('mode-btn-range')?.addEventListener('click', () => setGameMode(GAME_MODES.RANGE));
-document.getElementById('mode-btn-closest')?.addEventListener('click', () => setGameMode(GAME_MODES.CLOSEST_TO_FLAG));
-document.getElementById('mode-btn-hole')?.addEventListener('click', () => setGameMode(GAME_MODES.PLAY_HOLE));
+document.getElementById('mode-btn-range')?.addEventListener('click', () => {
+    ui.showGameView();
+    setGameMode(GAME_MODES.RANGE);
+});
+document.getElementById('mode-btn-closest')?.addEventListener('click', () => {
+    ui.showGameView();
+    setGameMode(GAME_MODES.CLOSEST_TO_FLAG);
+});
+document.getElementById('mode-btn-hole')?.addEventListener('click', () => {
+    ui.showGameView();
+    setGameMode(GAME_MODES.PLAY_HOLE);
+});
+
+// --- Connect "Back to Menu" Button ---
+function handleBackToMenu() {
+    console.log("Returning to Main Menu...");
+    // Terminate current mode-specific logic if active
+    if (currentMode === GAME_MODES.CLOSEST_TO_FLAG) {
+        closestToFlag.terminateMode();
+    } else if (currentMode === GAME_MODES.PLAY_HOLE) {
+        playHole.terminateMode();
+    }
+    // Reset core game logic and UI elements (like shot result, timing bars)
+    logic.resetSwing(); // This also calls ui.resetUI() and visuals.resetVisuals()
+    
+    // visuals.resetVisuals(); // Covered by logic.resetSwing() -> ui.resetUI() -> visuals.resetVisuals()
+    // ui.resetUI(); // Covered by logic.resetSwing()
+
+    // currentMode = null; // Or set to a default if needed, though ui.showMainMenu handles view
+    // The ui.showMainMenu() is called by the event listener in ui.js directly.
+}
+ui.addBackToMenuClickListener(handleBackToMenu);
+
+// --- Initial View ---
+// Show the main menu after all initializations are complete
+ui.showMainMenu();
 
 
 // Add global key listeners that call the input handler
