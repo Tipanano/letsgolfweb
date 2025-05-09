@@ -150,11 +150,37 @@ export function initCoreVisuals(canvasElement) {
 }
 
 function onWindowResize() {
-    if (!renderer || !camera) return;
+    if (!renderer || !camera) {
+        console.warn("onWindowResize: Renderer or Camera not available.");
+        return;
+    }
     const canvas = renderer.domElement;
-    camera.aspect = canvas.clientWidth / canvas.clientHeight;
+    const rect = canvas.getBoundingClientRect();
+    const newWidth = rect.width;
+    const newHeight = rect.height;
+
+    console.log(`onWindowResize: Canvas getBoundingClientRect() width=${newWidth}, height=${newHeight}`);
+
+    if (newHeight === 0) {
+        console.warn("onWindowResize: Canvas clientHeight is 0, skipping update to prevent NaN aspect ratio.");
+        return;
+    }
+
+    camera.aspect = newWidth / newHeight;
     camera.updateProjectionMatrix();
-    renderer.setSize(canvas.clientWidth, canvas.clientHeight);
+    console.log(`onWindowResize: Camera aspect updated to ${camera.aspect.toFixed(2)}`);
+
+    renderer.setPixelRatio(window.devicePixelRatio); 
+    renderer.setSize(newWidth, newHeight, false); 
+    console.log(`onWindowResize: Renderer size set to ${newWidth}x${newHeight}, pixelRatio: ${window.devicePixelRatio}`);
+
+    // Explicitly render the scene with the updated camera and renderer size
+    // Determine which camera is active for rendering (main or measurement view)
+    const activeRenderCamera = MeasurementView.isViewActive() && MeasurementView.getCamera() ? MeasurementView.getCamera() : camera;
+    if (scene && activeRenderCamera) { // Ensure scene and an active camera exist
+        renderer.render(scene, activeRenderCamera);
+        console.log("Rendered scene in onWindowResize");
+    }
 }
 
 function animate(timestamp) {

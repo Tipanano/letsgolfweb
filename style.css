@@ -1,14 +1,41 @@
+@import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap');
+
 body {
-    font-family: sans-serif;
+    font-family: 'Open Sans', sans-serif;
     line-height: 1.6;
-    padding: 20px;
-    background-color: #f4f4f4;
-    color: #333;
+    margin: 0; /* Remove default margin */
+    padding: 0; /* Remove default padding, handle with containers */
+    background-color: #e8f5e9; /* Light green background */
+    color: #37474f; /* Darker grey for text */
+    /* display: flex; flex-direction: column; align-items: center; */ /* Removed to allow children to manage their width */
 }
 
-h1, h2 {
-    color: #005f40; /* Dark green */
+h1 {
+    color: #1b5e20; /* Darker Green */
+    text-align: center;
+    margin-top: 20px;
+    margin-bottom: 30px;
+    font-size: 2.5em;
 }
+
+h2 {
+    color: #2e7d32; /* Medium Green */
+    border-bottom: 2px solid #a5d6a7; /* Light green underline */
+    padding-bottom: 5px;
+    margin-top: 20px;
+    margin-bottom: 15px;
+    font-size: 1.6em;
+}
+
+/* Styling for headers within specific sections */
+#timing-bars h2, #timing-info h2 {
+    font-size: 1.3em;
+    color: #388e3c; /* Slightly lighter green for these headers */
+    text-align: center;
+    margin-bottom: 10px;
+    border-bottom: none; /* Remove default h2 underline for these */
+}
+
 
 /* Original styling for blocks - removing game-status and ball-position-control */
 #instructions, #timing-info, #shot-result {
@@ -137,7 +164,7 @@ h1, h2 {
     width: 100%;   /* Make canvas responsive */
     height: 400px; /* Example fixed height */
     background-color: #aaddcc; /* Placeholder canvas background */
-    transform: scaleX(-1) !important; /* Explicitly flip horizontally for testing */
+    transform: scaleX(-1) !important; /* REMOVING THIS AGAIN FOR DIAGNOSIS */
 }
 
 /* --- Ball Position Control --- */
@@ -182,39 +209,92 @@ h1, h2 {
     margin-top: -7.5px; /* Adjust vertical centering (half height) */
     transition: top 0.1s ease-in-out; /* Smooth vertical movement */
     z-index: 1;
+    pointer-events: none; /* Allow clicks to pass through */
 }
 
-/* --- Game Status (Now below main layout) --- */
-#game-status {
-    /* position: absolute; */ /* REMOVED */
-    background-color: rgba(255, 255, 255, 0.85); /* Semi-transparent white */
-    border: 1px solid #ccc; /* Lighter border */
-    padding: 10px;
-    /* margin-bottom: 0; */ /* REMOVED */
-    border-radius: 5px;
-    /* z-index: 10; */ /* REMOVED */
-    width: 100%; /* Take full width of #game-interface */
-    box-sizing: border-box;
-    display: flex; /* Arrange items horizontally */
-    gap: 20px; /* Space between items */
-    align-items: center; /* Vertically align items */
-}
-
-/* --- Ball Position Control (Now side panel) --- */
+/* --- Ball Position Control (Simplified) --- */
 #ball-position-control {
-    /* position: absolute; */ /* REMOVED */
-    background-color: rgba(255, 255, 255, 0.85); /* Semi-transparent white */
-    border: 1px solid #ccc; /* Lighter border */
-    padding: 10px;
-    /* margin-bottom: 0; */ /* REMOVED */
-    border-radius: 5px;
-    /* z-index: 10; */ /* REMOVED */
-    flex-basis: 200px; /* Set fixed width */
-    flex-shrink: 0; /* Prevent shrinking */
-    box-sizing: border-box;
-    /* top: 10px; */ /* REMOVED */
-    /* right: 10px; */ /* REMOVED */
+    background-color: transparent; /* No background for the container itself */
+    padding: 0; /* No padding for the container */
+    flex-basis: auto; /* Allow to shrink to content */
+    flex-shrink: 1;
+    display: flex; /* Use flex to align info button and stance visual */
+    flex-direction: column;
+    align-items: center; /* Center items like the stance visual */
+    position: relative; /* For info popup positioning */
 }
+
+.info-button {
+    background-color: #ddd; /* Light grey background */
+    color: #333;
+    border: 1px solid #bbb;
+    border-radius: 50%; /* Circular */
+    width: 24px;
+    height: 24px;
+    font-size: 0.9em;
+    font-weight: bold;
+    line-height: 22px; /* Adjust for vertical centering */
+    text-align: center;
+    cursor: pointer;
+    padding: 0;
+    margin-bottom: 5px; /* Space between button and stance visual */
+    align-self: center; /* Center the button itself if container is wider */
+}
+
+.info-button:hover {
+    background-color: #ccc;
+}
+
+.info-popup {
+    display: none; /* Hidden by default */
+    position: absolute;
+    top: 30px; /* Position below the info button */
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #fff;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 10px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+    z-index: 100; /* Ensure it's above other elements in its context */
+    width: 180px; /* Adjust as needed */
+    font-size: 0.9em;
+    color: #333;
+    text-align: center;
+}
+
+
+/* --- Bottom Controls Area (NEW) --- */
+#bottom-controls {
+    background-color: #fff;
+    border: 1px solid #ddd;
+    padding: 15px;
+    margin-top: 15px; /* Space above this control panel */
+    border-radius: 5px;
+    display: flex;
+    flex-wrap: wrap; /* Allow items to wrap on smaller screens */
+    gap: 20px; /* Space between control groups */
+    justify-content: center; /* Center control groups */
+    align-items: center;
+}
+
+#bottom-controls > div { /* Style for each control group */
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+#bottom-controls label {
+    font-size: 0.9em;
+    color: #333;
+}
+
+#bottom-controls input[type="range"],
+#bottom-controls select,
+#bottom-controls input[type="radio"] {
+    margin-right: 5px;
+}
+
 
 /* --- Visual Info Overlay (NEW) --- */
 #visual-info-overlay {
@@ -235,6 +315,158 @@ h1, h2 {
     align-items: stretch; /* Make children stretch full width */
     /* font-size is now part of .overlay-text-item */
 }
+
+#top-center-status {
+    position: absolute;
+    top: 10px; /* Adjust as needed */
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+    z-index: 6; /* Ensure it's above canvas but potentially below other popups */
+    /* .overlay-text-item class will be applied to the span inside this div via HTML */
+}
+
+/* --- Ball Position Control (Simplified) --- */
+#ball-position-control {
+    background-color: transparent; /* No background for the container itself */
+    padding: 10px 0 0 0; /* Padding only at the top if needed, or remove */
+    flex-basis: auto; /* Allow to shrink to content */
+    flex-shrink: 1;
+    display: flex; 
+    flex-direction: column;
+    align-items: center; 
+    position: relative; 
+    margin-left: 10px; /* Give it some space from the visuals container */
+}
+
+.info-button {
+    background-color: #ddd; 
+    color: #333;
+    border: 1px solid #bbb;
+    border-radius: 50%; 
+    width: 24px;
+    height: 24px;
+    font-size: 0.9em;
+    font-weight: bold;
+    line-height: 22px; 
+    text-align: center;
+    cursor: pointer;
+    padding: 0;
+    margin-bottom: 8px; /* Space between button and stance visual */
+}
+
+.info-button:hover {
+    background-color: #ccc;
+}
+
+.info-popup {
+    display: none; 
+    position: absolute;
+    top: 35px; /* Position below the info button */
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #fff;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    padding: 10px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    z-index: 100; 
+    width: 200px; /* Adjust as needed */
+    font-size: 0.9em;
+    color: #333;
+    text-align: center;
+}
+
+#swing-speed-control-vertical {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 15px; /* Space above the swing speed control */
+    position: relative; /* For positioning the info popup */
+}
+
+.vertical-slider {
+    /* -webkit-appearance: slider-vertical; */ /* Deprecated */
+    /* appearance: slider-vertical; */ /* Deprecated */
+    /* writing-mode: bt-lr; */ /* For Firefox - will be handled by inline style */
+    width: 8px; /* Adjust width of the track */
+    height: 150px; /* Increased height for the slider */
+    padding: 0 5px; /* Add some padding if needed */
+    margin: 5px 0; /* Margin around the slider */
+}
+
+/* Optional: Style the thumb and track for vertical slider if needed */
+/* These are browser-specific and can be complex */
+/* Example for WebKit */
+.vertical-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px; /* Width of the thumb */
+    height: 20px; /* Height of the thumb */
+    background: #007bff;
+    cursor: pointer;
+    border-radius: 50%;
+}
+
+.vertical-slider::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    background: #007bff;
+    cursor: pointer;
+    border-radius: 50%;
+    border: none;
+}
+
+#swing-speed-value-display {
+    font-size: 0.9em;
+    color: #333;
+    margin-top: 8px;
+}
+
+
+/* --- Bottom Controls Area (NEW) --- */
+#bottom-controls {
+    background-color: #f8f9fa; /* Light background for the panel */
+    border-top: 1px solid #ddd; /* Separator line */
+    padding: 15px;
+    margin-top: 15px; 
+    border-radius: 0 0 5px 5px; /* Optional: round bottom corners if game-interface has rounded top */
+    display: flex;
+    flex-wrap: wrap; 
+    gap: 15px 25px; /* Row gap and column gap */
+    justify-content: center; 
+    align-items: center;
+}
+
+#bottom-controls > div { 
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+#bottom-controls label {
+    font-size: 0.95em;
+    color: #333;
+    margin-bottom: 0; /* Remove bottom margin from labels if any */
+}
+
+#bottom-controls input[type="range"]{
+    vertical-align: middle;
+}
+#bottom-controls select {
+    padding: 5px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+}
+#bottom-controls input[type="radio"] {
+    margin-right: 3px;
+    vertical-align: middle;
+}
+#bottom-controls #shot-type-select label { /* More specific selector for radio labels */
+    font-size: 0.9em;
+    margin-right: 8px;
+}
+
 
 /* NEW Common class for all overlay text items */
 .overlay-text-item {
@@ -296,10 +528,9 @@ body.mode-play-hole #visual-info-overlay .overlay-bottom-left.mode-play-hole {
 /* #overlay-score-info { text-align: right; } */
 
 /* Adjust text color if needed for contrast */
-#game-status label, #game-status p,
-#ball-position-control h2, #ball-position-control p {
-    color: #333; /* Ensure readability */
-}
+/* #game-status is removed */
+/* #ball-position-control h2, #ball-position-control p are removed */
+/* Text color for new controls is handled in #bottom-controls */
 
 /* Adjust ball position visual if needed */
 #ball-position-control .stance-visual {
@@ -380,39 +611,92 @@ body.mode-closest-to-flag #closest-to-flag-info {
 
 /* --- Main Menu & Game View --- */
 #main-menu {
-    display: flex; /* Use flexbox for centering */
-    flex-direction: column; /* Stack items vertically */
-    align-items: center; /* Center items horizontally */
-    justify-content: center; /* Center items vertically */
-    min-height: 80vh; /* Take up most of the viewport height */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 90vh; /* Adjusted height */
     text-align: center;
     padding: 20px;
+    width: 100%;
+    box-sizing: border-box;
+    background: linear-gradient(to bottom, #dcedc8, #c8e6c9); /* Light green gradient */
 }
 
 #main-menu h2 {
-    margin-bottom: 30px;
+    font-size: 2em;
+    color: #1b5e20; /* Darker green for main menu title */
+    margin-bottom: 40px;
+    border-bottom: none;
 }
 
-#main-menu > div { /* Style for the direct children divs within main-menu */
-    margin-bottom: 20px;
-    padding: 20px;
-    border: 1px solid #ccc;
-    border-radius: 8px;
-    background-color: #f9f9f9;
-    width: 80%;
-    max-width: 400px; /* Max width for menu sections */
+#main-menu > div {
+    margin-bottom: 25px;
+    padding: 25px;
+    border: none; /* Remove border */
+    border-radius: 12px; /* Softer radius */
+    background-color: rgba(255, 255, 255, 0.8); /* Semi-transparent white */
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); /* Softer shadow */
+    width: 90%;
+    max-width: 450px;
+}
+
+#main-menu strong {
+    display: block;
+    margin-bottom: 10px;
+    color: #2e7d32; /* Medium Green */
+    font-size: 1.1em;
 }
 
 #main-menu button {
-    padding: 10px 15px;
+    padding: 12px 20px;
     font-size: 1em;
-    margin: 5px;
+    font-weight: 600;
+    margin: 8px;
     cursor: pointer;
+    border: none;
+    border-radius: 6px;
+    background-color: #4caf50; /* Green button */
+    color: white;
+    transition: background-color 0.3s ease, transform 0.1s ease;
+}
+
+#main-menu button:hover {
+    background-color: #388e3c; /* Darker green on hover */
+    transform: translateY(-1px);
+}
+
+#main-menu button:active {
+    transform: translateY(0px);
+}
+
+#back-to-menu-button {
+    padding: 12px 20px; /* Increased padding */
+    font-size: 1em; /* Increased font size */
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    border-radius: 6px;
+    background-color: #66bb6a; /* Lighter green for in-game menu button */
+    color: white;
+    transition: background-color 0.3s ease, transform 0.1s ease;
+    /* position, top, right, z-index are already set inline in HTML, keep them or manage here */
+}
+
+#back-to-menu-button:hover {
+    background-color: #57a05a; /* Darker shade on hover */
+    transform: translateY(-1px);
+}
+
+#back-to-menu-button:active {
+    transform: translateY(0px);
 }
 
 #game-view {
-    /* Initially hidden by inline style, but can be controlled here too */
-    /* display: none; */
+    width: 100%; /* Ensure game view takes full width */
+    box-sizing: border-box; /* Include padding and border in the element's total width and height */
+    padding: 15px; /* Add some padding around the game view content */
+    /* display: none; is handled by JS */
 }
 
 /* When game-view is active, make visuals larger */
@@ -422,7 +706,7 @@ body.mode-closest-to-flag #closest-to-flag-info {
 }
 
 #game-view #golf-canvas {
-    height: 600px; /* Increased height */
+    height: 800px; /* Increased height */
     /* width: 100%; already set */
 }
 
@@ -505,4 +789,50 @@ body.mode-closest-to-flag #closest-to-flag-info {
 #shot-summary-widget button#show-details-button:hover {
     color: #aaa; /* Simple hover effect, or remove if not desired */
     background-color: transparent;
+}
+
+/* --- Club Button Styles --- */
+#club-buttons-container {
+    display: flex;
+    flex-wrap: wrap; /* Allow buttons to wrap to the next line */
+    gap: 5px; /* Space between buttons */
+    justify-content: center; /* Center buttons if they don't fill the line */
+    margin-top: 5px; /* Add some space above the buttons */
+}
+
+.club-button {
+    padding: 6px 10px; /* Adjust padding for a smaller button feel */
+    font-size: 0.85em; /* Smaller font size */
+    min-width: 40px; /* Minimum width to ensure text fits or for consistency */
+    text-align: center;
+    border: 1px solid #ccc;
+    background-color: #f0f0f0;
+    color: #333;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s, border-color 0.2s;
+}
+
+.club-button:hover {
+    background-color: #e0e0e0;
+    border-color: #bbb;
+}
+
+.club-button.selected {
+    background-color: #007bff; /* Blue background for selected club */
+    color: white;
+    border-color: #0056b3;
+}
+
+.club-button:disabled {
+    background-color: #e9ecef;
+    color: #6c757d;
+    cursor: not-allowed;
+    border-color: #ced4da;
+}
+
+#club-buttons-container.disabled .club-button {
+    /* Styles for when the entire container is "disabled" (e.g., during putt) */
+    opacity: 0.6;
+    pointer-events: none;
 }

@@ -9,7 +9,7 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club) 
     const currentTemperature = getTemperature(); // degrees C
     console.log(`Sim: Conditions - Temp: ${currentTemperature}°C, Wind: ${currentWind.speed.toFixed(1)}m/s @ ${currentWind.direction}°`);
 
-    currentWind.speed = 0 // Temporarily disable wind for testing
+    //currentWind.speed = 0 // Temporarily disable wind for testing
 
 
     const trajectoryPoints = [initialPos];
@@ -147,7 +147,7 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club) 
         effectiveCd = Math.max(MINIMUM_EFFECTIVE_CD, effectiveCd); // Clamp to minimum
         
         // For debugging:
-        console.log(`CurrentBackspinRPM: ${currentBackspinRPM.toFixed(0)}, SpinInducedDragReduction: ${spinInducedDragReduction.toFixed(6)}, effectiveCd: ${effectiveCd.toFixed(4)}`);
+        //console.log(`CurrentBackspinRPM: ${currentBackspinRPM.toFixed(0)}, SpinInducedDragReduction: ${spinInducedDragReduction.toFixed(6)}, effectiveCd: ${effectiveCd.toFixed(4)}`);
 
         // --- Pre-calculate drag force factor for THIS step using effectiveCd ---
         const currentDragForceFactor = -0.5 * airDensity * ballArea * effectiveCd / ballMass;

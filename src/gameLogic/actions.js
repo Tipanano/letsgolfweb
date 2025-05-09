@@ -26,6 +26,16 @@ import { getActiveCameraMode, setCameraBehindBall, snapFollowCameraToBall, Camer
 import { getSurfaceTypeAtPoint } from './utils.js'; // Import surface checker
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js'; // Need THREE for Vector3
 
+// --- Sound Effects ---
+const regularShotSound = new Audio('assets/sounds/regular_shot.mp3');
+regularShotSound.preload = 'auto'; // Preload the sound
+
+const chipShotSound = new Audio('assets/sounds/chip_shot.mp3');
+chipShotSound.preload = 'auto'; // Preload the sound
+
+const puttShotSound = new Audio('assets/sounds/putt_shot.mp3');
+puttShotSound.preload = 'auto'; // Preload the sound
+
 // --- Action Functions for Input Handler ---
 
 export function startBackswing() {
@@ -177,6 +187,7 @@ export function triggerFullSwingCalc() {
         // Check if all required keys are pressed
         if (getArmsStartTime() && getWristsStartTime() && (getHipInitiationTime() || getRotationStartTime())) {
             console.log("Action: Triggering full swing calculation from key presses.");
+            regularShotSound.play().catch(e => console.error("Error playing regular shot sound:", e));
             calculateFullSwingShot(); // Call the calculation function directly
         } else {
             console.warn("Action: Attempted to trigger full swing calc prematurely (missing keys).");
@@ -196,6 +207,7 @@ export function triggerChipCalc() {
              // Stop the chip animation loop (if not already stopped by timeout)
             stopChipDownswingAnimation();
             console.log("Action: Triggering chip calculation from key presses.");
+            chipShotSound.play().catch(e => console.error("Error playing regular shot sound:", e));
             setGameState('calculatingChip'); // Set state BEFORE calling calculation
             calculateChipShot(); // Call the calculation function directly
         } else {
@@ -213,6 +225,7 @@ export function triggerPuttCalc() {
         if (getPuttHitTime()) {
              // Animation loop is stopped in recordPuttKey
             console.log("Action: Triggering putt calculation from key press.");
+            puttShotSound.play().catch(e => console.error("Error playing regular shot sound:", e));
             setGameState('calculatingPutt'); // Set state BEFORE calling calculation
             calculatePuttShot(); // Call the calculation function directly
         } else {

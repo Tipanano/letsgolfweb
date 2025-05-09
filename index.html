@@ -34,7 +34,7 @@
 
     <!-- Game View (Initially Hidden) -->
     <div id="game-view" style="display: none;">
-        <button id="back-to-menu-button" style="position: absolute; top: 5px; right: 5px; z-index: 1001; padding: 5px 10px;">Menu</button>
+        <button id="back-to-menu-button" style="position: absolute; top: 10px; left: 10px; z-index: 1001;">Menu</button> <!-- Adjusted position and removed inline padding -->
 
         <!-- Closest to Flag Info Panel (Hidden by default) -->
         <div id="closest-to-flag-info" class="mode-info-panel">
@@ -127,6 +127,9 @@
                             <div class="overlay-text-item">Lie: <span id="overlay-lie">N/A</span></div>
                         </div>
                     </div>
+                    <!-- NEW Top Center Status -->
+                    <div id="top-center-status" class="overlay-text-item"><span id="status-text-display">Ready...</span></div>
+
                     <div class="overlay-bottom">
                          <!-- Play Hole Bottom Left -->
                         <div class="overlay-bottom-left mode-play-hole">
@@ -134,58 +137,64 @@
                             <div class="overlay-text-item">Total: <span id="overlay-total-score">N/A</span> (<span id="overlay-position">N/A</span>)</div>
                         </div>
                         <!-- Range / CTF might not need bottom left, or could show something else -->
-                    </div>
-                    <!-- NEW Shot Summary Widget -->
-                    <div id="shot-summary-widget" style="display: none;">
-                        <div class="overlay-text-item">Carry: <span id="summary-carry">N/A</span> yd</div>
-                        <div class="overlay-text-item">Roll: <span id="summary-roll">N/A</span> yd</div>
-                        <button id="show-details-button">+</button> <!-- Button style is separate -->
+                         <!-- NEW Shot Summary Widget (now part of overlay-bottom for positioning if desired, or keep separate) -->
+                        <div id="shot-summary-widget" style="display: none;">
+                            <div class="overlay-text-item">Carry: <span id="summary-carry">N/A</span> yd</div>
+                            <div class="overlay-text-item">Roll: <span id="summary-roll">N/A</span> yd</div>
+                            <button id="show-details-button">+</button> <!-- Button style is separate -->
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Ball Position Control (Moved Inside Layout, Outside Visuals) -->
+            <!-- Ball Position Control (Simplified) -->
             <div id="ball-position-control">
-                <h2>Ball Position</h2>
-                <p>Use Up/Down to adjust</p>
+                <button id="ball-pos-info-btn" class="info-button">i</button>
                 <div class="stance-visual">
                     <div class="foot" id="left-foot"></div>
                     <div class="ball-marker" id="ball-marker"></div>
                     <div class="foot" id="right-foot"></div>
                 </div>
-                <p>Position: <span id="ball-position-text">Center</span></p>
+                <!-- Hidden pop-up for ball position info -->
+                <div id="ball-pos-info-popup" class="info-popup" style="display: none;">
+                    Use the up/down arrow keys or click the feet icons to set ball position in your stance.
+                </div>
+
+                <!-- Swing Speed Control (Vertical) -->
+                <div id="swing-speed-control-vertical" style="margin-top: 15px; text-align: center;">
+                    <button id="swing-speed-info-btn" class="info-button">i</button>
+                    <input type="range" id="swing-speed-slider" name="swing-speed" min="30" max="100" value="90" class="vertical-slider" style="writing-mode: vertical-lr; direction: rtl;">
+                    <div id="swing-speed-value-display" style="margin-top: 5px;"><span id="swing-speed-value">90</span>%</div>
+                     <!-- Hidden pop-up for swing speed info -->
+                    <div id="swing-speed-info-popup" class="info-popup" style="display: none;">
+                        Reducing swing speed makes it easier to make a good swing and good contact with the ball, but also reduces distance.
+                    </div>
+                </div>
             </div>
 
         </div> <!-- End #main-layout -->
 
-        <!-- Game Status (Moved Inside Wrapper, Below Layout) -->
-        <div id="game-status">
-             <p>Status: <span id="status-text">Ready</span></p>
-             <div>
-                <label for="swing-speed-slider">Swing Speed (%): </label>
-                <input type="range" id="swing-speed-slider" name="swing-speed" min="30" max="100" value="90">
-                <span id="swing-speed-value">90</span>%
+        <!-- NEW Bottom Controls Area -->
+        <div id="bottom-controls">
+            <div> <!-- Club Select -->
+                <label>Club: </label> <!-- Label doesn't need 'for' if it's not directly linked to a single input -->
+                <div id="club-buttons-container">
+                    <!-- Club buttons will be populated by JS -->
+                </div>
             </div>
-            <div>
-                <label for="club-select">Club: </label>
-                <select name="club" id="club-select">
-                    <!-- Options will be populated by JS -->
-                </select>
-            </div>
-            <div id="shot-type-select">
+            <div id="shot-type-select"> <!-- Shot Type -->
                 <label>Shot Type: </label>
-                <input type="radio" id="shot-type-full" name="shot-type" value="full" checked>
-                <label for="shot-type-full">Full Swing</label>
+                <input type="radio" id="shot-type-regular" name="shot-type" value="full" checked> <!-- Changed id and value to "full" to match existing logic, label changed -->
+                <label for="shot-type-regular">Regular</label>
                 <input type="radio" id="shot-type-chip" name="shot-type" value="chip">
                 <label for="shot-type-chip">Chip</label>
-                <input type="radio" id="shot-type-putt" name="shot-type" value="putt">
-                <label for="shot-type-putt">Putt</label>
+                <!-- Putt option removed -->
              </div>
         </div>
 
     </div> <!-- End #game-interface -->
 
-    <!-- 5. Shot Result -->
+    <!-- 5. Shot Result (Pop-up) -->
     <div id="shot-result">
         <h2>Shot Result</h2>
         <p><strong>Overall:</strong> <span id="result-text">Hit the ball!</span></p>

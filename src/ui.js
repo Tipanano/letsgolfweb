@@ -1,4 +1,4 @@
-import { clubs } from './clubs.js'; // Import club data for populating dropdown
+import { clubs, defaultPlayerBag } from './clubs.js'; // Import club data and defaultPlayerBag
 import { YARDS_TO_METERS } from './visuals/core.js'; // Import conversion constant (Corrected Path)
 import { getWind, getTemperature } from './gameLogic/state.js'; // Import environment state getters (Corrected Path)
 
@@ -12,16 +12,22 @@ const gameViewDiv = document.getElementById('game-view');
 const backToMenuButton = document.getElementById('back-to-menu-button');
 
 // Other UI Elements
-const statusText = document.getElementById('status-text');
+const statusTextDisplay = document.getElementById('status-text-display'); // New top-center status
+const ballPosInfoButton = document.getElementById('ball-pos-info-btn');
+const ballPosInfoPopup = document.getElementById('ball-pos-info-popup');
+const swingSpeedInfoButton = document.getElementById('swing-speed-info-btn');
+const swingSpeedInfoPopup = document.getElementById('swing-speed-info-popup');
+// const statusText = document.getElementById('status-text'); // Old status text, now unused
 const swingSpeedSlider = document.getElementById('swing-speed-slider');
 const swingSpeedValueSpan = document.getElementById('swing-speed-value');
-const clubSelect = document.getElementById('club-select');
+// const clubSelect = document.getElementById('club-select'); // Replaced by clubButtonsContainer
+const clubButtonsContainer = document.getElementById('club-buttons-container'); // New container for club buttons
 const nextShotButton = document.getElementById('next-shot-button');
 // Shot Type Selector Elements
 const shotTypeRadios = document.querySelectorAll('input[name="shot-type"]'); // Get all radio buttons
-const shotTypeFull = document.getElementById('shot-type-full');
+const shotTypeRegular = document.getElementById('shot-type-regular'); // Renamed from shot-type-full
 const shotTypeChip = document.getElementById('shot-type-chip');
-const shotTypePutt = document.getElementById('shot-type-putt');
+// const shotTypePutt = document.getElementById('shot-type-putt'); // Putt type is implicit with Putter selection
 
 const backswingDurationText = document.getElementById('backswing-duration');
 const rotationStartOffsetText = document.getElementById('rotation-start-offset');
@@ -73,7 +79,9 @@ const showDetailsButton = document.getElementById('show-details-button');
 // Ball Position Elements
 const ballPositionControl = document.getElementById('ball-position-control');
 const ballMarker = document.getElementById('ball-marker');
-const ballPositionText = document.getElementById('ball-position-text');
+const leftFoot = document.getElementById('left-foot'); // Added
+const rightFoot = document.getElementById('right-foot'); // Added
+// const ballPositionText = document.getElementById('ball-position-text'); // Removed as element is deleted
 
 // Closest to Flag UI Elements
 const ctfTargetDistanceText = document.getElementById('ctf-target-distance');
@@ -124,17 +132,61 @@ let currentBallPositionIndex = 5; // Start near Center (index 5 for 10 levels, 0
 // --- UI Update Functions ---
 
 export function updateStatus(text) {
-    statusText.textContent = text;
+    if (statusTextDisplay) {
+        if (text.toLowerCase().includes("next shot")) {
+            statusTextDisplay.textContent = "'n' for next shot";
+        } else if (text.toLowerCase().includes("ready")) {
+            statusTextDisplay.textContent = "Ready...";
+        } else {
+            statusTextDisplay.textContent = text; // Fallback for other statuses
+        }
+    }
 }
 
-export function populateClubSelect() {
-    for (const key in clubs) {
-        const option = document.createElement('option');
-        option.value = key;
-        option.textContent = clubs[key].name;
-        clubSelect.appendChild(option);
+// Store the currently selected club button
+let selectedClubButton = null;
+let onClubChangeCallback = null; // To store the callback for club changes
+
+export function createClubButtons() {
+    if (!clubButtonsContainer) return;
+    clubButtonsContainer.innerHTML = ''; // Clear existing buttons
+
+    // Use the defaultPlayerBag to populate buttons
+    // Later, this could be replaced by a player's custom bag
+    const displayClubKeys = defaultPlayerBag; 
+
+    displayClubKeys.forEach(clubKey => {
+        const club = clubs[clubKey];
+        if (!club) {
+            console.warn(`Club with key "${clubKey}" not found in clubs data. Skipping button.`);
+            return;
+        }
+        const button = document.createElement('button');
+        button.classList.add('club-button');
+        button.dataset.clubKey = clubKey;
+        button.textContent = club.name.length > 6 ? clubKey : club.name; // Use key if name is too long
+        
+        button.addEventListener('click', () => {
+            if (selectedClubButton) {
+                selectedClubButton.classList.remove('selected');
+            }
+            button.classList.add('selected');
+            selectedClubButton = button;
+            if (onClubChangeCallback) {
+                onClubChangeCallback(clubKey);
+            }
+        });
+        clubButtonsContainer.appendChild(button);
+    });
+
+    // Set a default selected club (e.g., 'I7' if it's in the bag, otherwise the first club in the bag)
+    const defaultClubToSelect = displayClubKeys.includes('I7') ? 'I7' : displayClubKeys[0];
+    if (defaultClubToSelect) {
+        const defaultButton = clubButtonsContainer.querySelector(`.club-button[data-club-key="${defaultClubToSelect}"]`);
+        if (defaultButton) {
+            defaultButton.click(); // Simulate a click to select it
+        }
     }
-    clubSelect.value = 'I7'; // Set default selection to the correct key
 }
 
 export function setupBackswingBar() {
@@ -440,8 +492,8 @@ export function resetUIForNewShot() {
 // --- Ball Position UI Functions ---
 
 function updateBallPositionDisplay() {
-    // Update text label
-    ballPositionText.textContent = ballPositionLabels[currentBallPositionIndex];
+    // Update text label - REMOVED as element ballPositionText is deleted
+    // ballPositionText.textContent = ballPositionLabels[currentBallPositionIndex];
 
     // Update visual marker position (vertically)
     // Calculate percentage based on index (0 to levels-1)
@@ -489,6 +541,18 @@ export function getShotType() {
     return 'full'; // Default if none checked (shouldn't happen with default)
 }
 
+// Function to programmatically set the checked state of shot type radio buttons
+export function setShotTypeRadio(shotType) {
+    shotTypeRadios.forEach(radio => {
+        if (radio.value === shotType) {
+            radio.checked = true;
+        } else {
+            radio.checked = false;
+        }
+    });
+    // console.log(`UI: Shot type radio set to ${shotType}`);
+}
+
 export function setSwingSpeedControlState(enabled) {
     swingSpeedSlider.disabled = !enabled;
     // Optionally add a class to visually grey out the slider/label when disabled
@@ -534,15 +598,15 @@ export function updateTimingBarVisibility(shotType) { // Consider renaming later
         ballPositionControl.style.display = (isFullSwing || isChip) ? '' : 'none';
     }
 
-    // Club Select Dropdown: Enable for Full & Chip, Disable for Putt
-    if (clubSelect) {
-        clubSelect.disabled = isPutt;
-        // Add/remove a class for visual styling if desired
-        if (isPutt) {
-            clubSelect.classList.add('disabled');
-        } else {
-            clubSelect.classList.remove('disabled');
-        }
+    // Club Buttons Container: Should always be enabled.
+    // The logic for handling Putter selection and shot type is in state.js.
+    if (clubButtonsContainer) {
+        // Ensure buttons are not inadvertently disabled by other logic if classList was used
+        // clubButtonsContainer.classList.remove('disabled'); // Optional: remove if this class was used for disabling
+        // const buttons = clubButtonsContainer.querySelectorAll('.club-button');
+        // buttons.forEach(button => {
+        //     button.disabled = false; // Ensure buttons are enabled
+        // });
     }
 
     // Ideal Backswing Marker Visibility: Show only for Full swing
@@ -563,13 +627,22 @@ export function updatePuttTimingBar(elapsedTime) {
     return progressPercent;
 }
 
-// Function to programmatically set the value of the club select dropdown
-export function setClubSelectValue(clubKey) {
-    if (clubSelect) {
-        clubSelect.value = clubKey;
-        console.log(`UI: Set club select dropdown to ${clubKey}`);
+// Function to programmatically set the selected club button
+export function setSelectedClubButton(clubKey) {
+    if (clubButtonsContainer) {
+        const buttonToSelect = clubButtonsContainer.querySelector(`.club-button[data-club-key="${clubKey}"]`);
+        if (buttonToSelect) {
+            if (selectedClubButton) {
+                selectedClubButton.classList.remove('selected');
+            }
+            buttonToSelect.classList.add('selected');
+            selectedClubButton = buttonToSelect;
+            // console.log(`UI: Set selected club button to ${clubKey}`);
+        } else {
+            console.warn(`UI: Club button for key ${clubKey} not found.`);
+        }
     } else {
-        console.warn("UI: Club select element not found, couldn't set value.");
+        console.warn("UI: Club buttons container not found, couldn't set selected club.");
     }
 }
 
@@ -586,9 +659,9 @@ export function addSwingSpeedInputListener(callback) {
 }
 
 export function addClubChangeListener(callback) {
-    clubSelect.addEventListener('change', (event) => {
-        callback(event.target.value); // Pass the selected club key
-    });
+    // The actual event listeners are on the buttons themselves in createClubButtons.
+    // We just store the callback here to be used by the button click handlers.
+    onClubChangeCallback = callback;
 }
 
 export function addShotTypeChangeListener(callback) {
@@ -865,7 +938,7 @@ function getWindArrow(direction) {
 /**
  * Updates the wind and temperature display in the UI overlay.
  */
-function updateEnvironmentDisplay() {
+export function updateEnvironmentDisplay() { // Added export
     if (!overlayWindSpan || !overlayTempSpan) return; // Elements might not exist
 
     const windData = getWind();
@@ -873,7 +946,8 @@ function updateEnvironmentDisplay() {
 
     const windSpeedText = windData.speed.toFixed(1);
     const windArrow = getWindArrow(windData.direction);
-    const windDisplayText = `${windSpeedText} m/s ${windArrow}`;
+    const windDirectionDegrees = windData.direction.toFixed(0);
+    const windDisplayText = `${windSpeedText} m/s ${windArrow} (${windDirectionDegrees}°)`;
 
     const tempDisplayText = `${temperatureData.toFixed(0)}°C`;
 
@@ -895,7 +969,7 @@ if (overlayWindSpan && overlayTempSpan) { // Only run if elements exist
 
 
 // Remove initial setup calls from here; they will be called explicitly from main.js
-// populateClubSelect();
+// createClubButtons(); // This will be called from main.js
 // setupBackswingBar();
 
 
@@ -988,6 +1062,74 @@ export function addBackToMenuClickListener(callback) {
 // This might be better handled in main.js after all initializations
 // showMainMenu();
 
+
+// --- Event Listener for Ball Position Info Button & Pop-up ---
+function hideBallPosInfoPopup() {
+    if (ballPosInfoPopup) {
+        ballPosInfoPopup.style.display = 'none';
+    }
+    document.removeEventListener('click', handleClickOutsideBallPosPopup, true);
+}
+
+function handleClickOutsideBallPosPopup(event) {
+    if (ballPosInfoPopup && ballPosInfoPopup.style.display !== 'none') {
+        if (!ballPosInfoPopup.contains(event.target) && event.target !== ballPosInfoButton) {
+            hideBallPosInfoPopup();
+        }
+    }
+}
+
+if (ballPosInfoButton) {
+    ballPosInfoButton.addEventListener('click', (event) => {
+        event.stopPropagation();
+        if (ballPosInfoPopup) {
+            const isVisible = ballPosInfoPopup.style.display === 'block';
+            if (isVisible) {
+                hideBallPosInfoPopup();
+            } else {
+                ballPosInfoPopup.style.display = 'block';
+                // Add the global click listener when the pop-up is shown
+                document.addEventListener('click', handleClickOutsideBallPosPopup, true);
+            }
+        }
+    });
+}
+
+// --- Event Listener for Swing Speed Info Button & Pop-up ---
+function hideSwingSpeedInfoPopup() {
+    if (swingSpeedInfoPopup) {
+        swingSpeedInfoPopup.style.display = 'none';
+    }
+    document.removeEventListener('click', handleClickOutsideSwingSpeedPopup, true);
+}
+
+function handleClickOutsideSwingSpeedPopup(event) {
+    if (swingSpeedInfoPopup && swingSpeedInfoPopup.style.display !== 'none') {
+        if (!swingSpeedInfoPopup.contains(event.target) && event.target !== swingSpeedInfoButton) {
+            hideSwingSpeedInfoPopup();
+        }
+    }
+}
+
+if (swingSpeedInfoButton) {
+    swingSpeedInfoButton.addEventListener('click', (event) => {
+        event.stopPropagation();
+        if (swingSpeedInfoPopup) {
+            const isVisible = swingSpeedInfoPopup.style.display === 'block';
+            if (isVisible) {
+                hideSwingSpeedInfoPopup();
+            } else {
+                // Hide other popups if open
+                hideBallPosInfoPopup(); 
+                hideShotResultPopup(); // Though less likely to be open simultaneously
+                swingSpeedInfoPopup.style.display = 'block';
+                document.addEventListener('click', handleClickOutsideSwingSpeedPopup, true);
+            }
+        }
+    });
+}
+
+
 // --- Event Listener for Show Details Button & Click-Outside-to-Close for Pop-up ---
 
 // Function to hide the shot result pop-up and remove the global click listener
@@ -1010,11 +1152,12 @@ function handleClickOutsideShotResultPopup(event) {
 
 if (showDetailsButton) {
     showDetailsButton.addEventListener('click', (event) => {
-        event.stopPropagation(); // Prevent this click from being caught by the document listener immediately
+        event.stopPropagation(); 
         if (shotResultDiv) {
-            shotResultDiv.style.display = 'block'; // Or 'flex'
-            // Add the global click listener when the pop-up is shown
-            // Use true for capture phase to catch clicks on other elements before they might stop propagation
+            // Hide other popups if open
+            hideBallPosInfoPopup();
+            hideSwingSpeedInfoPopup();
+            shotResultDiv.style.display = 'block'; 
             document.addEventListener('click', handleClickOutsideShotResultPopup, true);
         }
     });
@@ -1025,5 +1168,18 @@ export function addNextShotClickListener(callback) {
     nextShotButton.addEventListener('click', () => {
         hideShotResultPopup(); // This now also removes the global listener
         callback(); // Call original callback
+    });
+}
+
+// --- Event Listeners for Clickable Feet in Ball Position UI ---
+if (leftFoot) {
+    leftFoot.addEventListener('click', () => {
+        adjustBallPosition(1); // Move ball forward (towards lead foot/upper foot)
+    });
+}
+
+if (rightFoot) {
+    rightFoot.addEventListener('click', () => {
+        adjustBallPosition(-1); // Move ball backward (towards trail foot/lower foot)
     });
 }

@@ -1,11 +1,13 @@
 import * as ui from './ui.js';
-import { showMainMenu, showGameView, addBackToMenuClickListener } from './ui.js'; // Import specific functions
+// Import specific functions, including updateEnvironmentDisplay
+import { showMainMenu, showGameView, addBackToMenuClickListener, updateEnvironmentDisplay } from './ui.js'; 
 import * as logic from './gameLogic.js'; // Game state and actions
 import * as visuals from './visuals.js';
 import * as inputHandler from './inputHandler.js'; // Import the new input handler
 import * as environment from './gameLogic/environment.js'; // Import environment simulation
 import * as closestToFlag from './modes/closestToFlag.js'; // Import the CTF mode logic
 import * as playHole from './modes/playHole.js'; // Import the Play Hole mode logic
+import { getRandomInRange } from './gameLogic/utils.js'; // Import getRandomInRange
 
 // --- Game Modes ---
 const GAME_MODES = {
@@ -64,8 +66,8 @@ function setGameMode(newMode) {
         visuals.showBallAtAddress(); // Ensure ball is shown
     } else if (currentMode === GAME_MODES.PLAY_HOLE) {
         playHole.initializeMode(); 
-        // visuals.switchToHoleView() is likely called by playHole.initializeMode or subsequent logic
-        visuals.showBallAtAddress(); // Ensure ball is shown
+        // visuals.switchToHoleView() is called by playHole.initializeMode via visuals.activateHoleViewCamera()
+        // Ball position is handled by playHole.initializeMode using loaded or tee position.
     }
     
     console.log(`Game mode ${currentMode} initialized and visuals set up.`);
@@ -78,15 +80,22 @@ export function getCurrentGameMode() {
 
 // --- Initial Setup ---
 
-// Populate the club select dropdown first
-ui.populateClubSelect();
+// Create the club buttons first
+ui.createClubButtons();
 
-// Get initial values from UI (slider and now-populated select) and set them in logic
+// Get initial values from UI (slider and now-updated club buttons) and set them in logic
 const initialSwingSpeed = parseInt(document.getElementById('swing-speed-slider').value, 10);
 logic.setSwingSpeed(initialSwingSpeed);
 
-const initialClubKey = document.getElementById('club-select').value; // Read value *after* populating
-logic.setSelectedClub(initialClubKey);
+// The default club is set by createClubButtons, which also triggers the onClubChangeCallback
+// if a callback is registered. We'll register the callback *after* this initial setup
+// to avoid double-setting or issues if logic isn't fully ready.
+// For now, we can assume a default club is selected in UI and logic will pick it up
+// or we can explicitly get it if needed, but createClubButtons should handle the initial selection.
+
+// const initialClubKey = ???; // This will be set by the default button click in createClubButtons
+// logic.setSelectedClub(initialClubKey); // This will be handled by the club change listener
+
 const initialShotType = ui.getShotType(); // Get initial shot type from UI
 logic.setShotType(initialShotType); // Set initial shot type in logic
 
@@ -97,8 +106,14 @@ ui.setupTimingBarWindows(initialSwingSpeed / 100); // Setup downswing windows ba
 
 // Initialize game logic (which also calls ui.resetUI and sets initial wind/temp state)
 logic.initializeGameLogic();
-// Set initial wind simulation parameters (can be overridden by modes later)
-environment.setWindParameters(5, 45, 3, 20, 2500); // Example: 5m/s base, 45deg, +/-3m/s speed, +/-20deg dir, 2.5s interval
+// Generate random base wind parameters
+const initialBaseSpeed = getRandomInRange(0, 10); // Random base speed 0-10 m/s
+const initialBaseDirection = getRandomInRange(0, 360); // Random base direction 0-360 degrees
+// Set initial wind simulation parameters using the random base values
+// Variances and interval remain the same for now, but could also be randomized or configured
+environment.setWindParameters(initialBaseSpeed, initialBaseDirection, 3, 20, 2500); 
+// Manually update the environment display once after setting parameters to ensure correct initial display
+updateEnvironmentDisplay(); 
 // Register the shot completion handler
 logic.registerShotCompletionCallback(handleShotCompletion);
 

@@ -1,5 +1,5 @@
 import { clubs } from '../clubs.js';
-import { setupTimingBarWindows, setBallPosition, getBallPositionLevels, setSwingSpeedControlState, updateTimingBarVisibility, setClubSelectValue } from '../ui.js';
+import { setupTimingBarWindows, setBallPosition, getBallPositionLevels, setSwingSpeedControlState, updateTimingBarVisibility, setSelectedClubButton, setShotTypeRadio } from '../ui.js'; // Added setShotTypeRadio
 // Import resetStaticCameraZoom along with other camera functions if needed, or just visuals module
 import { resetStaticCameraZoom } from '../visuals/core.js'; // Import the new zoom reset function
 import * as visuals from '../visuals.js'; // Import visuals main module
@@ -15,7 +15,7 @@ export const PUTT_DISTANCE_FACTOR = 1.5; // Yards per mph of ball speed (Needs t
 export let gameState = 'ready'; // ready, backswing, backswingPausedAtTop, downswingWaiting, calculating, result, chipDownswingWaiting, calculatingChip, puttDownswingWaiting, calculatingPutt
 export let currentShotType = 'full'; // 'full', 'chip', 'putt'
 export let swingSpeed = 1.0; // Base speed factor (0.3 to 1.0) - Only for 'full' swing
-export let selectedClub = clubs['7I']; // Default club
+export let selectedClub = clubs['I7']; // Default club - Corrected key
 export let currentTargetLineAngle = 0; // Absolute angle (degrees) of the intended target line relative to Z-axis
 export let shotDirectionAngle = 0; // Angle in degrees RELATIVE to currentTargetLineAngle (player's fine-tuning adjustment)
 
@@ -186,7 +186,19 @@ export function setSwingSpeed(percentage) {
 
 export function setSelectedClub(clubKey) {
     selectedClub = clubs[clubKey];
-    console.log(`Logic State: Club set to: ${selectedClub.name}`);
+    console.log(`Logic State: Club set to: ${selectedClub.name} (Key: ${clubKey})`);
+
+    // Auto-set shot type based on club selection
+    if (clubKey === 'PT') {
+        if (currentShotType !== 'putt') {
+            setShotType('putt'); // This will also call setSelectedClubButton('PT')
+        }
+    } else {
+        // If a non-putter is selected and current shot type is 'putt', switch to 'full'
+        if (currentShotType === 'putt') {
+            setShotType('full');
+        }
+    }
 
     // Set the default ball position for the selected club
     if (selectedClub && selectedClub.defaultBallPositionIndex !== undefined) {
@@ -212,28 +224,36 @@ export function setShotType(type) {
     // Update visibility of timing bars based on shot type
     updateTimingBarVisibility(type);
 
-    // Update club selection for putt
+    // Update club selection for putt and UI radio buttons
+    setShotTypeRadio(type); // Update UI radio buttons
+
     switch (type) {
         case 'chip':
-            // Camera is no longer changed here
-            // Optionally force a wedge? Or leave club selection open? For now, leave open.
+            // If current club is Putter and switching to Chip, select a non-Putter (e.g., PW)
+            if (selectedClub && selectedClub === clubs['PT']) {
+                setSelectedClub('PW'); // Switch to Pitching Wedge
+                setSelectedClubButton('PW'); // Update UI button
+            }
             break;
         case 'putt':
-            // Camera is no longer changed here
-            // Automatically select the Putter internally
-            setSelectedClub('PT'); // Assuming 'PT' is the key for the Putter
-            // Update the UI dropdown to reflect this change
-            setClubSelectValue('PT');
+            // Automatically select the Putter internally if not already selected
+            if (!selectedClub || selectedClub !== clubs['PT']) {
+                setSelectedClub('PT'); // This will call setSelectedClub again, but it's okay
+            }
+            // Ensure the Putter button is visually selected in UI
+            setSelectedClubButton('PT');
             break;
         case 'full':
         default:
-            // Camera is no longer changed here
-            // If switching *back* from putt, maybe re-select a default iron? Or leave as is?
+            // If current club is Putter and switching to Full, select a non-Putter (e.g., I7)
+            if (selectedClub && selectedClub === clubs['PT']) {
+                setSelectedClub('I7'); // Switch to 7 Iron
+                setSelectedClubButton('I7'); // Update UI button
+            }
             break;
     }
-
-    // Reset swing state when changing type
-    //resetSwingState(); // Call the full reset function
+    // Reset swing state when changing type - consider if this is always desired
+    // resetSwingState(); 
 }
 
 // This function performs the full reset including UI/Visuals

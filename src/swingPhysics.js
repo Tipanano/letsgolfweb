@@ -289,8 +289,13 @@ function calculateAttackAngle(baseAoA, ballPositionFactor, currentSurface) {
 
     // Apply cap if not on tee and AoA bonus is positive
     // Convert surface to lowercase for comparison
+    console.log(`AoA Calc: BallPosFactor=${ballPositionFactor.toFixed(2)}, Surface=${currentSurface}`);
+    const MAX_NON_TEE_AOA_BONUS = 1.0; // Max positive AoA bonus when not on tee
     if (currentSurface.toLowerCase() !== 'tee' && aoaFromBallPos > 0) {
         aoaFromBallPos = Math.min(aoaFromBallPos, MAX_NON_TEE_AOA_BONUS);
+       if (baseAoA > 0) {
+            baseAoA = 0
+       }
         console.log(`AoA Calc: Capping non-tee AoA bonus to ${MAX_NON_TEE_AOA_BONUS}`);
     }
 

@@ -27,3 +27,7 @@ export const clubs = {
     // Putter
     'PT': { name: 'Putter',         loft: 3,    lengthFactor: 0.70, baseSmash: 1.0,  baseAoA: 0,    spinRateFactor: 0.1, basePotentialSpeed: 20.0, optimalSpin: 100, defaultBallPositionIndex: 5, liftFactor: 0.0, clBackspinEff: 0.0 }, // Center-Fwd (Ball position less critical for putt, but set a default)
 };
+
+export const defaultPlayerBag = [
+    'DR', 'W3', 'I3', 'I4', 'I5', 'I6', 'I7', 'I8', 'I9', 'PW', 'AW50', 'GW54', 'LW60', 'PT'
+];

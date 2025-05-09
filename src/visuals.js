@@ -183,23 +183,22 @@ export function animateBallFlight(shotData) {
 }
 
 // Reset visuals - Resets core elements and the current view
-// Accepts an optional position to place the ball at.
-export function resetVisuals(position = null) {
-    console.log(`Resetting visuals for mode: ${currentVisualMode}. Position provided:`, position);
+// Accepts an optional position to place the ball at and the current lie.
+export function resetVisuals(position = null, lie = null) {
+    console.log(`Resetting visuals for mode: ${currentVisualMode}. Position provided:`, position, "Lie:", lie);
     // CoreVisuals.resetCoreVisuals(); // Don't call this as it resets ball to default
 
     // Manually replicate parts of resetCoreVisuals needed:
     CoreVisuals.removeTrajectoryLine(); // Remove trajectory line
     // TODO: Add calls to stop animation state if needed (isBallAnimating = false etc.)
 
-    // Reset ball position: Use provided position if available, otherwise default.
-    // The showBallAtAddress function in core.js handles the surface type logic.
+    // Reset ball position: Use provided position and lie if available, otherwise default.
     if (position) {
-        console.log(">>> CONDITION PASSED: Resetting ball position using provided coordinates:", position);
-        CoreVisuals.showBallAtAddress(position); // Pass the position, let core handle surface/defaulting
+        console.log(">>> CONDITION PASSED: Resetting ball position using provided coordinates:", position, "and lie:", lie);
+        CoreVisuals.showBallAtAddress(position, lie); // Pass the position and lie
     } else {
-        console.log(">>> CONDITION FAILED: Resetting ball position to default (null). Position was:", position);
-        CoreVisuals.showBallAtAddress(null); // Pass null to use default position/surface
+        console.log(">>> CONDITION FAILED: Resetting ball position to default (null). Position was:", position, "Lie:", lie);
+        CoreVisuals.showBallAtAddress(null, lie || 'TEE'); // Pass null for position, default to TEE if lie is also null
     }
 
 
@@ -329,14 +328,19 @@ export function activateHoleViewCamera() {
         // Calculate distance for camera adjustment
         const distance = ballPosition.distanceTo(targetPosition);
 
-        // --- Get Current Aim Angle (Don't Reset) ---
-        const currentTargetAngle = getCurrentTargetLineAngle();
-        const currentRelativeAngle = getShotDirectionAngle();
-        const totalAimAngle = currentTargetAngle + currentRelativeAngle;
-        console.log(`Visuals: Activating hole view with existing total aim angle: ${totalAimAngle.toFixed(1)}`);
+        // --- Calculate the direct angle from ball to target ---
+        const dx = targetPosition.x - ballPosition.x;
+        const dz = targetPosition.z - ballPosition.z;
+        let calculatedAngleRad = Math.atan2(dx, dz); // dx for X, dz for Z for angle from +Z axis
+        let calculatedAngleDeg = THREE.MathUtils.radToDeg(calculatedAngleRad);
 
-        // Call the core function, passing the existing total angle
-        CoreVisuals.setCameraBehindBallLookingAtTarget(ballPosition, targetPosition, distance, totalAimAngle);
+        // Update the game state's target line angle.
+        // This sets currentTargetLineAngle to calculatedAngleDeg and shotDirectionAngle to 0.
+        setShotDirectionAngle(calculatedAngleDeg); 
+        console.log(`Visuals: Set currentTargetLineAngle to ${calculatedAngleDeg.toFixed(1)} (points at flag) and reset relative aim.`);
+
+        // Call the core function, passing the newly set absolute angle (relative is 0 now)
+        CoreVisuals.setCameraBehindBallLookingAtTarget(ballPosition, targetPosition, distance, calculatedAngleDeg);
     } else {
         console.warn("Could not activate hole view camera: Missing ball or target position.");
         // Fallback to default static view?
