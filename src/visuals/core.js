@@ -38,11 +38,13 @@ const STATIC_ZOOM_STEP = 0.1;
 const STATIC_ZOOM_MIN_LEVEL = 0.0;
 const STATIC_ZOOM_MAX_LEVEL = 1.0;
 const STATIC_ZOOM_MIN_DIST_FACTOR = 0.15; // Multiplier for base distance when fully zoomed in
-const STATIC_ZOOM_MAX_DIST_FACTOR = 2.0; // Multiplier for base distance when fully zoomed out
+const STATIC_ZOOM_MAX_DIST_FACTOR = 3.0; // Multiplier for base distance when fully zoomed out
 const STATIC_ZOOM_MIN_HEIGHT = BALL_RADIUS + 0.5; // Minimum height above ball radius
-const STATIC_ZOOM_MAX_HEIGHT = 15.0; // Maximum height in meters
-const STATIC_ZOOM_MAX_HEIGHT_THRESHOLD = 0.7; // Zoom level at which max height is reached
-let staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL;
+const STATIC_ZOOM_MAX_HEIGHT = 25.0; // Maximum height in meters
+const STATIC_ZOOM_MAX_HEIGHT_THRESHOLD = 1.0; // Zoom level at which max height is reached
+// let staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // Deprecated
+let staticCameraHeightLevel = DEFAULT_STATIC_ZOOM_LEVEL; // New: Controls height
+let staticCameraDistanceLevel = DEFAULT_STATIC_ZOOM_LEVEL; // New: Controls distance/zoom
 let staticCameraZoomLevelPutt = DEFAUTLT_STATIC_PUTT_ZOOM_LEVEL; // Putt view zoom level
 
 // Animation state
@@ -655,7 +657,7 @@ export function resetCameraPosition(angleToUse = 0) { // Accept angle parameter
     currentStaticView = 'range'; // Update stored static view type
     // staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // REMOVED: Don't reset zoom on aim/view change
     console.log(`Static camera set to: Range View (Angle: ${angleToUse.toFixed(1)})`);
-    updateStaticCameraPositionFromZoom(); // Apply existing zoom level to new view
+    updateStaticCameraView(); // Apply existing zoom level to new view
 }
 
 // Sets camera for Target view
@@ -686,7 +688,7 @@ export function setCameraForTargetView(targetZ = 150, angleToUse = 0) { // Accep
     currentStaticView = 'target'; // Update stored static view type
     // staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // REMOVED: Don't reset zoom on aim/view change
     console.log(`Static camera set to: Target View (Z=${targetZ.toFixed(1)}, Angle: ${angleToUse.toFixed(1)})`);
-    updateStaticCameraPositionFromZoom(); // Apply existing zoom level to new view
+    updateStaticCameraView(); // Apply existing zoom level to new view
 }
 
 // Sets camera for Chip view
@@ -712,7 +714,7 @@ export function setCameraForChipView(angleToUse = 0) { // Accept angle parameter
     currentStaticView = 'chip'; // Update stored static view type
     // staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // REMOVED: Don't reset zoom on aim/view change
     console.log(`Static camera set to: Chip View (Angle: ${angleToUse.toFixed(1)})`);
-    updateStaticCameraPositionFromZoom(); // Apply existing zoom level to new view
+    updateStaticCameraView(); // Apply existing zoom level to new view
 }
 
 // Sets camera for Putt view
@@ -738,7 +740,7 @@ export function setCameraForPuttView(angleToUse = 0) { // Accept angle parameter
     currentStaticView = 'putt'; // Update stored static view type
     // staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // REMOVED: Don't reset zoom on aim/view change
     console.log(`Static camera set to: Putt View (Angle: ${angleToUse.toFixed(1)})`);
-    updateStaticCameraPositionFromZoom(); // Apply existing zoom level to new view
+    updateStaticCameraView(); // Apply existing zoom level to new view
 }
 
 // Sets camera for Hole Tee view (overview)
@@ -765,7 +767,7 @@ export function setCameraForHoleTeeView(holeLengthYards = 400, angleToUse = 0) {
     currentStaticView = 'tee'; // Update stored static view type
     // staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // REMOVED: Don't reset zoom on aim/view change
     console.log(`Static camera set to: Hole Tee View (Angle: ${angleToUse.toFixed(1)}, looking towards Z=${(holeLengthMeters * 0.6).toFixed(1)})`);
-    updateStaticCameraPositionFromZoom(); // Apply existing zoom level to new view
+    updateStaticCameraView(); // Apply existing zoom level to new view
 }
 
 // Sets camera behind the ball, looking directly at a target, adjusting distance based on proximity
@@ -808,7 +810,7 @@ export function setCameraBehindBallLookingAtTarget(ballPosition, targetPosition,
     // staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // REMOVED: Don't reset zoom on aim/view change
 
     console.log(`Static camera set to: Hole View (Angle: ${angleToUse.toFixed(1)}, behind ball at ${ballPosition.z.toFixed(1)}, looking towards ${targetPosition.z.toFixed(1)})`);
-    updateStaticCameraPositionFromZoom(); // Apply existing zoom level to new view
+    updateStaticCameraView(); // Apply existing zoom level to new view
 }
 
 // Sets the initial position and lookAt for the follow camera, aiming at a target
@@ -918,7 +920,7 @@ export function setCameraBehindBall(targetPosition, viewType = 'range') { // Kee
     // staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // REMOVED: Don't reset zoom on aim/view change
 
     console.log(`Static camera set behind ball (Total Angle: ${totalAimAngle.toFixed(1)}) at (${targetPosVec3.x.toFixed(1)}, ${targetPosVec3.z.toFixed(1)}) with view type: ${currentStaticView}`);
-    updateStaticCameraPositionFromZoom(); // Apply existing zoom level to new view
+    updateStaticCameraView(); // Apply existing zoom level to new view
 }
 
 // Snaps the follow camera instantly to its starting offset relative to a target position
@@ -947,12 +949,13 @@ export function snapFollowCameraToBall(targetPosition) { // Keep original signat
 }
 
 // --- Zoom Functions ---
-const MIN_FOV = 10; // Minimum Field of View (Zoom In Limit)
-const MAX_FOV = 150; // Maximum Field of View (Zoom Out Limit)
-const ZOOM_STEP = 5;  // How much FOV changes per step
+const MIN_FOV = 10; // Minimum Field of View (Zoom In Limit) for non-static modes
+const MAX_FOV = 150; // Maximum Field of View (Zoom Out Limit) for non-static modes
+const FOV_ZOOM_STEP = 5;  // How much FOV changes per step for non-static modes
 
-// --- New function to update static camera based on zoom level ---
-function updateStaticCameraPositionFromZoom() {
+// Renamed function: updateStaticCameraView
+// This function will be further modified to use staticCameraHeightLevel and staticCameraDistanceLevel
+function updateStaticCameraView() {
     if (!camera || activeCameraMode !== CameraMode.STATIC) return;
 
     const totalAimAngle = getCurrentTargetLineAngle() + getShotDirectionAngle();
@@ -1026,21 +1029,22 @@ function updateStaticCameraPositionFromZoom() {
 
     // Calculate base distance (XZ plane) and height (Y) from the offset
     baseDistance = Math.sqrt(baseCamPosOffset.x * baseCamPosOffset.x + baseCamPosOffset.z * baseCamPosOffset.z);
-    baseHeight = baseCamPosOffset.y;
+    // baseHeight is implicitly defined by baseCamPosOffset.y, but we'll use STATIC_ZOOM_MIN_HEIGHT and STATIC_ZOOM_MAX_HEIGHT for interpolation.
 
-    // 2. Calculate Target Distance and Height based on Zoom Level
-    const targetDist = THREE.MathUtils.lerp(baseDistance * STATIC_ZOOM_MIN_DIST_FACTOR, baseDistance * STATIC_ZOOM_MAX_DIST_FACTOR, staticCameraZoomLevel);
+    // 2. Calculate Target Distance and Height based on new independent levels
+    const targetDist = THREE.MathUtils.lerp(baseDistance * STATIC_ZOOM_MIN_DIST_FACTOR, baseDistance * STATIC_ZOOM_MAX_DIST_FACTOR, staticCameraDistanceLevel);
 
     let targetHeight;
-    if (staticCameraZoomLevel <= STATIC_ZOOM_MAX_HEIGHT_THRESHOLD) {
-        // Interpolate height up to the threshold
-        const heightInterpFactor = staticCameraZoomLevel / STATIC_ZOOM_MAX_HEIGHT_THRESHOLD;
+    // Use staticCameraHeightLevel for height calculation, applying the threshold logic
+    // The threshold logic here might need re-evaluation if baseHeight was meant to be part of the interpolation.
+    // For now, height is purely based on staticCameraHeightLevel and fixed min/max.
+    if (staticCameraHeightLevel <= STATIC_ZOOM_MAX_HEIGHT_THRESHOLD) {
+        const heightInterpFactor = staticCameraHeightLevel / STATIC_ZOOM_MAX_HEIGHT_THRESHOLD;
         targetHeight = THREE.MathUtils.lerp(STATIC_ZOOM_MIN_HEIGHT, STATIC_ZOOM_MAX_HEIGHT, heightInterpFactor);
     } else {
-        // Height is capped at max height beyond the threshold
-        targetHeight = STATIC_ZOOM_MAX_HEIGHT;
+        targetHeight = STATIC_ZOOM_MAX_HEIGHT; // Cap at max height
     }
-    targetHeight = Math.max(STATIC_ZOOM_MIN_HEIGHT, targetHeight); // Ensure min height is respected
+    targetHeight = Math.max(STATIC_ZOOM_MIN_HEIGHT, targetHeight); // Ensure min height
 
     // 3. Construct the New Base Camera Position Offset (before rotation)
     // Find the original direction vector on the XZ plane
@@ -1063,48 +1067,59 @@ function updateStaticCameraPositionFromZoom() {
     camera.position.copy(rotatedCamPos);
     camera.lookAt(rotatedLookAt);
 
-    // console.log(`Static Zoom Update: Level=${staticCameraZoomLevel.toFixed(2)}, Dist=${targetDist.toFixed(1)}, Height=${targetHeight.toFixed(1)}`);
+    // console.log(`Static View Update: DistLevel=${staticCameraDistanceLevel.toFixed(2)}, HeightLevel=${staticCameraHeightLevel.toFixed(2)}, Dist=${targetDist.toFixed(1)}, Height=${targetHeight.toFixed(1)}`);
 }
 
+// --- New functions to adjust height and distance independently ---
+export function adjustStaticCameraHeight(delta) {
+    if (!camera || activeCameraMode !== CameraMode.STATIC) return;
+    staticCameraHeightLevel = Math.max(STATIC_ZOOM_MIN_LEVEL, Math.min(STATIC_ZOOM_MAX_LEVEL, staticCameraHeightLevel + delta));
+    updateStaticCameraView();
+    console.log(`Static Camera Height Level: ${staticCameraHeightLevel.toFixed(2)}`);
+}
 
-// --- Zoom Functions (Modified) ---
-export function zoomCameraIn() {
+export function adjustStaticCameraDistance(delta) {
+    if (!camera || activeCameraMode !== CameraMode.STATIC) return;
+    staticCameraDistanceLevel = Math.max(STATIC_ZOOM_MIN_LEVEL, Math.min(STATIC_ZOOM_MAX_LEVEL, staticCameraDistanceLevel + delta));
+    updateStaticCameraView();
+    console.log(`Static Camera Distance Level: ${staticCameraDistanceLevel.toFixed(2)}`);
+}
+
+// --- Zoom Functions (Modified to control height for static, FOV for others) ---
+export function zoomCameraIn() { // Corresponds to '+' key, will adjust height UP
     if (!camera) return;
 
     if (activeCameraMode === CameraMode.STATIC) {
-        staticCameraZoomLevel = Math.max(STATIC_ZOOM_MIN_LEVEL, staticCameraZoomLevel - STATIC_ZOOM_STEP);
-        updateStaticCameraPositionFromZoom();
-        console.log(`Static Zoom In: Level = ${staticCameraZoomLevel.toFixed(2)}`);
+        adjustStaticCameraHeight(STATIC_ZOOM_STEP); // Increase height level
     } else {
         // Original FOV zoom for non-static modes
-        camera.fov = Math.max(MIN_FOV, camera.fov - ZOOM_STEP);
+        camera.fov = Math.max(MIN_FOV, FOV_ZOOM_STEP);
         camera.updateProjectionMatrix();
         console.log(`FOV Zoom In: FOV = ${camera.fov}`);
     }
 }
 
-export function zoomCameraOut() {
+export function zoomCameraOut() { // Corresponds to '-' key, will adjust height DOWN
     if (!camera) return;
 
     if (activeCameraMode === CameraMode.STATIC) {
-        staticCameraZoomLevel = Math.min(STATIC_ZOOM_MAX_LEVEL, staticCameraZoomLevel + STATIC_ZOOM_STEP);
-        updateStaticCameraPositionFromZoom();
-        console.log(`Static Zoom Out: Level = ${staticCameraZoomLevel.toFixed(2)}`);
+        adjustStaticCameraHeight(-STATIC_ZOOM_STEP); // Decrease height level
     } else {
         // Original FOV zoom for non-static modes
-        camera.fov = Math.min(MAX_FOV, camera.fov + ZOOM_STEP);
+        camera.fov = Math.min(MAX_FOV, camera.fov + FOV_ZOOM_STEP);
         camera.updateProjectionMatrix();
         console.log(`FOV Zoom Out: FOV = ${camera.fov}`);
     }
 }
 
-// --- New function to explicitly reset static zoom ---
+// --- New function to explicitly reset static zoom (now height/distance levels) ---
 export function resetStaticCameraZoom() {
-    staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL;
-    console.log("Static camera zoom level reset to default.");
-    // Optionally, call updateStaticCameraPositionFromZoom() here if the camera should
+    staticCameraHeightLevel = DEFAULT_STATIC_ZOOM_LEVEL; // Reset new levels
+    staticCameraDistanceLevel = DEFAULT_STATIC_ZOOM_LEVEL; // Reset new levels
+    console.log("Static camera height and distance levels reset to default.");
+    // Optionally, call updateStaticCameraView() here if the camera should
     // immediately reflect the reset zoom level visually. Let's add it for consistency.
-    updateStaticCameraPositionFromZoom();
+    updateStaticCameraView();
 }
 
 // --- Getters ---

@@ -1,6 +1,7 @@
 import { clubs, defaultPlayerBag } from './clubs.js'; // Import club data and defaultPlayerBag
 import { YARDS_TO_METERS } from './visuals/core.js'; // Import conversion constant (Corrected Path)
 import { getWind, getTemperature } from './gameLogic/state.js'; // Import environment state getters (Corrected Path)
+import { clearPlayHoleState } from './gameLogic/persistentGameState.js';
 
 // --- DOM Element References ---
 // --- DOM Element References ---
@@ -658,6 +659,22 @@ export function addSwingSpeedInputListener(callback) {
     });
 }
 
+// --- Event Listener for Reset Game Data Button ---
+export function addResetGameDataListener() {
+    const resetButton = document.getElementById('reset-game-data-button');
+    if (resetButton) {
+        resetButton.addEventListener('click', () => {
+            if (confirm('Are you sure you want to reset all saved game data for Play Hole mode? This action cannot be undone.')) {
+                clearPlayHoleState();
+                alert('Game data reset. Reloading the page.');
+                window.location.reload();
+            }
+        });
+    } else {
+        console.warn("UI: Reset Game Data button not found.");
+    }
+}
+
 export function addClubChangeListener(callback) {
     // The actual event listeners are on the buttons themselves in createClubButtons.
     // We just store the callback here to be used by the button click handlers.
@@ -946,8 +963,7 @@ export function updateEnvironmentDisplay() { // Added export
 
     const windSpeedText = windData.speed.toFixed(1);
     const windArrow = getWindArrow(windData.direction);
-    const windDirectionDegrees = windData.direction.toFixed(0);
-    const windDisplayText = `${windSpeedText} m/s ${windArrow} (${windDirectionDegrees}°)`;
+    const windDisplayText = `${windSpeedText} m/s ${windArrow}`;
 
     const tempDisplayText = `${temperatureData.toFixed(0)}°C`;
 

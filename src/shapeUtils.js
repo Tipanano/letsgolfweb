@@ -84,6 +84,131 @@ export function calculatePolygonCenter(vertices) {
 }
 
 /**
+ * Creates a shape for the fairway with a mix of straight and curved segments.
+ * The input controlPoints define the main vertices of the fairway polygon.
+ * @param {Array<{x: number, z: number}>} controlPoints - An array of objects defining the fairway outline. Assumed to be ordered.
+ * @param {number} [straightChance=0.4] - Probability (0-1) that a segment between control points will be straight.
+ * @param {number} [segmentsPerCurve=10] - Number of points to generate for each curved segment.
+ * @returns {Array<{x: number, z: number}>} An array of vertices defining the final fairway shape.
+ */
+export function createRandomizedFairwayShape(controlPoints, straightChance = 0.4, segmentsPerCurve = 10) {
+    if (!controlPoints || controlPoints.length < 3) {
+        console.warn("createRandomizedFairwayShape: Need at least 3 control points for a polygon. Returning original points if any, else empty.");
+        return controlPoints ? [...controlPoints] : []; // Return a copy or empty
+    }
+
+    const finalVertices = [];
+    const numPoints = controlPoints.length;
+
+    // Start with the first control point
+    finalVertices.push({ x: controlPoints[0].x, z: controlPoints[0].z });
+
+    for (let i = 0; i < numPoints; i++) {
+        const p_curr = controlPoints[i];
+        const p_next_idx = (i + 1) % numPoints; // Loop back to the start for the last segment
+        const p_next = controlPoints[p_next_idx];
+
+        // The current point p_curr should already be the last point in finalVertices
+        // *except* for the very first iteration where finalVertices only has controlPoints[0].
+        // For subsequent iterations, p_curr is the p_next of the previous iteration.
+
+        let forceStraight = false;
+        if (numPoints >= 3) { // Need at least 3 points to define an angle
+            const p_prev_idx_angle = (i - 1 + numPoints) % numPoints;
+            const p_prev_angle = controlPoints[p_prev_idx_angle];
+
+            const vec_prev_curr = { x: p_curr.x - p_prev_angle.x, z: p_curr.z - p_prev_angle.z };
+            const vec_curr_next = { x: p_next.x - p_curr.x, z: p_next.z - p_curr.z };
+
+            const dotProduct = vec_prev_curr.x * vec_curr_next.x + vec_prev_curr.z * vec_curr_next.z;
+            const mag_prev_curr = Math.sqrt(vec_prev_curr.x**2 + vec_prev_curr.z**2);
+            const mag_curr_next = Math.sqrt(vec_curr_next.x**2 + vec_curr_next.z**2);
+
+            if (mag_prev_curr > 0 && mag_curr_next > 0) {
+                const cosAngle = dotProduct / (mag_prev_curr * mag_curr_next);
+                const angleRad = Math.acos(Math.max(-1, Math.min(1, cosAngle))); // Clamp cosAngle to [-1, 1]
+                const angleDeg = angleRad * (180 / Math.PI);
+
+                if (angleDeg < 90) { // If the angle is acute (sharp turn)
+                    forceStraight = true;
+                    // console.log(`Forcing straight segment at index ${i} due to sharp angle: ${angleDeg.toFixed(1)} degrees`);
+                }
+            } else {
+                forceStraight = true; // If any segment has zero length, make it straight to avoid issues
+            }
+        }
+
+
+        if (forceStraight || Math.random() < straightChance || numPoints < 4) { // Make segment p_curr to p_next straight or if not enough points for CatmullRom
+            // Add p_next if it's not already the last point (which it shouldn't be here)
+            // or if it's not identical to the current point (p_curr)
+            const lastAddedPoint = finalVertices[finalVertices.length - 1];
+            if (lastAddedPoint.x !== p_next.x || lastAddedPoint.z !== p_next.z) {
+                 finalVertices.push({ x: p_next.x, z: p_next.z });
+            }
+        } else { // Make segment p_curr to p_next curved
+            // CatmullRomCurve3 needs at least 4 points: (prev, curr, next, next_next)
+            // We are generating a curve for the segment between p_curr and p_next.
+            const p_prev_idx = (i - 1 + numPoints) % numPoints;
+            const p_prev = controlPoints[p_prev_idx];
+
+            const p_next_next_idx = (i + 2) % numPoints;
+            const p_next_next = controlPoints[p_next_next_idx];
+            
+            const curve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(p_prev.x, 0, p_prev.z),      // Point before the start of the segment
+                new THREE.Vector3(p_curr.x, 0, p_curr.z),      // Start of the segment
+                new THREE.Vector3(p_next.x, 0, p_next.z),      // End of the segment
+                new THREE.Vector3(p_next_next.x, 0, p_next_next.z) // Point after the end of the segment
+            ]);
+
+            // getPoints generates points along the curve.
+            // The first point (index 0) of this array corresponds to p_curr.
+            // The last point corresponds to p_next.
+            const pointsOnCurve = curve.getPoints(segmentsPerCurve);
+
+            // Add points from the curve, skipping the first one (p_curr) as it's already in finalVertices.
+            for (let j = 1; j < pointsOnCurve.length; j++) {
+                const curvePoint = { x: pointsOnCurve[j].x, z: pointsOnCurve[j].z };
+                const lastAddedPoint = finalVertices[finalVertices.length - 1];
+                // Add if different from the last added point to avoid duplicates
+                if (lastAddedPoint.x !== curvePoint.x || lastAddedPoint.z !== curvePoint.z) {
+                    finalVertices.push(curvePoint);
+                }
+            }
+        }
+    }
+    
+    // Clean up: Remove last point if it's identical to the first (due to closing the loop)
+    // This ensures the polygon is correctly defined for rendering (often expects non-duplicated start/end for closed paths)
+    // However, createSmoothClosedShape *does* add an explicit closing point. Let's be consistent.
+    const cleanedVertices = [];
+    if (finalVertices.length > 0) {
+        cleanedVertices.push(finalVertices[0]); // Add the first point
+        for (let i = 1; i < finalVertices.length; i++) {
+            const prev = cleanedVertices[cleanedVertices.length - 1];
+            const curr = finalVertices[i];
+            if (prev.x !== curr.x || prev.z !== curr.z) { // Only add if different from previous
+                cleanedVertices.push(curr);
+            }
+        }
+    }
+
+    // Ensure the path is explicitly closed if it's not already by the loop logic
+    if (cleanedVertices.length > 1) {
+        const first = cleanedVertices[0];
+        const last = cleanedVertices[cleanedVertices.length - 1];
+        if (first.x !== last.x || first.z !== last.z) {
+            cleanedVertices.push({ ...first }); // Explicitly close the path
+        }
+    }
+    
+    console.log(`createRandomizedFairwayShape: Generated ${cleanedVertices.length} vertices from ${numPoints} control points.`);
+    return cleanedVertices;
+}
+
+
+/**
  * Checks if a 2D point is inside a polygon using the ray casting algorithm.
  * Handles points on the polygon edge inconsistently (may return true or false).
  * @param {{x: number, z: number}} point - The point to check.

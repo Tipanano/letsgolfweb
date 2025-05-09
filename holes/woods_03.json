@@ -1,0 +1,73 @@
+{
+  "name": "Woods' Gauntlet - Hole 3",
+  "par": 5,
+  "lengthYards": 520,
+  "background": {
+    "vertices": [
+      { "x": -100, "z": -30 }, { "x": 100, "z": -30 },
+      { "x": 100, "z": 570 }, { "x": -100, "z": 570 }
+    ],
+    "surface": "OUT_OF_BOUNDS"
+  },
+  "tee": {
+    "center": { "x": 0, "z": 0 },
+    "width": 10,
+    "depth": 10,
+    "surface": "TEE"
+  },
+  "fairway": {
+    "controlPoints": [
+      { "x": -20, "z": 50 },   { "x": 20, "z": 50 },
+      { "x": 30, "z": 250 },
+      { "x": 40, "z": 400 },
+      { "x": 25, "z": 500 },
+      { "x": -25, "z": 500 },
+      { "x": -40, "z": 400 },
+      { "x": -30, "z": 250 },
+      { "x": -20, "z": 50 }
+    ],
+    "surface": "FAIRWAY"
+  },
+  "rough": {
+    "vertices": [
+      { "x": -90, "z": -15 }, { "x": 90, "z": -15 },
+      { "x": 90, "z": 550 }, { "x": -90, "z": 550 }
+    ],
+    "surface": "THICK_ROUGH"
+  },
+  "green": {
+    "controlPoints": [
+      { "x": -15, "z": 510 }, { "x": 15, "z": 510 },
+      { "x": 20, "z": 525 }, { "x": 0, "z": 535 },
+      { "x": -20, "z": 525 }
+    ],
+    "surface": "GREEN"
+  },
+  "bunkers": [
+    { "controlPoints": [
+        { "x": -45, "z": 230 }, { "x": -35, "z": 225 },
+        { "x": -30, "z": 240 }, { "x": -40, "z": 245 }
+      ], "surface": "BUNKER" },
+    { "controlPoints": [
+        { "x": -50, "z": 250 }, { "x": -40, "z": 248 },
+        { "x": -35, "z": 260 }, { "x": -45, "z": 265 }
+      ], "surface": "BUNKER" },
+    { "controlPoints": [
+        { "x": 50, "z": 380 }, { "x": 60, "z": 385 },
+        { "x": 55, "z": 400 }, { "x": 45, "z": 395 }
+      ], "surface": "BUNKER" },
+    { "controlPoints": [
+        { "x": -25, "z": 505 }, { "x": -15, "z": 500 },
+        { "x": -20, "z": 515 }
+      ], "surface": "BUNKER" },
+    { "controlPoints": [
+        { "x": 25, "z": 505 }, { "x": 15, "z": 500 },
+        { "x": 20, "z": 515 }
+      ], "surface": "BUNKER" },
+    { "controlPoints": [
+        { "x": -5, "z": 538 }, { "x": 5, "z": 538 },
+        { "x": 0, "z": 545 }
+      ], "surface": "BUNKER" }
+  ],
+  "waterHazards": []
+}

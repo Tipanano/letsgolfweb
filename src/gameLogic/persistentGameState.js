@@ -9,17 +9,18 @@ const getDefaultState = () => ({
     strokesThisHole: 0,
     totalStrokesRound: 0,
     currentLie: 'tee', // e.g., 'tee', 'fairway', 'rough', 'green', 'bunker', 'water'
+    holeLayoutData: null, // Will store the fully processed hole layout
     // Add any other relevant data to persist for playHole mode
 });
 
 /**
  * Saves the current playHole game state to localStorage.
  * @param {object} state - The game state to save.
- *                         Expected to include: currentHoleIndex, ballPosition, strokesThisHole, totalStrokesRound, currentLie.
+ *                         Expected to include: currentHoleIndex, ballPosition, strokesThisHole, totalStrokesRound, currentLie, holeLayoutData.
  */
 export function savePlayHoleState(state) {
-    if (!state || state.ballPosition === undefined) { // Basic check
-        console.error('PersistentGameState: Attempted to save invalid state:', state);
+    if (!state || state.ballPosition === undefined || state.holeLayoutData === undefined) { // Basic check, ensure holeLayoutData is considered
+        console.error('PersistentGameState: Attempted to save invalid or incomplete state:', state);
         return;
     }
     try {

@@ -18,7 +18,7 @@ const GAME_MODES = {
 let currentMode = GAME_MODES.RANGE; // Default mode
 
 // Function to change the game mode
-function setGameMode(newMode) {
+async function setGameMode(newMode) { // Made async
     if (!Object.values(GAME_MODES).includes(newMode)) {
         console.error(`Attempted to switch to invalid game mode: ${newMode}`);
         return;
@@ -65,7 +65,7 @@ function setGameMode(newMode) {
         visuals.switchToTargetView(closestToFlag.getTargetDistance());
         visuals.showBallAtAddress(); // Ensure ball is shown
     } else if (currentMode === GAME_MODES.PLAY_HOLE) {
-        playHole.initializeMode(); 
+        await playHole.initializeMode(); // Added await
         // visuals.switchToHoleView() is called by playHole.initializeMode via visuals.activateHoleViewCamera()
         // Ball position is handled by playHole.initializeMode using loaded or tee position.
     }
@@ -134,6 +134,8 @@ if (!canvas) {
 ui.addSwingSpeedInputListener((percentage) => {
     logic.setSwingSpeed(percentage);
 });
+
+ui.addResetGameDataListener(); // Added listener for the new reset button
 
 ui.addClubChangeListener((clubKey) => {
     logic.setSelectedClub(clubKey);

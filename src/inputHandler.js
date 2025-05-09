@@ -6,10 +6,10 @@ import { getGameState, getCurrentShotType, getShotDirectionAngle, setShotDirecti
 import * as Visuals from './visuals.js'; // Import high-level visuals functions
 import * as MeasurementView from './visuals/measurementView.js'; // Import MeasurementView
 // Import specific core camera functions
-import { applyAimAngleToCamera, zoomCameraIn, zoomCameraOut, YARDS_TO_METERS, ball } from './visuals/core.js'; // Added ball import
+import { applyAimAngleToCamera, zoomCameraIn, zoomCameraOut, YARDS_TO_METERS, ball, getActiveCameraMode, adjustStaticCameraDistance, CameraMode } from './visuals/core.js'; // Added ball import and new camera functions
 // Import specific UI functions needed for input feedback (markers, status updates)
 import {
-    adjustBallPosition,
+    // adjustBallPosition, // No longer needed here, handled by clickable feet
     updateStatus,
     resetUIForNewShot, // May not be needed here if GameLogic.resetSwing handles it
     markHipInitiationOnBackswingBar,
@@ -61,24 +61,36 @@ export function handleKeyDown(event) {
         return; // Consume event
     }
 
-    // --- Camera Zoom Controls ---
-    if (event.key === '=' || event.key === '+') { // Handle both '=' and '+' for zoom in
-        zoomCameraIn();
-        return; // Consume event
+    // --- Camera Zoom Controls (Height for Static, FOV for others) ---
+    if (event.key === '=' || event.key === '+') {
+        adjustStaticCameraDistance(-0.1); // Decrease distance level (closer/zoom in)
+        //zoomCameraIn(); // This now handles height for static view
+        return;
     } else if (event.key === '-') {
-        zoomCameraOut();
-        return; // Consume event
+        adjustStaticCameraDistance(0.1); // Increase distance level (further/zoom out)
+        //zoomCameraOut(); // This now handles height for static view
+        return;
     }
 
-    // --- Ball Position Adjustment (Only when ready) ---
+    // --- Ball Position Adjustment (Only when ready) --- // THIS SECTION WILL BE MODIFIED FOR ARROW KEYS
     if (gameState === 'ready') {
+        const currentCameraMode = getActiveCameraMode(); // Get current camera mode
+
         if (event.key === 'ArrowUp') {
             event.preventDefault();
-            adjustBallPosition(1); // Directly calls UI function
+            if (currentCameraMode === CameraMode.STATIC) {
+                zoomCameraIn(); // This now handles height for static view
+                //adjustStaticCameraDistance(-0.1); // Decrease distance level (closer/zoom in)
+            }
+            // Removed adjustBallPosition(1);
             return;
         } else if (event.key === 'ArrowDown') {
             event.preventDefault();
-            adjustBallPosition(-1); // Directly calls UI function
+            if (currentCameraMode === CameraMode.STATIC) {
+                zoomCameraOut(); // This now handles height for static view
+                //adjustStaticCameraDistance(0.1); // Increase distance level (further/zoom out)
+            }
+            // Removed adjustBallPosition(-1);
             return;
         }
         // --- Aiming Adjustment (Only when ready) ---
