@@ -836,3 +836,40 @@ body.mode-closest-to-flag #closest-to-flag-info {
     opacity: 0.6;
     pointer-events: none;
 }
+
+/* Pop-up for Hole Selection */
+/* .popup class is already styled in index.html for basic centering and appearance */
+/* We can add specific styles for the hole select items if needed */
+#hole-list-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px; /* Space between hole buttons */
+}
+
+.hole-select-item {
+    padding: 8px 12px;
+    font-size: 0.95em;
+    background-color: #f0f0f0;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    text-align: left;
+}
+
+.hole-select-item:hover {
+    background-color: #e0e0e0;
+}
+
+#close-hole-select-popup {
+    margin-top: 15px;
+    padding: 8px 15px;
+    background-color: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+#close-hole-select-popup:hover {
+    background-color: #5a6268;
+}

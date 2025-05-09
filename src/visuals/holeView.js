@@ -25,7 +25,11 @@ export function clearHoleLayout() {
     // Reset flagstick references when clearing
     flagstickPoleMesh = null;
     flagClothMesh = null;
-    console.log("Cleared previous hole layout visuals.");
+    // Reset stored positions/dimensions
+    currentFlagPosition = null;
+    currentGreenCenter = null;
+    currentGreenRadius = null;
+    console.log("Cleared previous hole layout visuals and reset stored positions.");
 }
 
 /**

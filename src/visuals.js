@@ -140,7 +140,9 @@ export function switchToHoleView(holeLayout, initialScene = null) {
         console.error("switchToHoleView: Scene is not available!");
         return;
     }
-    if (currentVisualMode === VISUAL_MODES.HOLE && !initialScene && !MeasurementView.isViewActive()) return; // Already in hole view
+    // Removed early return: if (currentVisualMode === VISUAL_MODES.HOLE && !initialScene && !MeasurementView.isViewActive()) return; 
+    // We need to proceed even if currentVisualMode is HOLE, to clear the old hole and draw the new one.
+    // The unloadCurrentView() will handle clearing the previous hole's visuals.
 
     unloadCurrentView();
     console.log("Switching to Hole View...");

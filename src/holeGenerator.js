@@ -7,21 +7,25 @@ import { createSmoothClosedShape, calculatePolygonCenter, createRandomizedFairwa
 
 /**
  * Loads a hole layout from a JSON file and processes it into a playable format.
- * @param {string} [holeName="mickelson_01"] - The name of the hole file (without .json extension) to load from the 'holes' directory.
+ * @param {string} [holeNameInput="mickelson_01"] - The name of the hole file (can be with or without .json extension) to load from the 'holes' directory.
  * @returns {Promise<object|null>} A promise that resolves to an object describing the hole layout with final vertices, or null on error.
  */
-export async function generateHoleLayout(holeName = "mickelson_01") {
+export async function generateHoleLayout(holeNameInput = "mickelson_01") {
+    // Ensure holeName does not have .json extension for internal use and fetching
+    const holeName = holeNameInput.replace(/\.json$/, '');
+
     console.log(`Attempting to load and generate layout for hole: ${holeName}`);
     let sourceLayout;
+    const filePath = `./holes/${holeName}.json`;
     try {
-        const response = await fetch(`./holes/${holeName}.json`);
+        const response = await fetch(filePath);
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status} for ${holeName}.json`);
+            throw new Error(`HTTP error! status: ${response.status} for ${filePath}`);
         }
         sourceLayout = await response.json();
-        console.log(`Successfully loaded raw layout for ${holeName}:`, sourceLayout);
+        console.log(`Successfully loaded raw layout for ${holeName} from ${filePath}:`, sourceLayout);
     } catch (error) {
-        console.error(`Error loading hole data for ${holeName}:`, error);
+        console.error(`Error loading hole data for ${holeName} from ${filePath}:`, error);
         return null; // Return null if loading fails
     }
 

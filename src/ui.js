@@ -11,6 +11,13 @@ const gameViewDiv = document.getElementById('game-view');
 
 // Buttons
 const backToMenuButton = document.getElementById('back-to-menu-button');
+const switchHoleButton = document.getElementById('switch-hole-button'); // New
+const closeHoleSelectPopupButton = document.getElementById('close-hole-select-popup'); // New
+
+// Popups
+const holeSelectPopup = document.getElementById('hole-select-popup'); // New
+const holeListContainer = document.getElementById('hole-list-container'); // New
+
 
 // Other UI Elements
 const statusTextDisplay = document.getElementById('status-text-display'); // New top-center status
@@ -131,6 +138,66 @@ const ballPositionLabels = [
 let currentBallPositionIndex = 5; // Start near Center (index 5 for 10 levels, 0-9)
 
 // --- UI Update Functions ---
+
+// List of available hole files (to be populated from main.js or elsewhere)
+let availableHoleFiles = [];
+let onHoleSelectedCallback = null; // Callback to notify main.js of hole selection
+
+export function setAvailableHoleFiles(holeFiles) {
+    availableHoleFiles = holeFiles;
+}
+
+export function setOnHoleSelectedCallback(callback) {
+    onHoleSelectedCallback = callback;
+}
+
+export function populateHoleList() {
+    if (!holeListContainer) return;
+    holeListContainer.innerHTML = ''; // Clear existing
+
+    availableHoleFiles.forEach(holeFile => {
+        const button = document.createElement('button');
+        button.classList.add('hole-select-item'); // For styling
+        button.dataset.holefile = holeFile;
+        // Make a nicer name, e.g., "mickelson_01.json" -> "Mickelson 01"
+        const displayName = holeFile.replace('.json', '').replace('_', ' ');
+        button.textContent = displayName.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+
+
+        button.addEventListener('click', () => {
+            if (onHoleSelectedCallback) {
+                onHoleSelectedCallback(holeFile);
+            }
+            hideHoleSelectPopup();
+        });
+        holeListContainer.appendChild(button);
+    });
+}
+
+function showHoleSelectPopup() {
+    if (holeSelectPopup) {
+        populateHoleList(); // Populate with the latest list of holes
+        holeSelectPopup.style.display = 'block';
+        // Add the global click listener when the pop-up is shown
+        document.addEventListener('click', handleClickOutsideHoleSelectPopup, true);
+    }
+}
+
+function hideHoleSelectPopup() {
+    if (holeSelectPopup) {
+        holeSelectPopup.style.display = 'none';
+    }
+    document.removeEventListener('click', handleClickOutsideHoleSelectPopup, true);
+}
+
+function handleClickOutsideHoleSelectPopup(event) {
+    if (holeSelectPopup && holeSelectPopup.style.display !== 'none') {
+        if (!holeSelectPopup.contains(event.target) && event.target !== switchHoleButton) {
+            hideHoleSelectPopup();
+        }
+    }
+}
+
 
 export function updateStatus(text) {
     if (statusTextDisplay) {
@@ -1197,5 +1264,30 @@ if (leftFoot) {
 if (rightFoot) {
     rightFoot.addEventListener('click', () => {
         adjustBallPosition(-1); // Move ball backward (towards trail foot/lower foot)
+    });
+}
+
+// --- Event Listener for Switch Hole Button & Popup ---
+if (switchHoleButton) {
+    switchHoleButton.addEventListener('click', (event) => {
+        event.stopPropagation(); // Prevent click-outside from immediately closing if it's already open
+        if (holeSelectPopup) {
+            const isVisible = holeSelectPopup.style.display === 'block';
+            if (isVisible) {
+                hideHoleSelectPopup();
+            } else {
+                // Hide other popups if open
+                hideBallPosInfoPopup();
+                hideSwingSpeedInfoPopup();
+                hideShotResultPopup();
+                showHoleSelectPopup(); // This will populate and show
+            }
+        }
+    });
+}
+
+if (closeHoleSelectPopupButton) {
+    closeHoleSelectPopupButton.addEventListener('click', () => {
+        hideHoleSelectPopup();
     });
 }

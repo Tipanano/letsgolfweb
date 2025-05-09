@@ -1,13 +1,23 @@
 import * as ui from './ui.js';
 // Import specific functions, including updateEnvironmentDisplay
-import { showMainMenu, showGameView, addBackToMenuClickListener, updateEnvironmentDisplay } from './ui.js'; 
+// Added setAvailableHoleFiles and setOnHoleSelectedCallback
+import { showMainMenu, showGameView, addBackToMenuClickListener, updateEnvironmentDisplay, setAvailableHoleFiles, setOnHoleSelectedCallback } from './ui.js'; 
 import * as logic from './gameLogic.js'; // Game state and actions
 import * as visuals from './visuals.js';
 import * as inputHandler from './inputHandler.js'; // Import the new input handler
+import { clearPlayHoleState } from './gameLogic/persistentGameState.js'; // Import for resetting state
 import * as environment from './gameLogic/environment.js'; // Import environment simulation
 import * as closestToFlag from './modes/closestToFlag.js'; // Import the CTF mode logic
 import * as playHole from './modes/playHole.js'; // Import the Play Hole mode logic
 import { getRandomInRange } from './gameLogic/utils.js'; // Import getRandomInRange
+
+// --- Game Data ---
+const AVAILABLE_HOLE_FILES = [ // This would ideally be fetched or dynamically discovered
+    "mickelson_01.json",
+    "norman_02.json",
+    "woods_03.json"
+    // Add more hole files here as they are created
+];
 
 // --- Game Modes ---
 const GAME_MODES = {
@@ -17,8 +27,23 @@ const GAME_MODES = {
 };
 let currentMode = GAME_MODES.RANGE; // Default mode
 
+
+// Function to switch to a new hole in Play Hole mode
+async function switchGameToHole(holeFileName) {
+    if (currentMode !== GAME_MODES.PLAY_HOLE) {
+        console.warn("Cannot switch hole when not in Play Hole mode. Setting mode to Play Hole first.");
+        await setGameMode(GAME_MODES.PLAY_HOLE, holeFileName); // Pass holeFileName to setGameMode
+    } else {
+        console.log("Main: Switching to hole:", holeFileName);
+        clearPlayHoleState(); // Clear previous hole's saved state
+        // playHole.initializeMode is async, so await it.
+        await playHole.initializeMode(holeFileName); // Initialize the new hole
+    }
+}
+
+
 // Function to change the game mode
-async function setGameMode(newMode) { // Made async
+async function setGameMode(newMode, initialHoleName = null) { // Made async, added initialHoleName
     if (!Object.values(GAME_MODES).includes(newMode)) {
         console.error(`Attempted to switch to invalid game mode: ${newMode}`);
         return;
@@ -65,13 +90,19 @@ async function setGameMode(newMode) { // Made async
         visuals.switchToTargetView(closestToFlag.getTargetDistance());
         visuals.showBallAtAddress(); // Ensure ball is shown
     } else if (currentMode === GAME_MODES.PLAY_HOLE) {
-        await playHole.initializeMode(); // Added await
+        // If initialHoleName is provided (e.g. from switchGameToHole calling setGameMode), use it.
+        // Otherwise, playHole.initializeMode will use its default or load saved state.
+        await playHole.initializeMode(initialHoleName); 
         // visuals.switchToHoleView() is called by playHole.initializeMode via visuals.activateHoleViewCamera()
-        // Ball position is handled by playHole.initializeMode using loaded or tee position.
+        // Ball position is handled by playHole.initializeMode.
     }
     
     console.log(`Game mode ${currentMode} initialized and visuals set up.`);
 }
+
+// Make switchGameToHole globally accessible for UI or set via callback
+// window.switchGameToHole = switchGameToHole; // Option 1: Global
+// Option 2: Pass as callback (preferred) - will do this below
 
 // Function to get the current game mode (needed by inputHandler)
 export function getCurrentGameMode() {
@@ -82,6 +113,11 @@ export function getCurrentGameMode() {
 
 // Create the club buttons first
 ui.createClubButtons();
+
+// Pass hole files and selection callback to UI
+ui.setAvailableHoleFiles(AVAILABLE_HOLE_FILES);
+ui.setOnHoleSelectedCallback(switchGameToHole);
+
 
 // Get initial values from UI (slider and now-updated club buttons) and set them in logic
 const initialSwingSpeed = parseInt(document.getElementById('swing-speed-slider').value, 10);
