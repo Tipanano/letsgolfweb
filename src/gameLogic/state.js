@@ -9,7 +9,6 @@ import { resetUIForNewShot } from '../ui.js'; // Needed for resetSwingState
 // These might be better placed elsewhere if used by physics too, but keep here for now
 export const DOWNSWING_TIMING_BAR_DURATION_MS = 500; // For full swing
 export const BACKSWING_BAR_MAX_DURATION_MS = 1500; // Max visual duration for bar
-export const IDEAL_BACKSWING_DURATION_MS = 1000; // Ideal for full swing power reference
 export const PUTT_DISTANCE_FACTOR = 1.5; // Yards per mph of ball speed (Needs tuning!)
 
 // --- Game State ---

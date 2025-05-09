@@ -32,9 +32,16 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club) 
     // --- Simulation Constants (Tunable) ---
     //const Cd = 0.26; // Drag coefficient (placeholder)
 
-    const SPIN_TO_DRAG_FACTOR = 0.00015; // START POSITIVE e.g. 0.0000005 to see drag reduction with spin
-    const Cd_base = 0.22; // Start with your current working value from the "old code" DRAG COEFFICIENT
+    // const SPIN_TO_DRAG_FACTOR = 0.000005//2; // START POSITIVE e.g. 0.0000005 to see drag reduction with spin // REPLACED by non-linear logic
+    const Cd_base = 0.20; // Start with your current working value from the "old code" DRAG COEFFICIENT
     const MINIMUM_EFFECTIVE_CD = 0.0001; // Minimum allowed effective drag coefficient
+
+    // Non-linear Spin-to-Drag Effect Constants
+    const SPIN_DRAG_EFFECT_THRESHOLD_RPM = 8400; // RPM above which drag reduction starts
+    const SPIN_DRAG_RPM_FOR_MAX_EFFECT = 11000;  // RPM at which the maximum drag reduction is achieved
+    const SPIN_DRAG_MAX_CD_REDUCTION = 0.1;     // Maximum amount Cd_base can be reduced by spin
+    const SPIN_DRAG_EFFECT_POWER = 0.1;          // Exponent for the curve (2.0 = quadratic)
+
 
     // const Cl = 0.03; // Lift coefficient (placeholder, related to spin). Reduced from 0.1, still higher than original 0.002. // Replaced by separate Cl values
     //const Cl_backspin = 0.025; // Controls vertical lift (tune for height)
@@ -124,11 +131,23 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club) 
         // We are ignoring rifle spin decay (spinRadPerSec.z) for now
 
         // --- Calculate Effective Drag Coefficient for this step ---
-        // Higher spin will now REDUCE effectiveCd if SPIN_TO_DRAG_FACTOR is positive
-        let effectiveCd = Cd_base - (Math.abs(spinRadPerSec.x) * SPIN_TO_DRAG_FACTOR);
+        let spinInducedDragReduction = 0;
+        const currentBackspinRPM = Math.abs(spinRadPerSec.x) * (60 / (2 * Math.PI));
+
+        if (currentBackspinRPM > SPIN_DRAG_EFFECT_THRESHOLD_RPM) {
+            const rangeOfEffectRPM = SPIN_DRAG_RPM_FOR_MAX_EFFECT - SPIN_DRAG_EFFECT_THRESHOLD_RPM;
+            if (rangeOfEffectRPM > 0) { // Avoid division by zero
+                const progressInEffectRange = (currentBackspinRPM - SPIN_DRAG_EFFECT_THRESHOLD_RPM) / rangeOfEffectRPM;
+                const clampedProgress = Math.max(0, Math.min(1, progressInEffectRange));
+                spinInducedDragReduction = Math.pow(clampedProgress, SPIN_DRAG_EFFECT_POWER) * SPIN_DRAG_MAX_CD_REDUCTION;
+            }
+        }
+
+        let effectiveCd = Cd_base - spinInducedDragReduction;
         effectiveCd = Math.max(MINIMUM_EFFECTIVE_CD, effectiveCd); // Clamp to minimum
+        
         // For debugging:
-        // console.log(`Cd_base: ${Cd_base.toFixed(4)}, SpinFactor: ${(Math.abs(spinRadPerSec.x) * SPIN_TO_DRAG_FACTOR).toFixed(6)}, effectiveCd: ${effectiveCd.toFixed(4)}`);
+        console.log(`CurrentBackspinRPM: ${currentBackspinRPM.toFixed(0)}, SpinInducedDragReduction: ${spinInducedDragReduction.toFixed(6)}, effectiveCd: ${effectiveCd.toFixed(4)}`);
 
         // --- Pre-calculate drag force factor for THIS step using effectiveCd ---
         const currentDragForceFactor = -0.5 * airDensity * ballArea * effectiveCd / ballMass;

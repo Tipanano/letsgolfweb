@@ -257,16 +257,20 @@ export function prepareNextShot() {
         // --- Toggle Flagstick Visibility AND Set Ball Scale ---
         const layout = getCurrentHoleLayout(); // Get layout
         let isOnGreen = false; // Default
+        let isBunker = false;  // Default
         if (ballPos && layout) {
             // Pass only X and Z for surface check
             const surface = getSurfaceTypeAtPoint({ x: ballPos.x, z: ballPos.z }, layout);
-            isOnGreen = (surface === 'GREEN');
-            setFlagstickVisibility(!isOnGreen); // Hide if on green, show otherwise
+            isBunker = (surface === 'BUNKER');
+            isOnGreen = (surface === 'GREEN' && !isBunker); // Only on green if not also in a bunker for this logic
+            
+            console.log(`Action: Next shot surface check - Surface: ${surface}, isBunker: ${isBunker}, isOnGreen (for flag/scale): ${isOnGreen}`);
+            setFlagstickVisibility(!isOnGreen); // Hide if on green (and not bunker), show otherwise
         } else {
             setFlagstickVisibility(true); // Default to visible if info missing
         }
-        // Set ball scale based on whether it's on the green
-        setBallScale(!isOnGreen); // Use enlarged scale if NOT on green
+        // Set ball scale based on whether it's on the green (and not a bunker for this specific scaling logic)
+        setBallScale(!isOnGreen); // Use enlarged scale if NOT on green (or if in a bunker on the green)
 
         // --- Set Default Aim Angle ---
         let angleDeg = 0; // Initialize angleDeg

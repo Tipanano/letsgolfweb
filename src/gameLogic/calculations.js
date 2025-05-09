@@ -8,7 +8,6 @@ import {
     getShotDirectionAngle, // <-- Gets RELATIVE angle
     getCurrentTargetLineAngle, // <-- Gets ABSOLUTE target line angle
     // getCurrentHoleLayout is NOT in state.js
-    IDEAL_BACKSWING_DURATION_MS
 } from './state.js'; // Removed PUTT_DISTANCE_FACTOR, IDEAL_BACKSWING_DURATION_MS is fine as is.
 import { getCurrentHoleLayout } from '../modes/playHole.js'; // <-- Import from correct module
 import { stopFullDownswingAnimation, stopChipDownswingAnimation /* Putt stopped in actions */ } from './animations.js';

@@ -12,29 +12,35 @@ import { getSurfaceProperties } from './surfaces.js'; // Import surface properti
 // --- Tunable Parameters ---
 
 // Backswing & Potential Speed
-const IDEAL_BACKSWING_DURATION_MS = 1000; // Base ideal duration
+export const IDEAL_BACKSWING_DURATION_MS = 1150; // Base ideal duration
 const BACKSWING_BAR_MAX_DURATION_MS = 1500; // Max duration shown on bar (Added here for calculation)
 const BACKSWING_POWER_SENSITIVITY = 1.0; // How much duration affects PCHS (linear = 1.0)
-const OVERSWING_PCHS_BONUS_FACTOR = 0.1; // Max % PCHS bonus for reaching max overswing duration
+const OVERSWING_PCHS_BONUS_FACTOR = 0.2; // Max % PCHS bonus for reaching max overswing duration
 const OVERSWING_DIFFICULTY_PENALTY = 0.15; // Max % ACHS penalty for reaching max overswing duration
 const SWING_SPEED_REDUCTION_EFFECT_FACTOR = 0.3; // 1.0 = full effect, 0.5 = half effect, 0.0 = no effect
 
 // Transition & Speed Efficiency
-const IDEAL_TRANSITION_OFFSET_MS = -150; // Ideal 'j' press relative to ideal backswing end
+export const IDEAL_TRANSITION_OFFSET_MS = -150; // Ideal 'j' press relative to ideal backswing end
 const TRANSITION_TIMING_SENSITIVITY = 350; // ms deviation window for transition affecting ACHS
 const MAX_TRANSITION_SPEED_LOSS = 0.3; // Max % ACHS loss from poor transition timing
 
+// ACHS Penalty Scaling based on PCHS
+const PCHS_THRESHOLD_FOR_REDUCED_PENALTY = 75; // PCHS at or below which the minimum penalty scaling applies (mph)
+const PCHS_THRESHOLD_FOR_FULL_PENALTY = 100;   // PCHS at or above which the full, original penalty applies (mph)
+const MIN_PENALTY_SCALE_FACTOR = 0.6;          // Multiplier for max loss at low PCHS (e.g., 0.6 = 60% of original max loss)
+
+
 // Arms/Rotation & Path/Speed Efficiency
-const IDEAL_ROTATION_OFFSET_MS = 50; // Ideal 'a' press relative to downswing start
-const IDEAL_ARMS_OFFSET_MS = 100; // Ideal 'd' press relative to downswing start
+export const IDEAL_ROTATION_OFFSET_MS = 50; // Ideal 'a' press relative to downswing start
+export const IDEAL_ARMS_OFFSET_MS = 100; // Ideal 'd' press relative to downswing start
 const RELATIVE_ARMS_ROTATION_PATH_SENSITIVITY = 1.0; // Degrees of path change per ms of relative diff (d vs a)
 const MAX_RELATIVE_PATH_CHANGE = 10.0; // Max degrees path change from relative timing
-const ABSOLUTE_ARMS_ROTATION_TIMING_SENSITIVITY = 300; // ms deviation window for absolute timing affecting path/speed
+const ABSOLUTE_ARMS_ROTATION_TIMING_SENSITIVITY = 225; // ms deviation window for absolute timing affecting path/speed
 const MAX_ABSOLUTE_PATH_SHIFT = 6.0; // Max additional degrees path change from poor absolute timing
 const MAX_ABSOLUTE_SPEED_LOSS = 0.4; // Max % ACHS loss from poor absolute arms/rotation timing
 
 // Wrists & Face/Loft/Strike
-const IDEAL_WRISTS_OFFSET_MS = 200; // Ideal 'i' press relative to downswing start
+export const IDEAL_WRISTS_OFFSET_MS = 250; // Ideal 'i' press relative to downswing start
 const WRIST_TIMING_FACE_SENSITIVITY = 0.5; // Degrees of face-relative-to-path change per ms deviation
 const MAX_FACE_ANGLE_CHANGE = 12.0; // Max degrees face change from wrist timing
 const WRIST_TIMING_LOFT_SENSITIVITY = 0.3; // Degrees of dynamic loft change per ms deviation
@@ -57,13 +63,13 @@ const BUNKER_FAT_STRIKE_SMASH_PENALTY = 0.10; // Reduced penalty for fat shots f
 const SPIN_AXIS_SENSITIVITY = 6.0; // How much face-to-path affects spin axis tilt
 
 // Backspin Factors
-const BACKSPIN_LOFT_FACTOR = 120; // Backspin per degree of dynamic loft
+const BACKSPIN_LOFT_FACTOR = 110; // Backspin per degree of dynamic loft
 const BACKSPIN_SPEED_FACTOR = 40; // Backspin per mph of ACHS
 const BACKSPIN_AOA_FACTOR =  0; // Backspin per degree of positive AoA
 
 // Sidespin Calculation Factors (NEW - Placeholders, need refinement)
 const SIDESPIN_FACE_TO_PATH_FACTOR = 100; // Base sidespin RPM per degree of face-to-path
-const SIDESPIN_SPEED_FACTOR = 10;         // Additional sidespin RPM per mph of ACHS (scaled by face-to-path)
+const SIDESPIN_SPEED_FACTOR = 5;         // Additional sidespin RPM per mph of ACHS (scaled by face-to-path)
 const SIDESPIN_LOFT_DAMPENING_FACTOR = 0.008; // How much dynamic loft reduces sidespin
 
 // Common Spin Strike Modifiers
@@ -160,15 +166,31 @@ function calculatePotentialCHS(backswingDuration, swingSpeed, clubBaseSpeed) {
  * @param {number} backswingDuration - Actual duration of the backswing in ms.
  */
 function calculateActualCHS(potentialCHS, transitionDev, armsDev, rotationDev, backswingDuration, swingSpeed, scaledTransitionSensitivity) {
+    // Calculate Penalty Scale Factor based on PCHS
+    let penaltyScaleFactor = 1.0;
+    if (potentialCHS <= PCHS_THRESHOLD_FOR_REDUCED_PENALTY) {
+        penaltyScaleFactor = MIN_PENALTY_SCALE_FACTOR;
+    } else if (potentialCHS < PCHS_THRESHOLD_FOR_FULL_PENALTY) {
+        // Linearly interpolate between MIN_PENALTY_SCALE_FACTOR and 1.0
+        const range = PCHS_THRESHOLD_FOR_FULL_PENALTY - PCHS_THRESHOLD_FOR_REDUCED_PENALTY;
+        const progress = (potentialCHS - PCHS_THRESHOLD_FOR_REDUCED_PENALTY) / range;
+        penaltyScaleFactor = MIN_PENALTY_SCALE_FACTOR + (1.0 - MIN_PENALTY_SCALE_FACTOR) * progress;
+    }
+    // If potentialCHS >= PCHS_THRESHOLD_FOR_FULL_PENALTY, penaltyScaleFactor remains 1.0
+
+    console.log(`ACHS Calc: PCHS=${potentialCHS.toFixed(1)}, PenaltyScaleFactor=${penaltyScaleFactor.toFixed(2)}`);
+
     // Transition Efficiency: Perfect timing = 1.0, max loss at edge of sensitivity window
     // Use the scaledTransitionSensitivity passed in.
-    const transitionLoss = clamp(Math.abs(transitionDev) / scaledTransitionSensitivity, 0, 1) * MAX_TRANSITION_SPEED_LOSS;
+    const adjustedMaxTransitionLoss = MAX_TRANSITION_SPEED_LOSS * penaltyScaleFactor;
+    const transitionLoss = clamp(Math.abs(transitionDev) / scaledTransitionSensitivity, 0, 1) * adjustedMaxTransitionLoss;
     const transitionEfficiency = 1.0 - transitionLoss;
 
     // Absolute Sequence Efficiency: Average deviation of arms and rotation
     // The sensitivity for this is already scaled within calculateTimingDeviation via durationScalingFactor
+    const adjustedMaxSequenceLoss = MAX_ABSOLUTE_SPEED_LOSS * penaltyScaleFactor;
     const absoluteAvgDev = (Math.abs(armsDev) + Math.abs(rotationDev)) / 2;
-    const sequenceLoss = clamp(absoluteAvgDev / (ABSOLUTE_ARMS_ROTATION_TIMING_SENSITIVITY / swingSpeed), 0, 1) * MAX_ABSOLUTE_SPEED_LOSS;
+    const sequenceLoss = clamp(absoluteAvgDev / (ABSOLUTE_ARMS_ROTATION_TIMING_SENSITIVITY / swingSpeed), 0, 1) * adjustedMaxSequenceLoss;
     const sequenceEfficiency = 1.0 - sequenceLoss;
 
     // Apply Overswing Difficulty Penalty Factor
@@ -384,7 +406,7 @@ function calculateSpinAxis(faceAngleRelativeToPath, dynamicLoft) {
  */
 function calculateBackSpin(dynamicLoft, actualCHS, attackAngle, strikeQuality, currentSurface, staticClubLoft) {
     const LOW_LOFT_THRESHOLD = 18.1; // Woods and Driver
-    const HIGH_LOFT_THRESHOLD = 49.0; // Wedges
+    const HIGH_LOFT_THRESHOLD = 44.0; // Wedges
     const BASE_SPEED_FACTOR = BACKSPIN_SPEED_FACTOR; // Original 20
 
     let speedFactorMultiplier = 1.0;
@@ -393,20 +415,20 @@ function calculateBackSpin(dynamicLoft, actualCHS, attackAngle, strikeQuality, c
         // Reduce significantly for very low lofts
         // Example: at 10 deg (Driver), multiplier might be 0.3
         // Scale linearly from, say, 0.2 at 0 loft to 0.7 at LOW_LOFT_THRESHOLD
-        const minMultiplierLow = 0.1; // Multiplier for extremely low loft (e.g. theoretical 0 deg)
+        const minMultiplierLow = 0.2; // Multiplier for extremely low loft (e.g. theoretical 0 deg)
         const maxMultiplierLow = 0.3; // Multiplier at the LOW_LOFT_THRESHOLD
         speedFactorMultiplier = minMultiplierLow + (maxMultiplierLow - minMultiplierLow) * (staticClubLoft / LOW_LOFT_THRESHOLD);
     } else if (staticClubLoft > HIGH_LOFT_THRESHOLD) {
         // Optionally, slightly increase for very high lofts, or keep at 1.0
         // Example: at 60 deg (Lob Wedge), multiplier might be 1.1
-        const minMultiplierHigh = 1.3; // Multiplier at the HIGH_LOFT_THRESHOLD
-        const maxMultiplierHigh = 1.4; // Multiplier for very high lofts (e.g., 60+ deg)
+        const minMultiplierHigh = 1.2; // Multiplier at the HIGH_LOFT_THRESHOLD
+        const maxMultiplierHigh = 1.3; // Multiplier for very high lofts (e.g., 60+ deg)
         const range = 65.0 - HIGH_LOFT_THRESHOLD; // Assume max loft around 65 for scaling
         speedFactorMultiplier = minMultiplierHigh + (maxMultiplierHigh - minMultiplierHigh) * ((staticClubLoft - HIGH_LOFT_THRESHOLD) / range);
         speedFactorMultiplier = Math.min(speedFactorMultiplier, maxMultiplierHigh); // Cap it
     } else {
         // Interpolate between LOW_LOFT_THRESHOLD (e.g., 0.7x) and HIGH_LOFT_THRESHOLD (1.0x)
-        const lowThreshMultiplier = 0.35; // Multiplier at LOW_LOFT_THRESHOLD
+        const lowThreshMultiplier = 0.4; // Multiplier at LOW_LOFT_THRESHOLD
         const highThreshMultiplier = 1.3; // Multiplier at HIGH_LOFT_THRESHOLD
         const loftRange = HIGH_LOFT_THRESHOLD - LOW_LOFT_THRESHOLD;
         speedFactorMultiplier = lowThreshMultiplier + (highThreshMultiplier - lowThreshMultiplier) * ((staticClubLoft - LOW_LOFT_THRESHOLD) / loftRange);
