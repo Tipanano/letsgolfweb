@@ -112,7 +112,25 @@ export async function generateHoleLayout(holeNameInput = "mickelson_01") {
         });
     }
 
-    // Water hazards are still circles, no processing needed here yet.
+    // Process Water Hazards: Convert control points to vertices
+    if (layoutToReturn.waterHazards && Array.isArray(layoutToReturn.waterHazards)) {
+        layoutToReturn.waterHazards.forEach((wh, index) => {
+            if (wh.controlPoints) {
+                wh.vertices = createSmoothClosedShape(wh.controlPoints);
+                delete wh.controlPoints; // Remove control points, keep final vertices
+                wh.type = 'polygon'; // Add type for holeView compatibility
+            } else if (wh.center && wh.radius) { // If it's defined as a circle
+                console.warn(`Water Hazard ${index} is defined as a circle. This will not be rendered as a smooth polygon. Consider converting to controlPoints.`);
+                // For now, we'll leave it as is, but holeView might not render it correctly if it expects polygons.
+                // Or, you could generate approximate polygon vertices from the circle here if needed.
+                wh.type = 'circle'; // Keep type as circle if no control points
+            } else if (!wh.vertices) { // Only warn if no geometry defined
+                 console.warn(`Water Hazard ${index} has no controlPoints, vertices, or center/radius defined.`);
+                 wh.vertices = []; // Ensure vertices array exists
+                 wh.type = 'polygon'; // Default to polygon type
+            }
+        });
+    }
 
     // --- Corner Rounding Removed - Using original vertices ---
 

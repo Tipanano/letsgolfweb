@@ -277,7 +277,7 @@ export function animateBallFlightWithLanding(shotData) {
     };
 
     // Always use 3D animation now
-    CoreVisuals.startBallAnimation(points, duration, onAnimationComplete);
+    CoreVisuals.startBallAnimation(points, duration, onAnimationComplete, shotData.isHoledOut, shotData.finalPosition);
 }
 
 

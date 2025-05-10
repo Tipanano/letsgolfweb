@@ -247,7 +247,26 @@ export function handleShotResult(shotData) {
 
     if (isHoledOut) {
         console.log(`HOLE OUT! Strokes this hole: ${shotsTaken}. Total round score: ${score}`);
-        // UI will reflect this. Consider if further action needed (e.g., advance to next hole).
+        ui.updateStatus(`Hole ${currentHoleIndex + 1} complete! Score: ${shotsTaken}. Press (n) to play again.`); // More explicit message
+
+        // Reset for the "next shot" (back to the tee of the current hole)
+        shotsTaken = 0;
+        currentLie = 'tee';
+        let initialX = 0;
+        let initialZ = 0;
+        if (currentHoleLayout?.tee?.center) {
+            initialX = currentHoleLayout.tee.center.x * YARDS_TO_METERS;
+            initialZ = currentHoleLayout.tee.center.z * YARDS_TO_METERS;
+        }
+        currentBallPosition = { x: initialX, y: BALL_RADIUS, z: initialZ };
+        
+        // The visuals.resetVisuals call will be handled by logic.resetSwing() in main.js when 'n' is pressed.
+        // We just need to ensure the game state is ready for that reset.
+        // visuals.resetVisuals(currentBallPosition, currentLie); // This might be redundant if 'n' press handles it
+        // visuals.activateHoleViewCamera(); // Also likely handled by resetSwing flow
+
+        isHoledOut = false; // Reset for the next attempt on this hole
+
     } else {
         console.log("Ball is not holed out. Ready for next shot.");
     }

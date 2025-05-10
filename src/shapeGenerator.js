@@ -90,3 +90,25 @@ export function generateFairwayControlPoints(shapeType = 'straight', startPoint 
 
 // Add more functions as needed for rough, water hazards, etc.
 // e.g., generateRoughControlPoints, generateWaterControlPoints
+
+/**
+ * Generates control points for a water hazard based on desired characteristics.
+ * @param {string} shapeType - e.g., 'pond', 'lake', 'stream_section'.
+ * @param {number} size - Approximate diameter or length in yards.
+ * @param {{x: number, z: number}} center - The desired center position.
+ * @param {number} [rotation=0] - Rotation angle in degrees.
+ * @param {number} [complexity=5] - Base number of points.
+ * @param {number} [randomness=0.15] - Factor for irregularity.
+ * @returns {Array<{x: number, z: number}>} An array of control points.
+ */
+export function generateWaterControlPoints(shapeType = 'pond', size = 20, center = { x: 0, z: 0 }, rotation = 0, complexity = 7, randomness = 0.15) {
+    console.log(`ShapeGen: Generating water control points - Type: ${shapeType}, Size: ${size}, Center: (${center.x}, ${center.z})`);
+    // TODO: Implement logic based on shapeType.
+    // - 'pond': Similar to a round or amoeba green/bunker.
+    // - 'lake': Larger, potentially more complex.
+    // - 'stream_section': More elongated, possibly defined by a centerline and width.
+
+    // Placeholder: Use similar logic to green generation for now.
+    // Adjust default complexity and randomness for typical water hazard shapes.
+    return generateGreenControlPoints('custom', size, center, rotation, complexity, randomness);
+}

@@ -53,6 +53,8 @@ let ballAnimationStartTime = 0;
 let ballAnimationDuration = 1500; // Default duration, will be overwritten
 let currentTrajectoryPoints = [];
 let currentAnimationCallback = null; // Add variable to store the callback
+let currentIsHoledOut = false; // Added for holed-out state
+let currentHoledOutPosition = null; // Added for holed-out state
 const BALL_PIVOT_POINT = new THREE.Vector3(0, BALL_RADIUS, 0); // Define pivot for standard views
 
 // --- Helper Function for Rotation ---
@@ -243,19 +245,28 @@ function animate(timestamp) {
         if (progress >= 1) {
             isBallAnimating = false;
             console.log("Ball animation finished.");
-            if (trajectoryLine) {
-                 // Ensure final draw range is valid
-                 if (currentTrajectoryPoints.length >= 0) {
-                    trajectoryLine.geometry.setDrawRange(0, currentTrajectoryPoints.length);
-                 }
+
+            let trueFinalBallPosition;
+            if (currentIsHoledOut && currentHoledOutPosition) {
+                trueFinalBallPosition = currentHoledOutPosition;
+                console.log("CoreVisuals: Snapping ball to holed out position:", trueFinalBallPosition);
+            } else if (currentTrajectoryPoints.length > 0) {
+                trueFinalBallPosition = currentTrajectoryPoints[currentTrajectoryPoints.length - 1];
             }
-             if (ball && currentTrajectoryPoints.length > 0) {
-                 // Ensure final position point exists
-                 const finalPoint = currentTrajectoryPoints[currentTrajectoryPoints.length - 1];
-                 if (finalPoint) {
-                     ball.position.copy(finalPoint);
-                 }
-             }
+
+            if (ball && trueFinalBallPosition) {
+                ball.position.copy(trueFinalBallPosition);
+            }
+
+            if (trajectoryLine) {
+                // Draw the line to the end of the calculated trajectory.
+                // If holed out, currentTrajectoryPoints should already end at the hole.
+                if (currentTrajectoryPoints.length > 0) { // Ensure there are points to draw
+                    trajectoryLine.geometry.setDrawRange(0, currentTrajectoryPoints.length);
+                } else {
+                    trajectoryLine.geometry.setDrawRange(0, 0); // No points, draw nothing
+                }
+            }
              // Execute the callback if it exists
              if (currentAnimationCallback) {
                  console.log("Executing animation completion callback.");
@@ -481,11 +492,17 @@ export function hideBall() {
 }
 
 // Function to handle the animation logic, potentially called by visuals.js
-export function startBallAnimation(points, duration, onCompleteCallback = null) { // Add callback parameter
+export function startBallAnimation(points, duration, onCompleteCallback = null, isHoledOut = false, holedOutPosition = null) { // Add callback, isHoledOut, and holedOutPosition parameters
      if (!scene) return; // Guard against uninitialized scene
 
-    // Store the callback
+    // Store the callback and holed-out state
     currentAnimationCallback = onCompleteCallback;
+    currentIsHoledOut = isHoledOut;
+    currentHoledOutPosition = holedOutPosition ? new THREE.Vector3(holedOutPosition.x, holedOutPosition.y, holedOutPosition.z) : null;
+
+    if (currentIsHoledOut) {
+        console.log("CoreVisuals: Ball is holed out. Final position:", currentHoledOutPosition);
+    }
 
     // Remove previous line if it exists
     if (trajectoryLine) {

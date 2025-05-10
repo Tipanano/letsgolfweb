@@ -69,10 +69,15 @@
   ],
   "waterHazards": [
     {
-      "type": "circle",
-      "center": { "x": -80, "z": 340 },
-      "radius": 10,
-      "surface": "WATER"
+      "surface": "WATER",
+      "controlPoints": [
+        { "x": -70, "z": 340 },
+        { "x": -75, "z": 349 },
+        { "x": -85, "z": 349 },
+        { "x": -90, "z": 340 },
+        { "x": -85, "z": 331 },
+        { "x": -75, "z": 331 }
+      ]
     }
   ]
 }

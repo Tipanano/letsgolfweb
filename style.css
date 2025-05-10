@@ -706,7 +706,7 @@ body.mode-closest-to-flag #closest-to-flag-info {
 }
 
 #game-view #golf-canvas {
-    height: 700px; /* Increased height */
+    height: 600px; /* Increased height */
     /* width: 100%; already set */
 }
 
