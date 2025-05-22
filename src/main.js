@@ -276,10 +276,16 @@ function handleShotCompletion(shotData) {
     visuals.animateBallFlightWithLanding(shotData);
 
     // 3. Update Game Mode Logic (if applicable)
+    let modeHandledStatusUpdate = false;
     if (currentMode === GAME_MODES.CLOSEST_TO_FLAG) {
         closestToFlag.handleShotResult(shotData);
+        // if (closestToFlag.isModeComplete()) modeHandledStatusUpdate = true; // Example if CTF sets a final status
     } else if (currentMode === GAME_MODES.PLAY_HOLE) {
         playHole.handleShotResult(shotData);
+        // playHole.handleShotResult will call ui.updateStatus if the hole is completed.
+        if (shotData.isHoledOut) {
+            modeHandledStatusUpdate = true;
+        }
     } else if (currentMode === GAME_MODES.RANGE) {
         // Update overlay specifically for range mode
         ui.updateVisualOverlayInfo('range', {
@@ -293,7 +299,9 @@ function handleShotCompletion(shotData) {
 
     // 4. Update overall game status (e.g., ready for next shot)
     // Note: gameLogic sets its internal state to 'result' before calling back
-    ui.updateStatus('Result - Press (n) for next shot');
+    if (!modeHandledStatusUpdate) {
+        ui.updateStatus('Result - Press (n) for next shot');
+    }
 }
 
 

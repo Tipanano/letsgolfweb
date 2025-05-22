@@ -20,7 +20,13 @@ import { calculateFullSwingShot, calculateChipShot, calculatePuttShot } from './
 // Import debug data getter directly
 import { getDebugTimingData } from './utils.js';
 import { getCurrentGameMode } from '../main.js'; // Import mode checker
-import { getCurrentBallPosition as getPlayHoleBallPosition, getCurrentHoleLayout } from '../modes/playHole.js'; // Import position and layout getters for playHole
+// Import necessary functions from playHole.js
+import { 
+    getCurrentBallPosition as getPlayHoleBallPosition, 
+    getCurrentHoleLayout,
+    getHoleJustCompleted,
+    prepareForTeeShotAfterHoleOut
+} from '../modes/playHole.js';
 import { getFlagPosition, setFlagstickVisibility } from '../visuals/holeView.js'; // Import flag position getter AND visibility setter
 import { getActiveCameraMode, setCameraBehindBall, snapFollowCameraToBall, CameraMode, removeTrajectoryLine, applyAimAngleToCamera, setCameraBehindBallLookingAtTarget, setInitialFollowCameraLookingAtTarget, setBallScale, resetStaticCameraZoom } from '../visuals/core.js'; // Import camera functions, line removal, aim application, setBallScale, AND resetStaticCameraZoom
 import { getSurfaceTypeAtPoint } from './utils.js'; // Import surface checker
@@ -239,8 +245,15 @@ export function triggerPuttCalc() {
 // This function performs a FULL reset, including visual ball position. Used for range mode, etc.
 export function resetSwing() {
     console.log("Action: Initiating FULL swing reset (including visuals).");
+
+    const currentMode = getCurrentGameMode();
+    if (currentMode === 'play-hole' && getHoleJustCompleted()) {
+        prepareForTeeShotAfterHoleOut();
+        // After preparing, the rest of resetSwing will handle UI and visual updates based on the new tee state.
+    }
+
     stopAllAnimations(); // Stop any running animations
-    resetSwingState();   // Calls the full reset in state.js
+    resetSwingState();   // Calls the full reset in state.js, which includes UI and visual reset.
     // UI/Visual reset is called within resetSwingState
 }
 

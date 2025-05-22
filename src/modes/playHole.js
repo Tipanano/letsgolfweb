@@ -12,7 +12,7 @@ let shotsTaken = 0; // Strokes for the current hole
 let score = 0; // Total strokes for the round
 let currentBallPosition = null;
 let currentLie = 'tee'; // Default lie
-let isHoledOut = false;
+let holeJustCompleted = false; // Renamed from isHoledOut: true if hole was just finished, awaiting 'n'
 let currentModeActive = false;
 let currentHoleIndex = 0; // For now, always 0, representing the first/current hole
 
@@ -23,7 +23,7 @@ const HOLE_RADIUS_METERS = 0.108 / 2; // Regulation hole diameter is 4.25 inches
 export async function initializeMode(holeName) { // Made async, added holeName parameter
     console.log(`Initializing Play Hole mode for hole: ${holeName || 'default'}...`);
     currentModeActive = true;
-    isHoledOut = false;
+    holeJustCompleted = false; // Ensure this is reset when a hole is initialized
 
     const loadedState = loadPlayHoleState();
     const holeToLoad = holeName || "mickelson_01"; // Use provided holeName or default
@@ -225,7 +225,13 @@ export function terminateMode() {
 }
 
 export function handleShotResult(shotData) {
-    if (!currentModeActive || isHoledOut) return;
+    if (!currentModeActive || holeJustCompleted) { // Don't process if hole was just finished and awaiting 'n'
+        // If holeJustCompleted is true, it means we already processed the hole-out,
+        // and are waiting for the player to press 'n' to start the next shot from the tee.
+        // The actual reset to tee happens in prepareForTeeShotAfterHoleOut, called by resetSwing.
+        console.log("PlayHole: Shot result received, but hole was just completed. Awaiting 'n'.");
+        return;
+    }
 
     shotsTaken++;
     score++; // Increment total round score for each shot taken
@@ -243,56 +249,76 @@ export function handleShotResult(shotData) {
     }
 
     currentLie = shotData.surfaceName || 'unknown'; // Update lie based on shot result
-    isHoledOut = shotData.isHoledOut || false;
-
-    if (isHoledOut) {
+    
+    if (shotData.isHoledOut) {
+        holeJustCompleted = true; // Set flag that hole is done, awaiting 'n'
         console.log(`HOLE OUT! Strokes this hole: ${shotsTaken}. Total round score: ${score}`);
-        ui.updateStatus(`Hole ${currentHoleIndex + 1} complete! Score: ${shotsTaken}. Press (n) to play again.`); // More explicit message
-
-        // Reset for the "next shot" (back to the tee of the current hole)
-        shotsTaken = 0;
-        currentLie = 'tee';
-        let initialX = 0;
-        let initialZ = 0;
-        if (currentHoleLayout?.tee?.center) {
-            initialX = currentHoleLayout.tee.center.x * YARDS_TO_METERS;
-            initialZ = currentHoleLayout.tee.center.z * YARDS_TO_METERS;
-        }
-        currentBallPosition = { x: initialX, y: BALL_RADIUS, z: initialZ };
-        
-        // The visuals.resetVisuals call will be handled by logic.resetSwing() in main.js when 'n' is pressed.
-        // We just need to ensure the game state is ready for that reset.
-        // visuals.resetVisuals(currentBallPosition, currentLie); // This might be redundant if 'n' press handles it
-        // visuals.activateHoleViewCamera(); // Also likely handled by resetSwing flow
-
-        isHoledOut = false; // Reset for the next attempt on this hole
-
+        ui.updateStatus(`Hole ${currentHoleIndex + 1} complete! Score: ${shotsTaken}. Press (n) to play again.`);
+        // Ball position remains at the hole for now. It will be reset to tee in prepareForTeeShotAfterHoleOut.
+        // shotsTaken for this completed hole is now fixed.
     } else {
         console.log("Ball is not holed out. Ready for next shot.");
     }
 
-    // Save the updated state
+    // Save the updated state (ball at its current location, or at hole if just holed out)
     savePlayHoleState({
         currentHoleIndex: currentHoleIndex,
-        ballPosition: currentBallPosition,
-        strokesThisHole: shotsTaken,
+        ballPosition: currentBallPosition, // This is where the ball physically is
+        strokesThisHole: shotsTaken, // Strokes for the current attempt (or completed hole)
         totalStrokesRound: score,
         currentLie: currentLie,
-        holeLayoutData: currentHoleLayout // Ensure layout is included in subsequent saves
+        holeLayoutData: currentHoleLayout,
+        holeJustCompletedState: holeJustCompleted // Save this new flag
     });
 
-    const distToFlag = calculateDistanceToFlag(currentBallPosition, currentHoleLayout.flagPosition);
+    // Update UI overlay based on the current state
+    // If holeJustCompleted, distToFlag should be from the hole, shotNum should be the completed shots.
+    // Otherwise, it's for the next shot from currentBallPosition.
+    const displayBallPos = getCurrentBallPosition(); // Uses holeJustCompleted logic
+    const displayLie = getCurrentLie();
+    const displayShotNum = getDisplayShotNumber();
+    const distToFlag = calculateDistanceToFlag(displayBallPos, currentHoleLayout.flagPosition);
+
     ui.updateVisualOverlayInfo('play-hole', {
         holeNum: currentHoleIndex + 1,
         par: currentHoleLayout.par,
         distToFlag: distToFlag,
-        shotNum: isHoledOut ? shotsTaken : shotsTaken + 1,
-        lie: currentLie,
+        shotNum: displayShotNum,
+        lie: displayLie,
         wind: 'Calm', // placeholder
         playerName: 'Player 1', // placeholder
         totalScore: score, // Display total strokes for the round
         position: '1st' // placeholder
     });
+}
+
+
+export function prepareForTeeShotAfterHoleOut() {
+    if (!currentModeActive) return;
+
+    console.log("PlayHole: Preparing for tee shot after hole out.");
+    shotsTaken = 0;
+    currentLie = 'tee';
+    let initialX = 0;
+    let initialZ = 0;
+    if (currentHoleLayout?.tee?.center) {
+        initialX = currentHoleLayout.tee.center.x * YARDS_TO_METERS;
+        initialZ = currentHoleLayout.tee.center.z * YARDS_TO_METERS;
+    }
+    currentBallPosition = { x: initialX, y: BALL_RADIUS, z: initialZ };
+    holeJustCompleted = false; // Reset the flag, we are now starting the new attempt
+
+    savePlayHoleState({
+        currentHoleIndex: currentHoleIndex,
+        ballPosition: currentBallPosition,
+        strokesThisHole: shotsTaken,
+        totalStrokesRound: score, // Total score persists
+        currentLie: currentLie,
+        holeLayoutData: currentHoleLayout,
+        holeJustCompletedState: holeJustCompleted
+    });
+    console.log("PlayHole: State reset to tee. Ball at:", currentBallPosition, "Shots:", shotsTaken);
+    // Visuals and UI update for this new state will be handled by the resetSwing flow in main.js/ui.js
 }
 
 // Helper function to calculate distance to flag
@@ -313,11 +339,33 @@ export function getCurrentScore() {
     return score;
 }
 
-export function getIsHoledOut() {
-    return isHoledOut;
+export function getHoleJustCompleted() { // Renamed getter
+    return holeJustCompleted;
 }
 
 export function getCurrentBallPosition() {
-    // Return a copy to prevent accidental modification
+    if (holeJustCompleted && currentHoleLayout?.tee?.center) {
+        // If hole was just completed, the "next" shot is from the tee
+        return {
+            x: currentHoleLayout.tee.center.x * YARDS_TO_METERS,
+            y: BALL_RADIUS,
+            z: currentHoleLayout.tee.center.z * YARDS_TO_METERS
+        };
+    }
+    // Otherwise, return the actual current ball position
     return { ...currentBallPosition };
+}
+
+export function getCurrentLie() {
+    if (holeJustCompleted) {
+        return 'tee';
+    }
+    return currentLie;
+}
+
+export function getDisplayShotNumber() {
+    if (holeJustCompleted) {
+        return 1; // Next shot will be the 1st from the tee
+    }
+    return shotsTaken + 1;
 }

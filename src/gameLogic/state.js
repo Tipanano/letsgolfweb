@@ -256,6 +256,9 @@ export function setShotType(type) {
     // resetSwingState(); 
 }
 
+import { getCurrentGameMode } from '../main.js'; // Import to check mode
+import * as playHole from '../modes/playHole.js'; // To get ball pos/lie for play-hole
+
 // This function performs the full reset including UI/Visuals
 export function resetSwingState() { // Added 'export' keyword here
     gameState = 'ready';
@@ -283,7 +286,22 @@ export function resetSwingState() { // Added 'export' keyword here
     currentTargetLineAngle = 0; // Reset target line angle
 
     resetUIForNewShot(); // Use the new reset function that preserves ball position
-    visuals.resetVisuals(); // Reset visuals (e.g., ball position, tee)
+
+    // Determine ball position and lie for visuals.resetVisuals()
+    let ballPosForVisuals = null;
+    let lieForVisuals = null;
+    const currentMode = getCurrentGameMode();
+
+    if (currentMode === 'play-hole') {
+        // prepareForTeeShotAfterHoleOut (if called) would have updated playHole's internal state.
+        // getCurrentBallPosition and getCurrentLie from playHole will now reflect the tee.
+        ballPosForVisuals = playHole.getCurrentBallPosition(); 
+        lieForVisuals = playHole.getCurrentLie();
+        console.log("State: Resetting visuals for play-hole mode. Pos:", ballPosForVisuals, "Lie:", lieForVisuals);
+    }
+    // For other modes (range, CTF), visuals.resetVisuals() defaults to tee/origin.
+    
+    visuals.resetVisuals(ballPosForVisuals, lieForVisuals); // Reset visuals (e.g., ball position, tee)
     resetStaticCameraZoom(); // Reset the static camera zoom level
     console.log("Logic State: Full swing state reset (including visuals and zoom).");
 }
