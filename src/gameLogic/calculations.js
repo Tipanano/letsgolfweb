@@ -19,10 +19,10 @@ import { calculatePuttImpact } from '../puttPhysics.js';
 import { simulateFlightStepByStep, simulateGroundRoll, HOLE_RADIUS_METERS } from './simulation.js';
 import { getSurfaceProperties } from '../surfaces.js'; // Import surface properties getter
 // Removed Putt Trajectory import as roll simulation handles it
-import { clamp, getSurfaceTypeAtPoint } from './utils.js'; // Import getSurfaceTypeAtPoint
+import { clamp, getSurfaceTypeAtPoint } from '../utils/gameUtils.js'; // Import getSurfaceTypeAtPoint
 import { getCurrentGameMode } from '../main.js'; // Import mode checker
 import { getCurrentBallPosition as getPlayHoleBallPosition } from '../modes/playHole.js'; // Import position getter
-import { BALL_RADIUS, YARDS_TO_METERS } from '../visuals/core.js'; // Import BALL_RADIUS and conversion
+import { BALL_RADIUS } from '../visuals/core.js'; // Import BALL_RADIUS
 import { getFlagPosition, getGreenCenter, getGreenRadius } from '../visuals/holeView.js'; // For hole/green checks
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js'; // For Vector3
 
@@ -217,10 +217,10 @@ export function calculateFullSwingShot() {
     // Calculate final distances
     const dxTotal = finalPosition.x - initialPositionObj.x;
     const dzTotal = finalPosition.z - initialPositionObj.z;
-    totalDistance = Math.sqrt(dxTotal*dxTotal + dzTotal*dzTotal) * (1 / YARDS_TO_METERS);
-    const sideDistance = dxTotal * (1 / YARDS_TO_METERS); // Side distance is just the X difference in yards
+    totalDistance = Math.sqrt(dxTotal*dxTotal + dzTotal*dzTotal); // Keep in meters
+    const sideDistance = dxTotal; // Keep in meters
     console.log(`Calc (Full): Final Position: (${finalPosition.x.toFixed(2)}, ${finalPosition.y.toFixed(2)}, ${finalPosition.z.toFixed(2)})m`);
-    console.log(`Calc (Full): Calculated Total Distance: ${totalDistance.toFixed(1)} yd, Side Distance: ${sideDistance.toFixed(1)} yd`);
+    console.log(`Calc (Full): Calculated Total Distance: ${totalDistance.toFixed(1)} m, Side Distance: ${sideDistance.toFixed(1)} m`);
 
     // --- Determine Result Message ---
     let spinDesc = "";
@@ -257,9 +257,10 @@ export function calculateFullSwingShot() {
         potentialCHS: impactResult.potentialCHS,
         dynamicLoft: impactResult.dynamicLoft,
         smashFactor: impactResult.smashFactor,
-        // Simulation results
+        // Simulation results (all distances in meters)
         peakHeight: peakHeight,
         carryDistance: carryDistance,
+        rolloutDistance: totalDistance - carryDistance, // Calculate rollout
         totalDistance: totalDistance,
         timeOfFlight: visualTimeOfFlight,
         trajectory: flightSimulationResult.trajectoryPoints, // Now contains combined flight + roll
@@ -482,10 +483,10 @@ export function calculateChipShot() {
     // Calculate final distances
     const dxTotal = finalPosition.x - initialPositionObj.x;
     const dzTotal = finalPosition.z - initialPositionObj.z;
-    totalDistance = Math.sqrt(dxTotal*dxTotal + dzTotal*dzTotal) * (1 / YARDS_TO_METERS);
-    const sideDistance = dxTotal * (1 / YARDS_TO_METERS);
+    totalDistance = Math.sqrt(dxTotal*dxTotal + dzTotal*dzTotal); // Keep in meters
+    const sideDistance = dxTotal; // Keep in meters
     console.log(`Calc (Chip): Final Position: (${finalPosition.x.toFixed(2)}, ${finalPosition.y.toFixed(2)}, ${finalPosition.z.toFixed(2)})m`);
-    console.log(`Calc (Chip): Calculated Total Distance: ${totalDistance.toFixed(1)} yd, Side Distance: ${sideDistance.toFixed(1)} yd`);
+    console.log(`Calc (Chip): Calculated Total Distance: ${totalDistance.toFixed(1)} m, Side Distance: ${sideDistance.toFixed(1)} m`);
 
     // --- Determine Result Message ---
      if (isHoledOut) {
@@ -512,9 +513,10 @@ export function calculateChipShot() {
         potentialCHS: impactResult.potentialCHS,
         dynamicLoft: impactResult.dynamicLoft,
         smashFactor: impactResult.smashFactor,
-        // Simulation results
+        // Simulation results (all distances in meters)
         peakHeight: peakHeight,
         carryDistance: carryDistance,
+        rolloutDistance: totalDistance - carryDistance, // Calculate rollout
         totalDistance: totalDistance,
         timeOfFlight: visualTimeOfFlight,
         trajectory: flightSimulationResult.trajectoryPoints, // Now contains combined flight + roll
@@ -603,10 +605,10 @@ export function calculatePuttShot() {
     // Calculate final distances
     const dxTotal = finalPosition.x - initialPosition.x;
     const dzTotal = finalPosition.z - initialPosition.z;
-    const totalDistance = Math.sqrt(dxTotal*dxTotal + dzTotal*dzTotal) * (1 / YARDS_TO_METERS);
-    const sideDistance = dxTotal * (1 / YARDS_TO_METERS);
+    const totalDistance = Math.sqrt(dxTotal*dxTotal + dzTotal*dzTotal); // Keep in meters
+    const sideDistance = dxTotal; // Keep in meters
     console.log(`Calc (Putt): Final Position: (${finalPosition.x.toFixed(2)}, ${finalPosition.y.toFixed(2)}, ${finalPosition.z.toFixed(2)})m`);
-    console.log(`Calc (Putt): Calculated Total Distance: ${totalDistance.toFixed(1)} yd, Side Distance: ${sideDistance.toFixed(1)} yd`);
+    console.log(`Calc (Putt): Calculated Total Distance: ${totalDistance.toFixed(1)} m, Side Distance: ${sideDistance.toFixed(1)} m`);
 
     // --- Determine Result Message ---
     if (isHoledOut) {
@@ -634,9 +636,10 @@ export function calculatePuttShot() {
         potentialCHS: 0,
         dynamicLoft: 0,
         smashFactor: 0,
-        // Simulation results
+        // Simulation results (all distances in meters)
         peakHeight: 0,
         carryDistance: 0, // No carry for putt
+        rolloutDistance: totalDistance, // All putt distance is rollout
         totalDistance: totalDistance,
         timeOfFlight: 0, // No flight time
         // Use the actual roll trajectory points for the putt animation

@@ -9,7 +9,7 @@ import { clearPlayHoleState } from './gameLogic/persistentGameState.js'; // Impo
 import * as environment from './gameLogic/environment.js'; // Import environment simulation
 import * as closestToFlag from './modes/closestToFlag.js'; // Import the CTF mode logic
 import * as playHole from './modes/playHole.js'; // Import the Play Hole mode logic
-import { getRandomInRange } from './gameLogic/utils.js'; // Import getRandomInRange
+import { getRandomInRange } from './utils/gameUtils.js'; // Import getRandomInRange
 
 // --- Game Data ---
 const AVAILABLE_HOLE_FILES = [ // This would ideally be fetched or dynamically discovered

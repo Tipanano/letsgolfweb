@@ -5,11 +5,10 @@ export function calculatePuttTrajectoryPoints(shotData, initialPosition = { x: 0
     const puttSteps = 10; // Number of points to generate for the line
 
     // Get data from shotData
-    const totalDistanceYards = shotData.totalDistance || 0;
+    const totalDistanceMeters = shotData.totalDistance || 0; // Already in meters
     const finalAngleDegrees = shotData.horizontalLaunchAngle || 0; // This is the final absolute angle
 
-    // Convert to meters and radians
-    const totalDistanceMeters = totalDistanceYards / 1.09361;
+    // Convert angle to radians
     const finalAngleRadians = finalAngleDegrees * Math.PI / 180;
 
     // Calculate the displacement vector based on angle and distance
@@ -38,7 +37,7 @@ export function calculatePuttTrajectoryPoints(shotData, initialPosition = { x: 0
     }
 
     const finalPoint = puttPoints[puttPoints.length - 1] || initialPosition;
-    console.log(`Trajectory (Putt): Angle=${finalAngleDegrees.toFixed(1)}deg, Dist=${totalDistanceYards.toFixed(1)}yd`);
+    console.log(`Trajectory (Putt): Angle=${finalAngleDegrees.toFixed(1)}deg, Dist=${totalDistanceMeters.toFixed(1)}m`);
     console.log(`Trajectory (Putt): Generated ${puttPoints.length} points. Start: (${startX.toFixed(1)}, ${startY.toFixed(1)}, ${startZ.toFixed(1)})m, End: (${finalPoint.x.toFixed(1)}, ${finalPoint.y.toFixed(1)}, ${finalPoint.z.toFixed(1)})m`);
     return puttPoints;
 }

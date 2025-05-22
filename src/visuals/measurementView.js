@@ -1,6 +1,7 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
-import { YARDS_TO_METERS, getCourseObjects as getCoreCourseObjects } from './core.js'; // Import getCourseObjects from core
+import { getCourseObjects as getCoreCourseObjects } from './core.js'; // Import getCourseObjects from core
 import * as UIVisuals from '../ui.js'; // Import UI functions for labels
+import { metersToYards } from '../utils/unitConversions.js'; // Import conversion utilities
 
 let scene; // Reference to the main scene
 let renderer; // Reference to the main renderer
@@ -279,8 +280,8 @@ function updateDistanceTexts(ballPos, clickPos, flagPos) {
     const distClickFlag = new THREE.Vector2(clickPos.x, clickPos.z).distanceTo(new THREE.Vector2(flagPos.x, flagPos.z));
 
     // Convert meters to yards for display
-    const distBallClickYards = (distBallClick / YARDS_TO_METERS).toFixed(1);
-    const distClickFlagYards = (distClickFlag / YARDS_TO_METERS).toFixed(1);
+    const distBallClickYards = metersToYards(distBallClick).toFixed(1);
+    const distClickFlagYards = metersToYards(distClickFlag).toFixed(1);
 
     console.log(`Distances: Ball->Click=${distBallClickYards}yd, Click->Flag=${distClickFlagYards}yd`);
 

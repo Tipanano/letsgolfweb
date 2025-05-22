@@ -63,7 +63,7 @@ export {
 export {
     getDebugTimingData // Exported for UI/InputHandler
     // clamp function is internal to calculations/trajectory now
-} from './gameLogic/utils.js';
+} from './utils/gameUtils.js';
 
 // --- Animation Exports ---
 // Generally, animation start/stop functions are called by actions.js,

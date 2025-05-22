@@ -6,16 +6,13 @@ import { getGameState, getCurrentShotType, getShotDirectionAngle, setShotDirecti
 import * as Visuals from './visuals.js'; // Import high-level visuals functions
 import * as MeasurementView from './visuals/measurementView.js'; // Import MeasurementView
 // Import specific core camera functions
-import { applyAimAngleToCamera, zoomCameraIn, zoomCameraOut, YARDS_TO_METERS, ball, getActiveCameraMode, adjustStaticCameraDistance, CameraMode } from './visuals/core.js'; // Added ball import and new camera functions
+import { applyAimAngleToCamera, zoomCameraIn, zoomCameraOut, ball, getActiveCameraMode, adjustStaticCameraDistance, CameraMode } from './visuals/core.js'; // Added ball import and new camera functions
+import { YARDS_TO_METERS } from './utils/unitConversions.js'; // Import conversion constant
 // Import specific UI functions needed for input feedback (markers, status updates)
 import {
-    // adjustBallPosition, // No longer needed here, handled by clickable feet
     updateStatus,
-    resetUIForNewShot, // May not be needed here if GameLogic.resetSwing handles it
     markHipInitiationOnBackswingBar,
-    updateDebugTimingInfo, // May need data from GameLogic getters
     showKeyPressMarker,
-    // Timing bar updates are likely handled within GameLogic's animation loops now
 } from './ui.js';
 import { getCurrentGameMode } from './main.js'; // Import the function to get the current game mode
 import { prepareNextShot } from './gameLogic/actions.js';
@@ -158,6 +155,12 @@ export function handleKeyDown(event) {
         }
     }
 
+    // --- Common Reset Logic ('n' key) ---
+    if (event.key === 'n' && gameState === 'result') {
+        handleResetKey();
+        return; // Consume event
+    }
+
     // --- Shot Type Specific Logic ---
     if (currentShotType === 'full') {
         handleFullSwingKeyDown(event, gameState); // Removed swingSpeed argument
@@ -186,6 +189,25 @@ export function handleKeyUp(event) {
 }
 
 
+// --- Helper Functions ---
+
+function handleResetKey() {
+    const currentMode = getCurrentGameMode();
+    console.log(`InputHandler: 'n' pressed in result state. Mode: ${currentMode}`);
+    if (currentMode === 'play-hole') {
+        if (getHoleJustCompleted()) {
+            console.log("InputHandler: Hole just completed, performing full reset to tee.");
+            GameLogic.resetSwing(); // This will trigger prepareForTeeShotAfterHoleOut
+        } else {
+            console.log("InputHandler: Preparing next shot for playHole mode (not after hole-out).");
+            prepareNextShot();
+        }
+    } else {
+        GameLogic.resetSwing(); // Full reset for other modes (e.g., range)
+        console.log("InputHandler: Performing full reset for non-play-hole mode.");
+    }
+}
+
 // --- Helper Functions for KeyDown by Shot Type ---
 
 function handleFullSwingKeyDown(event, gameState) {
@@ -195,23 +217,6 @@ function handleFullSwingKeyDown(event, gameState) {
         GameLogic.startBackswing(); // Call action function in GameLogic
     }
 
-    // Reset with 'n' - behavior depends on game mode
-    if (event.key === 'n' && gameState === 'result') {
-        const currentMode = getCurrentGameMode(); // Get current mode
-        console.log(`InputHandler: 'n' pressed in result state. Mode: ${currentMode}`);
-        if (currentMode === 'play-hole') {
-            if (getHoleJustCompleted()) {
-                console.log("InputHandler: Hole just completed, performing full reset to tee.");
-                GameLogic.resetSwing(); // This will trigger prepareForTeeShotAfterHoleOut
-            } else {
-                console.log("InputHandler: Preparing next shot for playHole mode (not after hole-out).");
-                prepareNextShot(); 
-            }
-        } else {
-            GameLogic.resetSwing(); // Full reset for other modes (e.g., range)
-            console.log("InputHandler: Performing full reset for non-play-hole mode.");
-        }
-    }
 
     // Capture 'a' during backswing (early rotation)
     if (event.key === 'a' && gameState === 'backswing' && !GameLogic.getRotationInitiationTime()) {
@@ -284,24 +289,6 @@ function handleChipKeyDown(event, gameState) {
         GameLogic.startBackswing();
     }
 
-    // Reset with 'n' - behavior depends on game mode
-    if (event.key === 'n' && gameState === 'result') {
-        const currentMode = getCurrentGameMode(); // Get current mode
-        console.log(`InputHandler: 'n' pressed in result state. Mode: ${currentMode}`);
-        if (currentMode === 'play-hole') {
-            if (getHoleJustCompleted()) {
-                console.log("InputHandler: Hole just completed, performing full reset to tee.");
-                GameLogic.resetSwing(); // This will trigger prepareForTeeShotAfterHoleOut
-            } else {
-                console.log("InputHandler: Preparing next shot for playHole mode (not after hole-out).");
-                prepareNextShot();
-            }
-        } else {
-            GameLogic.resetSwing(); // Full reset for other modes (e.g., range)
-            console.log("InputHandler: Performing full reset for non-play-hole mode.");
-        }
-    }
-
     // Capture chip downswing keys ('a', then 'i')
     if (gameState === 'chipDownswingWaiting' && GameLogic.getDownswingPhaseStartTime()) {
         const timeNow = performance.now();
@@ -331,24 +318,6 @@ function handlePuttKeyDown(event, gameState) {
     // Start Backswing with 'w'
     if (event.key === 'w' && gameState === 'ready') {
         GameLogic.startBackswing();
-    }
-
-    // Reset with 'n' - behavior depends on game mode
-    if (event.key === 'n' && gameState === 'result') {
-        const currentMode = getCurrentGameMode(); // Get current mode
-        console.log(`InputHandler: 'n' pressed in result state. Mode: ${currentMode}`);
-        if (currentMode === 'play-hole') {
-            if (getHoleJustCompleted()) {
-                console.log("InputHandler: Hole just completed, performing full reset to tee.");
-                GameLogic.resetSwing(); // This will trigger prepareForTeeShotAfterHoleOut
-            } else {
-                console.log("InputHandler: Preparing next shot for playHole mode (not after hole-out).");
-                prepareNextShot();
-            }
-        } else {
-            GameLogic.resetSwing(); // Full reset for other modes (e.g., range)
-            console.log("InputHandler: Performing full reset for non-play-hole mode.");
-        }
     }
 
     // Capture putt hit key ('i')

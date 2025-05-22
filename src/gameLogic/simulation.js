@@ -259,8 +259,8 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club) 
 
     return {
         landingPosition: landingPosition,
-        carryDistance: carryDistanceMeters * 1.09361, // Convert to yards
-        peakHeight: peakHeight * 1.09361, // Convert to yards
+        carryDistance: carryDistanceMeters, // Keep in meters
+        peakHeight: peakHeight, // Keep in meters
         timeOfFlight: time, // Actual simulated time
         landingAngleRadians: landingAngleRadians, // Add landing angle
         landingVelocity: finalVel, // Return the velocity vector just before landing

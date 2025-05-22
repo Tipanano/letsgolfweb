@@ -3,9 +3,9 @@ import {
     getRotationStartTime, getArmsStartTime, getWristsStartTime,
     getHipInitiationTime, getBackswingEndTime
     // Removed incorrect import of getCurrentHoleLayout
-} from './state.js';
+} from '../gameLogic/state.js';
 import { isPointInPolygon } from '../shapeUtils.js'; // Import the point-in-polygon checker
-import { YARDS_TO_METERS } from '../visuals/core.js'; // Import conversion factor
+import { YARDS_TO_METERS } from './unitConversions.js'; // Import conversion factor
 
 /**
  * Clamps a value between a minimum and maximum.

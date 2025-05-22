@@ -9,10 +9,11 @@ import { getFlagPosition, getCurrentHoleObjects } from './holeView.js'; // Impor
 import { createTeeMesh } from './objects.js'; // Import the tee creator
 import { getSurfaceProperties } from '../surfaces.js'; // Import surface properties getter
 
+import { YARDS_TO_METERS } from '../utils/unitConversions.js';
+
 export let scene, camera, renderer, ball, trajectoryLine, teeMesh; // Add teeMesh
 // export const BALL_RADIUS = 0.2; // Old, incorrect value
 export const BALL_RADIUS = 0.021336; // Regulation radius (1.68 inches / 2) in meters
-export const YARDS_TO_METERS = 1 / 1.09361; // Define and export the conversion factor
 
 // Ball Scale Factors for Visibility
 const BALL_SCALE_NORMAL = 1.0; // Scale for on the green

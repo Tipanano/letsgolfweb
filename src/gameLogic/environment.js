@@ -1,5 +1,5 @@
 import { setWind, getGameState, getWind } from './state.js'; // Added getWind import
-import { getRandomInRange } from './utils.js'; // Assuming a utility function for random numbers exists
+import { getRandomInRange } from '../utils/gameUtils.js'; // Assuming a utility function for random numbers exists
 
 // --- Wind Simulation Parameters ---
 let baseWindSpeed = 5; // m/s (Example base value)

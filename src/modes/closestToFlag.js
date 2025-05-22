@@ -1,10 +1,11 @@
 // Logic for the "Closest to the Flag" game mode
 import * as ui from '../ui.js'; // Import UI functions
+import { metersToYards, yardsToMeters } from '../utils/unitConversions.js'; // Import conversion utilities
 
 // --- State ---
-let targetDistanceYards = 0;
+let targetDistanceMeters = 0; // Store internally in meters
 let shotsTaken = 0;
-let bestDistanceToHoleYards = Infinity;
+let bestDistanceToHoleMeters = Infinity; // Store internally in meters
 let currentModeActive = false;
 
 // --- Functions ---
@@ -13,14 +14,15 @@ export function initializeMode() {
     console.log("Initializing Closest to Flag mode...");
     currentModeActive = true;
     shotsTaken = 0;
-    bestDistanceToHoleYards = Infinity;
-    // Generate random target distance
-    targetDistanceYards = Math.floor(Math.random() * (200 - 120 + 1)) + 120;
-    console.log(`Target distance set to: ${targetDistanceYards} yards`);
+    bestDistanceToHoleMeters = Infinity;
+    // Generate random target distance in yards, then convert to meters
+    const targetDistanceYards = Math.floor(Math.random() * (200 - 120 + 1)) + 120;
+    targetDistanceMeters = yardsToMeters(targetDistanceYards);
+    console.log(`Target distance set to: ${targetDistanceYards} yards (${targetDistanceMeters.toFixed(1)} meters)`);
 
     // Update UI
     ui.resetClosestToFlagDisplay(); // Reset display first
-    ui.updateTargetDistanceDisplay(targetDistanceYards); // Show the target distance
+    ui.updateTargetDistanceDisplay(targetDistanceYards); // Show the target distance in yards
 
     // Visuals switch is handled by main.js
     // visuals.switchToTargetView(targetDistanceYards);
@@ -42,29 +44,32 @@ export function handleShotResult(shotData) {
     console.log("ClosestToFlag: Handling shot result:", shotData);
 
     // Calculate distance from hole (simple 2D for now)
-    // Assume shotData.carryDistance is straight distance
-    // Assume shotData.sideDistance is deviation left/right (needs to be calculated in gameLogic)
-    const sideDistanceYards = shotData.sideDistance || 0; // Placeholder - needs calculation
-    const endDistanceYards = shotData.carryDistance + shotData.rolloutDistance; // Use total distance
+    // shotData distances are now in meters
+    const sideDistanceMeters = shotData.sideDistance || 0;
+    const endDistanceMeters = shotData.totalDistance; // Use total distance in meters
 
-    const distanceRemainingYards = Math.abs(targetDistanceYards - endDistanceYards);
-    const distanceFromHoleYards = Math.sqrt(distanceRemainingYards**2 + sideDistanceYards**2);
+    const distanceRemainingMeters = Math.abs(targetDistanceMeters - endDistanceMeters);
+    const distanceFromHoleMeters = Math.sqrt(distanceRemainingMeters**2 + sideDistanceMeters**2);
 
+    // Convert to yards for display
+    const distanceFromHoleYards = metersToYards(distanceFromHoleMeters);
     console.log(`Shot ${shotsTaken}: Landed ${distanceFromHoleYards.toFixed(1)} yards from the hole.`);
 
-    if (distanceFromHoleYards < bestDistanceToHoleYards) {
-        bestDistanceToHoleYards = distanceFromHoleYards;
+    if (distanceFromHoleMeters < bestDistanceToHoleMeters) {
+        bestDistanceToHoleMeters = distanceFromHoleMeters;
     }
 
-    // Update UI with result
-    ui.updateClosestToFlagResult(distanceFromHoleYards, bestDistanceToHoleYards, shotsTaken);
+    // Update UI with result (convert meters to yards for display)
+    const bestDistanceYards = metersToYards(bestDistanceToHoleMeters);
+    ui.updateClosestToFlagResult(distanceFromHoleYards, bestDistanceYards, shotsTaken);
 
     // TODO: Decide if the game ends (e.g., after 1 shot, or multiple)
     // For now, let it continue until mode is switched.
 }
 
 export function getTargetDistance() {
-    return targetDistanceYards;
+    // Return in yards for compatibility with existing code
+    return metersToYards(targetDistanceMeters);
 }
 
 // Add other necessary functions, e.g., getting current score/best distance

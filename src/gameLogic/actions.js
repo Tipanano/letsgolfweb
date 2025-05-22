@@ -18,7 +18,7 @@ import {
 // Import calculation functions directly
 import { calculateFullSwingShot, calculateChipShot, calculatePuttShot } from './calculations.js';
 // Import debug data getter directly
-import { getDebugTimingData } from './utils.js';
+import { getDebugTimingData } from '../utils/gameUtils.js';
 import { getCurrentGameMode } from '../main.js'; // Import mode checker
 // Import necessary functions from playHole.js
 import { 
@@ -29,7 +29,7 @@ import {
 } from '../modes/playHole.js';
 import { getFlagPosition, setFlagstickVisibility } from '../visuals/holeView.js'; // Import flag position getter AND visibility setter
 import { getActiveCameraMode, setCameraBehindBall, snapFollowCameraToBall, CameraMode, removeTrajectoryLine, applyAimAngleToCamera, setCameraBehindBallLookingAtTarget, setInitialFollowCameraLookingAtTarget, setBallScale, resetStaticCameraZoom } from '../visuals/core.js'; // Import camera functions, line removal, aim application, setBallScale, AND resetStaticCameraZoom
-import { getSurfaceTypeAtPoint } from './utils.js'; // Import surface checker
+import { getSurfaceTypeAtPoint } from '../utils/gameUtils.js'; // Import surface checker
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js'; // Need THREE for Vector3
 
 // --- Sound Effects ---

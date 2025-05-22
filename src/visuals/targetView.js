@@ -24,11 +24,12 @@ const GREEN_COLOR = 0x3A913F; // Darker green
 const FLAG_COLOR = 0xFF0000; // Red
 const FLAGSTICK_COLOR = 0xcccccc; // White/Gray
 
+import { YARDS_TO_METERS } from '../utils/unitConversions.js';
+
 const Y_OFFSET_GROUND = 0;
 const Y_OFFSET_FAIRWAY = 0.01;
 const Y_OFFSET_GREEN = 0.02;
 const Y_OFFSET_FLAGSTICK = 0.02; // Base of flagstick on green level
-const YARDS_TO_METERS = 1 / 1.09361;
 
 export function setScene(coreScene, width, height) {
     scene = coreScene;

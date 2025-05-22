@@ -2,7 +2,8 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
 import { TextureLoader } from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js'; // Import TextureLoader
 import { createNoise2D } from 'https://esm.sh/simplex-noise'; // Import Simplex noise
-import { scene, YARDS_TO_METERS } from './core.js'; // Import scene and conversion factor
+import { scene } from './core.js'; // Import scene
+import { YARDS_TO_METERS } from '../utils/unitConversions.js'; // Import conversion factor
 
 let currentHoleObjects = []; // To keep track of objects added for the hole
 let currentFlagPosition = null; // Store the flag position in meters (Vector3)

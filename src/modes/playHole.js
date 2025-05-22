@@ -4,7 +4,8 @@ import * as holeGenerator from '../holeGenerator.js';
 import { loadPlayHoleState, savePlayHoleState, clearPlayHoleState } from '../gameLogic/persistentGameState.js';
 import * as visuals from '../visuals.js'; // To trigger drawing
 import { setShotType, getCurrentShotType } from '../gameLogic/state.js'; // Import setShotType and getCurrentShotType
-import { YARDS_TO_METERS, BALL_RADIUS } from '../visuals/core.js'; // For calculations
+import { BALL_RADIUS } from '../visuals/core.js'; // For calculations
+import { YARDS_TO_METERS } from '../utils/unitConversions.js'; // Import conversion constant
 
 // --- State ---
 let currentHoleLayout = null;

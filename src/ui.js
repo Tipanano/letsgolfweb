@@ -1,5 +1,5 @@
 import { clubs, defaultPlayerBag } from './clubs.js'; // Import club data and defaultPlayerBag
-import { YARDS_TO_METERS } from './visuals/core.js'; // Import conversion constant (Corrected Path)
+import { metersToYards, YARDS_TO_METERS } from './utils/unitConversions.js'; // Import conversion utilities
 import { getWind, getTemperature } from './gameLogic/state.js'; // Import environment state getters (Corrected Path)
 import { clearPlayHoleState } from './gameLogic/persistentGameState.js';
 
@@ -401,17 +401,24 @@ export function updateResultDisplay(resultData) {
     faceToPathText.textContent = formatNum(resultData.faceAngleRelPath, 1); // Added Face-to-Path
     backSpinText.textContent = formatNum(resultData.backSpin, 0);
     sideSpinText.textContent = formatNum(resultData.sideSpin, 0);
-    peakHeightText.textContent = formatNum(resultData.peakHeight, 1);
-    carryDistanceText.textContent = formatNum(resultData.carryDistance, 1);
+    
+    // Convert distances from meters to yards for display
+    const peakHeightYards = resultData.peakHeight ? metersToYards(resultData.peakHeight) : undefined;
+    const carryDistanceYards = resultData.carryDistance ? metersToYards(resultData.carryDistance) : undefined;
+    const rolloutDistanceYards = resultData.rolloutDistance ? metersToYards(resultData.rolloutDistance) : undefined;
+    const totalDistanceYards = resultData.totalDistance ? metersToYards(resultData.totalDistance) : undefined;
+    
+    peakHeightText.textContent = formatNum(peakHeightYards, 1);
+    carryDistanceText.textContent = formatNum(carryDistanceYards, 1);
     // Added rollout and total distance display
-    rolloutDistanceText.textContent = formatNum(resultData.rolloutDistance, 1);
-    totalDistanceText.textContent = formatNum(resultData.totalDistance, 1);
+    rolloutDistanceText.textContent = formatNum(rolloutDistanceYards, 1);
+    totalDistanceText.textContent = formatNum(totalDistanceYards, 1);
     launchAngleText.textContent = formatNum(resultData.launchAngle, 1); // Added Launch Angle display
 
     // Populate and show the shot summary widget
     if (shotSummaryWidget && summaryCarrySpan && summaryRollSpan) {
-        summaryCarrySpan.textContent = formatNum(resultData.carryDistance, 1);
-        summaryRollSpan.textContent = formatNum(resultData.rolloutDistance, 1);
+        summaryCarrySpan.textContent = formatNum(carryDistanceYards, 1);
+        summaryRollSpan.textContent = formatNum(rolloutDistanceYards, 1);
         shotSummaryWidget.style.display = 'block'; // Or 'flex' if styled with flex
     }
 
@@ -876,7 +883,7 @@ export function displayDownswingFeedbackWindows(rotationStartMs, rotationWidthMs
  * Updates the text content of the elements within the visual info overlay.
  * @param {number | string} holeNum - The current hole number.
  * @param {number | string} par - The par for the current hole.
- * @param {number | string} distToFlag - The distance to the flag in yards.
+ * @param {number | string} distToFlag - The distance to the flag in meters.
  * @param {number | string} shotNum - The current shot number for the hole.
  * @param {number | string} score - The current score relative to par for the hole.
  * @param {string} [lie='N/A'] - The current lie of the ball.
@@ -926,7 +933,9 @@ export function updateVisualOverlayInfo(mode, { holeNum = 'N/A', par = 'N/A', di
         if (overlayForScoreTextSpan) overlayForScoreTextSpan.textContent = forScoreText;
 
         // Update Top Right (Distance to Flag)
-        if (overlayDistFlagSpan) overlayDistFlagSpan.textContent = formatNum(distToFlag, 0);
+        // Convert from meters to yards if needed (check if distToFlag is already in yards)
+        const distToFlagYards = (typeof distToFlag === 'number' && distToFlag > 0) ? metersToYards(distToFlag) : distToFlag;
+        if (overlayDistFlagSpan) overlayDistFlagSpan.textContent = formatNum(distToFlagYards, 0);
 
         // Update Bottom Left (Play Hole)
         if (mode === 'play-hole') {
@@ -937,7 +946,9 @@ export function updateVisualOverlayInfo(mode, { holeNum = 'N/A', par = 'N/A', di
 
     } else if (mode === 'range') {
         // Update Top Left (Range)
-        if (overlayLastShotDistSpan) overlayLastShotDistSpan.textContent = formatNum(lastShotDist, 1);
+        // Convert from meters to yards if needed
+        const lastShotDistYards = (typeof lastShotDist === 'number' && lastShotDist > 0) ? metersToYards(lastShotDist) : lastShotDist;
+        if (overlayLastShotDistSpan) overlayLastShotDistSpan.textContent = formatNum(lastShotDistYards, 1);
         if (overlayBackSpinSpan) overlayBackSpinSpan.textContent = formatNum(backSpin, 0);
         if (overlaySideSpinSpan) overlaySideSpinSpan.textContent = formatNum(sideSpin, 0);
 
@@ -1064,11 +1075,12 @@ const distanceLabelClass = 'measurement-distance-label'; // CSS class for stylin
 /**
  * Creates or updates an HTML element to display distance text at a specific screen position.
  * @param {string} id - Unique ID for the label element (e.g., 'dist-label-ball-click').
- * @param {string} text - The text content (e.g., '150.5 yd').
+ * @param {string|number} text - The text content (e.g., '150.5 yd' or a number in meters to be converted).
  * @param {number} screenX - The X coordinate on the screen.
  * @param {number} screenY - The Y coordinate on the screen.
+ * @param {boolean} [convertToYards=true] - Whether to convert the text from meters to yards if it's a number.
  */
-export function createOrUpdateDistanceLabel(id, text, screenX, screenY) {
+export function createOrUpdateDistanceLabel(id, text, screenX, screenY, convertToYards = true) {
     let labelElement = document.getElementById(id);
 
     if (!labelElement) {
@@ -1088,7 +1100,13 @@ export function createOrUpdateDistanceLabel(id, text, screenX, screenY) {
         distanceLabelContainer.appendChild(labelElement);
     }
 
-    labelElement.textContent = text;
+    // Convert to yards if text is a number and convertToYards is true
+    let displayText = text;
+    if (convertToYards && typeof text === 'number') {
+        const yards = metersToYards(text);
+        displayText = `${yards.toFixed(1)} yd`;
+    }
+    labelElement.textContent = displayText;
     // Position the label centered horizontally above the point, offset slightly vertically
     labelElement.style.left = `${screenX}px`;
     labelElement.style.top = `${screenY + 30}px`; // Adjust vertical offset as needed
