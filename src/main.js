@@ -21,7 +21,7 @@ const AVAILABLE_HOLE_FILES = [ // This would ideally be fetched or dynamically d
 ];
 
 // --- Game Modes ---
-const GAME_MODES = {
+export const GAME_MODES = {
     RANGE: 'range',
     CLOSEST_TO_FLAG: 'closest-to-flag',
     PLAY_HOLE: 'play-hole',
@@ -44,7 +44,7 @@ async function switchGameToHole(holeFileName) {
 
 
 // Function to change the game mode
-async function setGameMode(newMode, initialHoleName = null) { // Made async, added initialHoleName
+export async function setGameMode(newMode, initialHoleName = null) { // Made async, added initialHoleName
     if (!Object.values(GAME_MODES).includes(newMode)) {
         console.error(`Attempted to switch to invalid game mode: ${newMode}`);
         return;
@@ -283,7 +283,11 @@ function handleShotCompletion(shotData) {
     // 3. Update Game Mode Logic (if applicable)
     let modeHandledStatusUpdate = false;
     if (currentMode === GAME_MODES.CLOSEST_TO_FLAG) {
-        closestToFlag.handleShotResult(shotData);
+        const distanceResult = closestToFlag.handleShotResult(shotData);
+        if (distanceResult) {
+            shotData.distanceFromHoleMeters = distanceResult.distanceFromHoleMeters;
+            shotData.distanceFromHoleYards = distanceResult.distanceFromHoleYards;
+        }
         // if (closestToFlag.isModeComplete()) modeHandledStatusUpdate = true; // Example if CTF sets a final status
     } else if (currentMode === GAME_MODES.PLAY_HOLE) {
         playHole.handleShotResult(shotData);

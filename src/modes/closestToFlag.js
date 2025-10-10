@@ -24,6 +24,12 @@ export function initializeMode() {
     ui.resetClosestToFlagDisplay(); // Reset display first
     ui.updateTargetDistanceDisplay(targetDistanceYards); // Show the target distance in yards
 
+    // Update visual overlay info with distance to flag and lie
+    ui.updateVisualOverlayInfo('closest-to-flag', {
+        distToFlag: targetDistanceYards,
+        lie: 'Tee'
+    });
+
     // Visuals switch is handled by main.js
     // visuals.switchToTargetView(targetDistanceYards);
 
@@ -64,6 +70,12 @@ export function handleShotResult(shotData) {
     // Update UI with result (convert meters to yards for display)
     const bestDistanceYards = metersToYards(bestDistanceToHoleMeters);
     ui.updateClosestToFlagResult(distanceFromHoleYards, bestDistanceYards, shotsTaken);
+
+    // Return the distance for multiplayer to send to server
+    return {
+        distanceFromHoleMeters,
+        distanceFromHoleYards
+    };
 
     // TODO: Decide if the game ends (e.g., after 1 shot, or multiple)
     // For now, let it continue until mode is switched.

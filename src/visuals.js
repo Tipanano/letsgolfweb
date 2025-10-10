@@ -8,6 +8,7 @@ import { getCurrentShotType } from './gameLogic.js'; // Import shot type getter
 import { setShotDirectionAngle, getCurrentTargetLineAngle, getShotDirectionAngle } from './gameLogic/state.js'; // Import state setter for angle
 import { getCurrentGameMode } from './main.js'; // Import game mode getter
 import { YARDS_TO_METERS } from './utils/unitConversions.js'; // Import conversion constant
+import * as multiplayerManager from './multiplayerManager.js'; // Import multiplayer manager
 
 // Store references from core visuals if needed
 let coreScene;
@@ -283,6 +284,9 @@ export function animateBallFlightWithLanding(shotData) {
     const onAnimationComplete = () => {
         console.log("Ball flight animation complete. Handling landing.");
         handleLandingAnimation(shotData);
+
+        // Notify multiplayer manager that ball has stopped, pass shot data
+        multiplayerManager.onBallStopped(shotData);
     };
 
     // Always use 3D animation now

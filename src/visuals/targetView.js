@@ -107,6 +107,8 @@ function createTargetElements() {
     // Add the whole group to the main scene
     scene.add(targetGroup);
     console.log(`Target elements created/updated at Z = ${targetZ.toFixed(1)}m`);
+    console.log(`✅ Target group added to scene. Children count: ${targetGroup.children.length}`);
+    console.log(`📦 Scene now has ${scene.children.length} children total`);
 }
 
 // Shows the target elements (creates if needed)

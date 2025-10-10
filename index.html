@@ -46,6 +46,17 @@
         <button id="switch-hole-button" style="position: absolute; top: 50px; right: 10px; z-index: 1001;">Switch Hole</button>
         <button id="reset-game-data-button" style="position: absolute; top: 10px; right: 10px; z-index: 1001; background-color: #ffdddd; border-color: #ffaaaa;">Reset Game Data</button>
 
+        <!-- Multiplayer Shot Timer - Now using top center status display instead -->
+
+        <!-- Multiplayer Scoreboard (Hidden by default, shown during multiplayer) -->
+        <div id="multiplayer-scoreboard" style="display: none; position: absolute; top: 100px; left: 10px; background: rgba(255, 255, 255, 0.95); border: 2px solid #4CAF50; padding: 15px; border-radius: 8px; z-index: 1000; min-width: 220px; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
+            <h3 style="margin: 0 0 10px 0; color: #4CAF50; font-size: 1.1em;">Multiplayer</h3>
+            <div id="multiplayer-player-list" style="font-size: 0.95em;">
+                <!-- Player scores will be added here -->
+            </div>
+            <button id="play-again-btn" style="display: none; width: 100%; margin-top: 10px; padding: 8px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Play Again</button>
+        </div>
+
         <!-- Closest to Flag Info Panel (Hidden by default) -->
         <div id="closest-to-flag-info" class="mode-info-panel">
         <h2>Closest to the Flag</h2>

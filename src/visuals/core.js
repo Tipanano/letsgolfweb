@@ -280,6 +280,10 @@ function animate(timestamp) {
     // Determine which camera to use for rendering
     const activeRenderCamera = MeasurementView.isViewActive() ? MeasurementView.getCamera() : camera;
     if (activeRenderCamera) { // Ensure there's a camera to render with
+        // Add occasional debug logging
+        if (Math.random() < 0.001) { // Log ~once per second at 60fps
+            console.log(`🎬 Rendering: scene children=${scene.children.length}, camera pos=(${camera.position.x.toFixed(1)}, ${camera.position.y.toFixed(1)}, ${camera.position.z.toFixed(1)})`);
+        }
         renderer.render(scene, activeRenderCamera);
     } else {
         // This case should ideally not happen if MeasurementView.init ensures its camera is created

@@ -31,6 +31,7 @@ import { getFlagPosition, setFlagstickVisibility } from '../visuals/holeView.js'
 import { getActiveCameraMode, setCameraBehindBall, snapFollowCameraToBall, CameraMode, removeTrajectoryLine, applyAimAngleToCamera, setCameraBehindBallLookingAtTarget, setInitialFollowCameraLookingAtTarget, setBallScale, resetStaticCameraZoom } from '../visuals/core.js'; // Import camera functions, line removal, aim application, setBallScale, AND resetStaticCameraZoom
 import { getSurfaceTypeAtPoint } from '../utils/gameUtils.js'; // Import surface checker
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js'; // Need THREE for Vector3
+import * as multiplayerManager from '../multiplayerManager.js'; // Import multiplayer manager
 
 // --- Sound Effects ---
 const regularShotSound = new Audio('assets/sounds/regular_shot.mp3');
@@ -46,6 +47,14 @@ puttShotSound.preload = 'auto'; // Preload the sound
 
 export function startBackswing() {
     if (getGameState() !== 'ready') return;
+
+    // Block second shot in multiplayer CTF mode
+    if (multiplayerManager.hasLocalPlayerShot()) {
+        console.log('Cannot start backswing: Player has already taken their shot in CTF mode');
+        updateStatus('You have already taken your shot!');
+        return;
+    }
+
     const shotType = getCurrentShotType();
 
     console.log(`Action: ${shotType}: Starting backswing`);
@@ -53,6 +62,9 @@ export function startBackswing() {
     setBackswingStartTime(performance.now());
     updateStatus(`${shotType.charAt(0).toUpperCase() + shotType.slice(1)} Backswing...`);
     resetUIForNewShot(); // Reset UI elements (preserving ball position)
+
+    // Notify multiplayer manager that shot has started
+    multiplayerManager.onShotStarted();
 
     // Start backswing bar animation
     startBackswingAnimation();
