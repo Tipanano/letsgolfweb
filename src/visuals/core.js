@@ -687,11 +687,12 @@ export function setCameraForTargetView(targetZ = 150, angleToUse = 0) { // Accep
     const pivot = BALL_PIVOT_POINT; // Assume aiming relative to the ball at the tee
 
     // Base position and lookAt relative to pivot (0,0,0) assuming 0 degrees
-    const cameraHeight = 20;
-    const cameraDistBack = 30; // Distance behind the target Z plane
-    // Base offsets assume target is down +Z from pivot at 0 degrees
-    const baseCamPosOffset = new THREE.Vector3(0, cameraHeight, targetZ - cameraDistBack);
-    const baseLookAtOffset = new THREE.Vector3(0, 0, targetZ / 1.5); // Look towards target Z
+    // Camera should be BEHIND the tee, looking TOWARD the target
+    const cameraHeight = 18;
+    const cameraDistBack = 12; // Distance behind the tee (negative Z) - closer to tee
+    // Position camera behind the tee at origin, looking down the fairway toward target
+    const baseCamPosOffset = new THREE.Vector3(0, cameraHeight, -cameraDistBack); // Behind tee (negative Z)
+    const baseLookAtOffset = new THREE.Vector3(0, 0, targetZ / 1.5); // Look toward target (positive Z)
 
     // Calculate absolute base positions before rotation
     const baseCamPos = pivot.clone().add(baseCamPosOffset);
@@ -706,6 +707,8 @@ export function setCameraForTargetView(targetZ = 150, angleToUse = 0) { // Accep
     currentStaticView = 'target'; // Update stored static view type
     // staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // REMOVED: Don't reset zoom on aim/view change
     console.log(`Static camera set to: Target View (Z=${targetZ.toFixed(1)}, Angle: ${angleToUse.toFixed(1)})`);
+    console.log(`🎥 Camera position: (${camera.position.x.toFixed(1)}, ${camera.position.y.toFixed(1)}, ${camera.position.z.toFixed(1)})`);
+    console.log(`🎥 Camera lookAt: (${rotatedLookAt.x.toFixed(1)}, ${rotatedLookAt.y.toFixed(1)}, ${rotatedLookAt.z.toFixed(1)})`);
     updateStaticCameraView(); // Apply existing zoom level to new view
 }
 
@@ -995,10 +998,11 @@ function updateStaticCameraView() {
         case 'target':
             // Use stored target Z for target view base calculation
             const targetZ = currentTargetZ !== undefined ? currentTargetZ : 150;
-            const cameraHeightTarget = 20;
-            const cameraDistBackTarget = 30;
-            baseCamPosOffset.set(0, cameraHeightTarget, targetZ - cameraDistBackTarget);
-            baseLookAtOffset.set(0, 0, targetZ / 1.5);
+            const cameraHeightTarget = 18;
+            const cameraDistBackTarget = 12; // Closer to tee
+            // Camera should be BEHIND the tee (negative Z), looking TOWARD the target
+            baseCamPosOffset.set(0, cameraHeightTarget, -cameraDistBackTarget); // Behind tee
+            baseLookAtOffset.set(0, 0, targetZ / 1.5); // Look toward target
             break;
         case 'chip':
         case 'putt':

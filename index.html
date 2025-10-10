@@ -19,6 +19,14 @@
             <button id="mode-btn-closest">Closest to Flag</button>
             <button id="mode-btn-hole">Play Hole</button>
         </div>
+        <!-- Multiplayer -->
+        <div id="multiplayer-section" style="background: #e8f5e9; padding: 10px; margin-bottom: 15px; border-radius: 5px;">
+            <strong>Multiplayer (Beta)</strong><br>
+            <button id="test-connection-btn">Test Connection</button>
+            <button id="host-game-btn">Host Game</button>
+            <button id="join-game-btn">Join Game</button>
+            <div id="connection-status" style="margin-top: 5px; font-size: 0.9em;">Not connected</div>
+        </div>
         <!-- User Authentication Placeholder -->
         <div id="user-auth-placeholder" style="background: #eee; padding: 10px; margin-bottom: 15px; border-radius: 5px;">
             <strong>User Account (Placeholder)</strong><br>
@@ -227,6 +235,40 @@
     </div>
 
     </div> <!-- End #game-view -->
+
+    <!-- Multiplayer Lobby -->
+    <div id="multiplayer-lobby" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; border: 2px solid #4CAF50; padding: 30px; border-radius: 10px; z-index: 2000; min-width: 400px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+        <h2 style="margin-top: 0;">Multiplayer Lobby</h2>
+        <div style="background: #f5f5f5; padding: 10px; border-radius: 5px; margin-bottom: 15px;">
+            <strong>Room Code:</strong> <span id="lobby-room-code" style="font-size: 1.5em; color: #4CAF50; font-weight: bold;">------</span>
+            <button id="copy-room-code" style="margin-left: 10px; font-size: 0.9em;">Copy</button>
+        </div>
+
+        <div style="margin-bottom: 15px;">
+            <strong>Players:</strong>
+            <div id="lobby-player-list" style="background: #fff; border: 1px solid #ddd; padding: 10px; margin-top: 5px; border-radius: 5px; min-height: 80px;">
+                <!-- Players will be added here -->
+            </div>
+        </div>
+
+        <div style="margin-bottom: 15px;">
+            <strong>Mode:</strong> <span id="lobby-game-mode">Closest to Flag</span><br>
+            <strong>Target:</strong> <span id="lobby-target-distance">150</span> yards
+        </div>
+
+        <div style="text-align: center;">
+            <button id="lobby-ready-btn" style="background: #4CAF50; color: white; padding: 10px 20px; font-size: 1.1em; border: none; border-radius: 5px; cursor: pointer; margin-right: 10px;">Ready</button>
+            <button id="lobby-start-btn" style="background: #2196F3; color: white; padding: 10px 20px; font-size: 1.1em; border: none; border-radius: 5px; cursor: pointer; display: none;">Start Game</button>
+            <button id="lobby-leave-btn" style="background: #f44336; color: white; padding: 10px 20px; font-size: 1.1em; border: none; border-radius: 5px; cursor: pointer;">Leave</button>
+        </div>
+
+        <div id="lobby-status" style="margin-top: 15px; text-align: center; color: #666; font-style: italic;">
+            Waiting for players...
+        </div>
+    </div>
+
+    <!-- Socket.IO Client -->
+    <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
 
     <script type="module" src="src/main.js"></script>
     <script type="module" src="src/tools.js"></script>

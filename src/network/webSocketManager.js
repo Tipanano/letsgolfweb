@@ -1,7 +1,8 @@
 // src/network/webSocketManager.js
+// Using Socket.IO client (CDN or npm install socket.io-client)
 
-// Placeholder for the WebSocket server URL. This will be configured later.
-const WEBSOCKET_URL = 'ws://your-server-address.com/ws'; // Replace with your actual WebSocket server URL
+// Socket.IO server URL - update for production
+const WEBSOCKET_URL = 'http://localhost:3001';
 
 let socket = null;
 let onMessageCallback = null; // Callback for general message handling
@@ -18,122 +19,180 @@ let onPlayerLeftCallback = null;
 let onGameStartCallback = null;
 let onGameStateUpdateCallback = null; // For more general game state sync
 
+// Import Socket.IO client (will be loaded from CDN in HTML)
+// If using npm: import { io } from 'socket.io-client';
+
 /**
- * Connects to the WebSocket server for a given game session.
+ * Connects to the Socket.IO server for a given game session.
  * @param {string} sessionId - The ID of the game session to connect to.
  * @param {string} idToken - The Firebase ID token for authentication.
  */
 export function connect(sessionId, idToken) {
-    if (socket && socket.readyState === WebSocket.OPEN) {
-        console.warn('WebSocket is already connected.');
+    if (socket && socket.connected) {
+        console.warn('Socket.IO is already connected.');
         return;
     }
 
-    const url = `${WEBSOCKET_URL}?sessionId=${sessionId}&token=${idToken}`;
-    socket = new WebSocket(url);
+    // Connect to Socket.IO server
+    socket = window.io(WEBSOCKET_URL, {
+        auth: {
+            token: idToken
+        }
+    });
 
-    socket.onopen = (event) => {
-        console.log('WebSocket connection established.');
+    socket.on('connect', () => {
+        console.log('Socket.IO connection established:', socket.id);
+
+        // Join the game session room
+        socket.emit('join-session', { sessionId, playerId: idToken });
+
         if (onOpenCallback) {
-            onOpenCallback(event);
+            onOpenCallback();
         }
-    };
+    });
 
-    socket.onmessage = (event) => {
-        console.log('WebSocket message received:', event.data);
-        try {
-            const message = JSON.parse(event.data);
-            if (onMessageCallback) {
-                onMessageCallback(message);
-            }
-            // Route message to specific handlers based on type
-            switch (message.type) {
-                case 'playerShot':
-                    if (onPlayerShotCallback) onPlayerShotCallback(message.payload);
-                    break;
-                case 'turnChange':
-                    if (onTurnChangeCallback) onTurnChangeCallback(message.payload);
-                    break;
-                case 'chatMessage':
-                    if (onChatMessageCallback) onChatMessageCallback(message.payload);
-                    break;
-                case 'playerJoined':
-                    if (onPlayerJoinedCallback) onPlayerJoinedCallback(message.payload);
-                    break;
-                case 'playerLeft':
-                    if (onPlayerLeftCallback) onPlayerLeftCallback(message.payload);
-                    break;
-                case 'gameStart':
-                    if (onGameStartCallback) onGameStartCallback(message.payload);
-                    break;
-                case 'gameStateUpdate':
-                     if (onGameStateUpdateCallback) onGameStateUpdateCallback(message.payload);
-                     break;
-                default:
-                    console.warn('Received unknown WebSocket message type:', message.type);
-            }
-        } catch (error) {
-            console.error('Error parsing WebSocket message or in callback:', error);
+    // Listen for specific Socket.IO events from server
+    socket.on('player:joined', (data) => {
+        console.log('Player joined:', data);
+        if (onPlayerJoinedCallback) onPlayerJoinedCallback(data);
+    });
+
+    socket.on('player:left', (data) => {
+        console.log('Player left:', data);
+        if (onPlayerLeftCallback) onPlayerLeftCallback(data);
+    });
+
+    socket.on('shot:received', (data) => {
+        console.log('Shot received:', data);
+        if (onPlayerShotCallback) onPlayerShotCallback(data);
+    });
+
+    socket.on('turn:changed', (data) => {
+        console.log('Turn changed:', data);
+        if (onTurnChangeCallback) onTurnChangeCallback(data);
+    });
+
+    socket.on('game:stateUpdate', (data) => {
+        console.log('🔵 WebSocket received game:stateUpdate event:', data);
+        if (onGameStateUpdateCallback) {
+            console.log('✅ Calling onGameStateUpdateCallback');
+            onGameStateUpdateCallback(data);
+        } else {
+            console.warn('⚠️ No onGameStateUpdateCallback registered!');
         }
-    };
+    });
 
-    socket.onclose = (event) => {
-        console.log('WebSocket connection closed.', event.code, event.reason);
+    socket.on('game:started', (data) => {
+        console.log('Game started:', data);
+        if (onGameStartCallback) onGameStartCallback(data);
+    });
+
+    socket.on('chat:message', (data) => {
+        console.log('Chat message:', data);
+        if (onChatMessageCallback) onChatMessageCallback(data);
+    });
+
+    socket.on('error', (error) => {
+        console.error('Socket.IO error:', error);
+        if (onErrorCallback) onErrorCallback(error);
+    });
+
+    socket.on('disconnect', (reason) => {
+        console.log('Socket.IO disconnected:', reason);
         if (onCloseCallback) {
-            onCloseCallback(event);
+            onCloseCallback(reason);
         }
-        socket = null; // Clear the socket reference
-    };
+    });
 
-    socket.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        if (onErrorCallback) {
-            onErrorCallback(error);
+    // Listen for player:readyStatus event
+    socket.on('player:readyStatus', (data) => {
+        console.log('Player ready status:', data);
+        if (customEventCallbacks['player:readyStatus']) {
+            customEventCallbacks['player:readyStatus'](data);
         }
-    };
+    });
+
+    // Listen for game:canStart event
+    socket.on('game:canStart', (data) => {
+        console.log('Game can start:', data);
+        if (customEventCallbacks['game:canStart']) {
+            customEventCallbacks['game:canStart'](data);
+        }
+    });
+}
+
+// Storage for custom event callbacks
+const customEventCallbacks = {};
+
+/**
+ * Sets a callback for custom events not covered by standard callbacks
+ * @param {string} eventName - The event name
+ * @param {function} callback - The callback function
+ */
+export function setOnCustomEventCallback(eventName, callback) {
+    customEventCallbacks[eventName] = callback;
 }
 
 /**
- * Sends a message over the WebSocket connection.
- * @param {object} message - The message object to send. Must be serializable to JSON.
+ * Sends player shot data to the server.
+ * @param {object} shotData - The shot data (position, club, etc.).
  */
-function sendMessage(message) {
-    if (socket && socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify(message));
+export function sendShotData(shotData) {
+    if (socket && socket.connected) {
+        socket.emit('player:shot', shotData);
     } else {
-        console.error('WebSocket is not connected or not open. Cannot send message.');
+        console.error('Socket.IO is not connected. Cannot send shot.');
     }
-}
-
-/**
- * Sends player shot input parameters to the server.
- * @param {object} inputs - The shot input parameters (e.g., club, power, aim).
- */
-export function sendShotInputs(inputs) {
-    sendMessage({ type: 'shotInputs', payload: inputs });
 }
 
 /**
  * Sends a chat message to the server.
  * @param {string} text - The chat message text.
+ * @param {string} playerName - The player's name.
  */
-export function sendChatMessage(text) {
-    sendMessage({ type: 'chat', payload: { message: text } });
+export function sendChatMessage(text, playerName) {
+    if (socket && socket.connected) {
+        socket.emit('chat:message', { message: text, playerName });
+    } else {
+        console.error('Socket.IO is not connected. Cannot send message.');
+    }
 }
 
 /**
- * Closes the WebSocket connection.
+ * Marks the player as ready.
+ */
+export function sendPlayerReady() {
+    if (socket && socket.connected) {
+        socket.emit('player:ready');
+    } else {
+        console.error('Socket.IO is not connected. Cannot send ready status.');
+    }
+}
+
+/**
+ * Starts the game (host only).
+ */
+export function sendGameStart() {
+    if (socket && socket.connected) {
+        socket.emit('game:start');
+    } else {
+        console.error('Socket.IO is not connected. Cannot start game.');
+    }
+}
+
+/**
+ * Closes the Socket.IO connection.
  */
 export function disconnect() {
     if (socket) {
-        socket.close();
+        socket.disconnect();
+        socket = null;
     }
 }
 
 /**
  * Registers a callback function to handle incoming messages.
  * @param {function} callback - The function to call when a message is received.
- *                              It will be passed the parsed message object.
  */
 export function setOnMessageCallback(callback) {
     onMessageCallback = callback;
@@ -161,9 +220,9 @@ export function setOnGameStartCallback(callback) { onGameStartCallback = callbac
 export function setOnGameStateUpdateCallback(callback) { onGameStateUpdateCallback = callback; }
 
 /**
- * Checks if the WebSocket is currently connected.
+ * Checks if Socket.IO is currently connected.
  * @returns {boolean} True if connected, false otherwise.
  */
 export function isConnected() {
-    return socket && socket.readyState === WebSocket.OPEN;
+    return socket && socket.connected;
 }

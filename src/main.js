@@ -10,6 +10,7 @@ import * as environment from './gameLogic/environment.js'; // Import environment
 import * as closestToFlag from './modes/closestToFlag.js'; // Import the CTF mode logic
 import * as playHole from './modes/playHole.js'; // Import the Play Hole mode logic
 import { getRandomInRange } from './utils/gameUtils.js'; // Import getRandomInRange
+import { initMultiplayerUI } from './multiplayerTest.js'; // Import multiplayer test
 
 // --- Game Data ---
 const AVAILABLE_HOLE_FILES = [ // This would ideally be fetched or dynamically discovered
@@ -86,8 +87,9 @@ async function setGameMode(newMode, initialHoleName = null) { // Made async, add
         logic.resetSwing(); // Reset swing state for Range mode
         visuals.showBallAtAddress(); // Ensure ball is shown
     } else if (currentMode === GAME_MODES.CLOSEST_TO_FLAG) {
-        closestToFlag.initializeMode(); 
-        visuals.switchToTargetView(closestToFlag.getTargetDistance());
+        const targetDistance = closestToFlag.initializeMode();
+        console.log('CTF Mode: Target distance from initializeMode:', targetDistance);
+        visuals.switchToTargetView(targetDistance);
         visuals.showBallAtAddress(); // Ensure ball is shown
     } else if (currentMode === GAME_MODES.PLAY_HOLE) {
         // If initialHoleName is provided (e.g. from switchGameToHole calling setGameMode), use it.
@@ -222,6 +224,9 @@ ui.addBackToMenuClickListener(handleBackToMenu);
 // --- Initial View ---
 // Show the main menu after all initializations are complete
 ui.showMainMenu();
+
+// Initialize multiplayer UI
+initMultiplayerUI();
 
 
 // Add global key listeners that call the input handler

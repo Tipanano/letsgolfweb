@@ -29,6 +29,8 @@ export function initializeMode() {
 
     // TODO: Reset player state if needed (e.g., allow swing)
     // logic.resetSwing(); // Might be called by main.js already
+
+    return targetDistanceYards; // Return the target distance for main.js to use
 }
 
 export function terminateMode() {

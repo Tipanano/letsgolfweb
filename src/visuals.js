@@ -7,6 +7,7 @@ import * as MeasurementView from './visuals/measurementView.js'; // Import the n
 import { getCurrentShotType } from './gameLogic.js'; // Import shot type getter
 import { setShotDirectionAngle, getCurrentTargetLineAngle, getShotDirectionAngle } from './gameLogic/state.js'; // Import state setter for angle
 import { getCurrentGameMode } from './main.js'; // Import game mode getter
+import { YARDS_TO_METERS } from './utils/unitConversions.js'; // Import conversion constant
 
 // Store references from core visuals if needed
 let coreScene;
@@ -104,6 +105,7 @@ export function switchToRangeView(initialScene = null) {
 
 // Accept scene as optional parameter for initial call (though less likely needed here)
 export function switchToTargetView(targetDistance, initialScene = null) {
+    console.log(`🔵 switchToTargetView called: targetDistance=${targetDistance}, currentVisualMode=${currentVisualMode}`);
     const sceneToUse = initialScene || coreScene; // Use passed scene if available, else module scope
      if (!sceneToUse) {
         console.error("switchToTargetView: Scene is not available!");
@@ -115,6 +117,10 @@ export function switchToTargetView(targetDistance, initialScene = null) {
          console.log("Already in Target View, updating distance...");
          TargetVisuals.setTargetDistance(targetDistance);
          TargetVisuals.drawTargetView(); // Redraw with new distance
+         // IMPORTANT: Also update the camera with the new distance!
+         const targetZ = targetDistance * YARDS_TO_METERS;
+         console.log(`🎯 Early return path: targetDistance=${targetDistance}, targetZ=${targetZ}`);
+         CoreVisuals.setCameraForTargetView(targetZ);
          return;
     }
 
@@ -127,9 +133,12 @@ export function switchToTargetView(targetDistance, initialScene = null) {
     TargetVisuals.setTargetDistance(targetDistance);
     TargetVisuals.drawTargetView(); // Create/show target elements
     // Set the camera specifically for the target view
-    const targetZ = targetDistance * CoreVisuals.YARDS_TO_METERS; // Use constant from core
+    const targetZ = targetDistance * YARDS_TO_METERS;
+    console.log(`🎯 switchToTargetView: targetDistance=${targetDistance}, targetZ=${targetZ}`);
     CoreVisuals.setCameraForTargetView(targetZ); // Set the static target view
+    console.log(`🎯 After setCameraForTargetView, before applyStaticCameraView`);
     CoreVisuals.applyStaticCameraView('target'); // Ensure mode is static and view is applied
+    console.log(`🎯 After applyStaticCameraView`);
     //CoreVisuals.hideBall(); // Hide the ball at address in target view? Or reposition?
 }
 
@@ -378,10 +387,10 @@ export function activateFollowBallCamera() {
 export function activateReverseCamera() {
     MeasurementView.deactivate(); // Ensure measurement view is off
     console.log("Activating Reverse Angle Camera");
-    let positionZ = 300 * CoreVisuals.YARDS_TO_METERS; // Default 300 yards for Range
+    let positionZ = 300 * YARDS_TO_METERS; // Default 300 yards for Range
 
     if (currentVisualMode === VISUAL_MODES.TARGET && currentTargetDistanceYards > 0) {
-        positionZ = currentTargetDistanceYards * CoreVisuals.YARDS_TO_METERS;
+        positionZ = currentTargetDistanceYards * YARDS_TO_METERS;
         console.log(`Using target distance for reverse camera: ${currentTargetDistanceYards} yards`);
     } else {
         console.log("Using default 300 yards for reverse camera.");

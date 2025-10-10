@@ -1,7 +1,7 @@
 // src/network/apiClient.js
 
-// Placeholder for the server's base URL. This will be configured later.
-const BASE_URL = 'http://your-server-address.com/api'; // Replace with your actual server URL
+// Server URL - update this for production
+const BASE_URL = 'http://localhost:3001/api';
 
 /**
  * A helper function to make authenticated API requests.
@@ -67,7 +67,7 @@ export async function createGameSession(idToken, gameSettings) {
  * @returns {Promise<object>} Server response, e.g., { sessionId, courseData, players }.
  */
 export async function joinGameSession(idToken, gameCode) {
-    return fetchWithAuth('/game/join', 'POST', { gameCode }, idToken);
+    return fetchWithAuth('/game/join', 'POST', { roomCode: gameCode }, idToken);
 }
 
 /**
