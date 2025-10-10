@@ -5,6 +5,7 @@ import * as ui from './ui.js';
 import * as shotTimer from './shotTimer.js';
 import { setGameMode, GAME_MODES } from './main.js';
 import * as visuals from './visuals.js';
+import { playerManager } from './playerManager.js';
 
 // State
 let currentSessionId = null;
@@ -59,14 +60,16 @@ export function init() {
 
 export async function hostGame(mode = 'closest-to-flag') {
     try {
-        localPlayerToken = generateDevToken();
-        localPlayerId = localPlayerToken;
+        // Use playerManager for ID and name
+        localPlayerId = playerManager.getPlayerId();
+        localPlayerToken = generateDevToken(); // Still use dev token for now
         gameMode = mode;
         isHost = true;
 
         const response = await apiClient.createGameSession(localPlayerToken, {
             maxPlayers: 4,
-            courseId: 'default'
+            courseId: 'default',
+            playerName: playerManager.getDisplayName()
         });
 
         currentSessionId = response.sessionId;
@@ -94,11 +97,12 @@ export async function hostGame(mode = 'closest-to-flag') {
 
 export async function joinGame(roomCode) {
     try {
-        localPlayerToken = generateDevToken();
-        localPlayerId = localPlayerToken;
+        // Use playerManager for ID and name
+        localPlayerId = playerManager.getPlayerId();
+        localPlayerToken = generateDevToken(); // Still use dev token for now
         isHost = false;
 
-        const response = await apiClient.joinGameSession(localPlayerToken, roomCode);
+        const response = await apiClient.joinGameSession(localPlayerToken, roomCode, playerManager.getDisplayName());
 
         currentSessionId = response.sessionId;
         currentRoomCode = roomCode;

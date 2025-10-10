@@ -1,7 +1,7 @@
 import * as ui from './ui.js';
 // Import specific functions, including updateEnvironmentDisplay
 // Added setAvailableHoleFiles and setOnHoleSelectedCallback
-import { showMainMenu, showGameView, addBackToMenuClickListener, updateEnvironmentDisplay, setAvailableHoleFiles, setOnHoleSelectedCallback } from './ui.js'; 
+import { showMainMenu, showGameView, addBackToMenuClickListener, updateEnvironmentDisplay, setAvailableHoleFiles, setOnHoleSelectedCallback } from './ui.js';
 import * as logic from './gameLogic.js'; // Game state and actions
 import * as visuals from './visuals.js';
 import * as inputHandler from './inputHandler.js'; // Import the new input handler
@@ -11,6 +11,7 @@ import * as closestToFlag from './modes/closestToFlag.js'; // Import the CTF mod
 import * as playHole from './modes/playHole.js'; // Import the Play Hole mode logic
 import { getRandomInRange } from './utils/gameUtils.js'; // Import getRandomInRange
 import { initMultiplayerUI } from './multiplayerTest.js'; // Import multiplayer test
+import { playerManager } from './playerManager.js'; // Import player manager
 
 // --- Game Data ---
 const AVAILABLE_HOLE_FILES = [ // This would ideally be fetched or dynamically discovered
@@ -112,6 +113,13 @@ export function getCurrentGameMode() {
 }
 
 // --- Initial Setup ---
+
+// Initialize player manager first (auto-creates guest if needed)
+await playerManager.init();
+console.log('Player initialized:', playerManager.getDisplayName());
+
+// Update UI with player info
+ui.updatePlayerDisplay(playerManager.getDisplayName(), playerManager.currentPlayer.playerType);
 
 // Create the club buttons first
 ui.createClubButtons();

@@ -64,10 +64,15 @@ export async function createGameSession(idToken, gameSettings) {
  * Joins an existing game session on the server.
  * @param {string} idToken - The Firebase ID token of the joining player.
  * @param {string} gameCode - The code to join the game session.
+ * @param {string} [playerName] - Optional player name.
  * @returns {Promise<object>} Server response, e.g., { sessionId, courseData, players }.
  */
-export async function joinGameSession(idToken, gameCode) {
-    return fetchWithAuth('/game/join', 'POST', { roomCode: gameCode }, idToken);
+export async function joinGameSession(idToken, gameCode, playerName = null) {
+    const body = { roomCode: gameCode };
+    if (playerName) {
+        body.playerName = playerName;
+    }
+    return fetchWithAuth('/game/join', 'POST', body, idToken);
 }
 
 /**

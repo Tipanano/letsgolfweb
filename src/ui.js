@@ -1309,3 +1309,39 @@ if (closeHoleSelectPopupButton) {
         hideHoleSelectPopup();
     });
 }
+
+/**
+ * Update player display in main menu
+ * @param {string} playerName - The player's display name
+ * @param {string} playerType - 'guest' or 'registered'
+ */
+export function updatePlayerDisplay(playerName, playerType = 'guest') {
+    const playerNameElement = document.getElementById('player-name');
+    const playerTypeBadge = document.getElementById('player-type-badge');
+    const registerBtn = document.getElementById('register-btn-placeholder');
+    const logoutBtn = document.getElementById('logout-btn');
+
+    if (playerNameElement) {
+        playerNameElement.textContent = playerName;
+    }
+
+    if (playerTypeBadge) {
+        if (playerType === 'registered') {
+            playerTypeBadge.textContent = 'REGISTERED';
+            playerTypeBadge.style.backgroundColor = '#4CAF50';
+            playerTypeBadge.style.color = 'white';
+        } else {
+            playerTypeBadge.textContent = 'GUEST';
+            playerTypeBadge.style.backgroundColor = '#9E9E9E';
+            playerTypeBadge.style.color = 'white';
+        }
+    }
+
+    // Show/hide buttons based on player type
+    if (registerBtn) {
+        registerBtn.style.display = playerType === 'guest' ? 'inline-block' : 'none';
+    }
+    if (logoutBtn) {
+        logoutBtn.style.display = playerType === 'registered' ? 'inline-block' : 'none';
+    }
+}
