@@ -67,10 +67,13 @@ export async function createGameSession(idToken, gameSettings) {
  * @param {string} [playerName] - Optional player name.
  * @returns {Promise<object>} Server response, e.g., { sessionId, courseData, players }.
  */
-export async function joinGameSession(idToken, gameCode, playerName = null) {
+export async function joinGameSession(idToken, gameCode, playerName = null, nanoAddress = null) {
     const body = { roomCode: gameCode };
     if (playerName) {
         body.playerName = playerName;
+    }
+    if (nanoAddress) {
+        body.nanoAddress = nanoAddress;
     }
     return fetchWithAuth('/game/join', 'POST', body, idToken);
 }

@@ -284,6 +284,7 @@
 
     <!-- Socket.IO Client -->
     <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
     <script type="module" src="src/main.js"></script>
     <script type="module" src="src/tools.js"></script>
@@ -296,5 +297,77 @@
         </div>
         <button id="close-hole-select-popup">Close</button>
     </div>
+
+    <!-- Nano Registration Modal -->
+    <div id="nano-auth-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 2000; justify-content: center; align-items: center;">
+        <div style="background: white; padding: 30px; border-radius: 10px; max-width: 500px; text-align: center; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+            <h2 id="nano-auth-title">Sign in with Nano</h2>
+            <div id="nano-auth-content">
+                <!-- Username input (registration only) -->
+                <div id="username-input-section" style="margin-bottom: 20px;">
+                    <label for="nano-username-input" style="display: block; margin-bottom: 8px; font-weight: bold;">Choose a username:</label>
+                    <input type="text" id="nano-username-input" placeholder="ProGolfer99" style="width: 100%; padding: 10px; font-size: 16px; border: 2px solid #ddd; border-radius: 5px;" />
+                    <button id="nano-username-submit" style="margin-top: 15px; padding: 12px 30px; background: #4CAF50; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; font-weight: bold;">Continue</button>
+                </div>
+
+                <!-- QR Code section (hidden initially) -->
+                <div id="qr-code-section" style="display: none;">
+                    <p style="margin-bottom: 15px; color: #666;">Send <strong>0.000001 NANO</strong> from your Nano wallet:</p>
+                    <div id="qr-code-container" style="margin: 20px auto; padding: 20px; background: white; border: 2px solid #4CAF50; border-radius: 10px; display: inline-block;">
+                        <!-- QR code will be inserted here -->
+                    </div>
+                    <p id="nano-address-display" style="font-family: monospace; font-size: 12px; word-break: break-all; background: #f5f5f5; padding: 10px; border-radius: 5px; margin: 15px 0;">nano_...</p>
+                    <p style="margin-top: 15px; color: #666; font-size: 14px;">
+                        <span id="auth-status-message">Waiting for payment...</span>
+                    </p>
+                    <p style="color: #999; font-size: 12px; margin-top: 10px;">Your payment will be automatically refunded!</p>
+                    <div id="auth-timer" style="margin-top: 10px; color: #666; font-size: 14px;">Expires in: <span id="auth-timer-countdown">5:00</span></div>
+                </div>
+            </div>
+            <button id="nano-auth-cancel" style="margin-top: 20px; padding: 10px 25px; background: #999; color: white; border: none; border-radius: 5px; cursor: pointer;">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Wagering/Escrow Modal -->
+    <div id="wager-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 2000; justify-content: center; align-items: center;">
+        <div style="background: white; padding: 30px; border-radius: 10px; max-width: 500px; text-align: center;">
+            <h2 id="wager-title">Wagering Game</h2>
+
+            <!-- Wager setup (for host) -->
+            <div id="wager-setup-section" style="display: none;">
+                <p>Create a wagering game where all players contribute Nano to a pot. Winner takes all!</p>
+                <label>Wager Amount (NANO):</label>
+                <input type="number" id="wager-amount-input" min="0.001" step="0.001" value="0.1" style="padding: 8px; margin: 10px 0; width: 200px;">
+                <br>
+                <button id="create-wager-game-btn" style="padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer; margin-top: 10px;">Create Wagering Game</button>
+                <button id="cancel-wager-setup-btn" style="padding: 10px 20px; background: #999; color: white; border: none; border-radius: 5px; cursor: pointer; margin-top: 10px; margin-left: 10px;">Cancel</button>
+            </div>
+
+            <!-- Payment section -->
+            <div id="wager-payment-section" style="display: none;">
+                <p id="wager-payment-message">Send <strong id="wager-amount-display">0.1 NANO</strong> to join the game:</p>
+                <div id="wager-qr-container" style="margin: 20px auto; padding: 20px; background: white; border: 2px solid #4CAF50; border-radius: 10px; display: inline-block;">
+                    <!-- QR code will be inserted here -->
+                </div>
+                <p id="wager-escrow-address" style="font-family: monospace; font-size: 12px; word-break: break-all; background: #f5f5f5; padding: 10px; border-radius: 5px; margin: 15px 0;">nano_...</p>
+                <button id="copy-wager-address-btn" style="padding: 8px 16px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer;">Copy Address</button>
+
+                <div style="margin-top: 20px; padding: 15px; background: #f5f5f5; border-radius: 5px;">
+                    <h3>Payment Status</h3>
+                    <div id="wager-player-status-list" style="text-align: left; margin-top: 10px;">
+                        <!-- Player payment status will be inserted here -->
+                    </div>
+                </div>
+
+                <p style="color: #666; font-size: 14px; margin-top: 15px;">
+                    <span id="wager-status-message">Waiting for all players to pay...</span>
+                </p>
+                <div id="wager-timer" style="margin-top: 10px; color: #666; font-size: 14px;">Expires in: <span id="wager-timer-countdown">10:00</span></div>
+            </div>
+
+            <button id="cancel-wager-btn" style="margin-top: 20px; padding: 10px 25px; background: #999; color: white; border: none; border-radius: 5px; cursor: pointer;">Cancel</button>
+        </div>
+    </div>
+
 </body>
 </html>

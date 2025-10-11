@@ -6,6 +6,7 @@ import * as shotTimer from './shotTimer.js';
 import { setGameMode, GAME_MODES } from './main.js';
 import * as visuals from './visuals.js';
 import { playerManager } from './playerManager.js';
+import { wageringManager } from './wageringManager.js';
 
 // State
 let currentSessionId = null;
@@ -20,6 +21,11 @@ let targetDistance = 150; // For CTF mode
 let currentPlayerIndex = -1; // Index of the player whose turn it is (-1 = not started)
 let isWatchingOtherPlayerShot = false; // Track if we're animating someone else's shot
 let isGameFinished = false; // Track if the game has finished
+
+// Wagering state
+let isWageringGame = false;
+let wagerAmount = null;
+let escrowStatus = null;
 
 // Mock token for development
 const generateDevToken = () => 'dev-token-' + Math.random().toString(36).substring(7);
@@ -56,9 +62,19 @@ export function init() {
 
     // Set up WebSocket callbacks
     setupWebSocketHandlers();
+
+    // Listen for wager-ready event (all players paid)
+    window.addEventListener('wager-ready', (event) => {
+        console.log('All players paid! Starting game...');
+        escrowStatus = 'ready';
+        wsManager.sendGameStart();
+    });
+
+    // Check for active game session on page load
+    checkAndRejoinActiveGame();
 }
 
-export async function hostGame(mode = 'closest-to-flag') {
+export async function hostGame(mode = 'closest-to-flag', settings = {}) {
     try {
         // Use playerManager for ID and name
         localPlayerId = playerManager.getPlayerId();
@@ -66,10 +82,17 @@ export async function hostGame(mode = 'closest-to-flag') {
         gameMode = mode;
         isHost = true;
 
+        // Store wagering state
+        isWageringGame = settings.wagerAmount ? true : false;
+        wagerAmount = settings.wagerAmount || null;
+
+        const player = playerManager.getPlayerData();
         const response = await apiClient.createGameSession(localPlayerToken, {
             maxPlayers: 4,
             courseId: 'default',
-            playerName: playerManager.getDisplayName()
+            playerName: playerManager.getDisplayName(),
+            wagerAmount: settings.wagerAmount || null,
+            hostNanoAddress: player.nanoAddress || null
         });
 
         currentSessionId = response.sessionId;
@@ -102,7 +125,13 @@ export async function joinGame(roomCode) {
         localPlayerToken = generateDevToken(); // Still use dev token for now
         isHost = false;
 
-        const response = await apiClient.joinGameSession(localPlayerToken, roomCode, playerManager.getDisplayName());
+        const player = playerManager.getPlayerData();
+        const response = await apiClient.joinGameSession(
+            localPlayerToken,
+            roomCode,
+            playerManager.getDisplayName(),
+            player.nanoAddress || null  // Pass Nano address for wagering games
+        );
 
         currentSessionId = response.sessionId;
         currentRoomCode = roomCode;
@@ -172,6 +201,10 @@ function setupWebSocketHandlers() {
             currentPlayerIndex = data.currentPlayerIndex;
             console.log('Starting turn index:', currentPlayerIndex);
         }
+
+        // Save active game session to localStorage for rejoin on refresh
+        saveActiveGameSession();
+
         hideLobby();
         startMultiplayerGame();
     });
@@ -266,10 +299,35 @@ function handleReadyClick() {
     updateStatus(isReady ? 'You are ready!' : 'Click ready when prepared');
 }
 
-function handleStartClick() {
+async function handleStartClick() {
     if (!isHost) return;
 
     console.log('Host starting game...');
+
+    // If this is a wagering game, show payment UI first
+    if (isWageringGame) {
+        console.log('Wagering game - initiating payment flow...');
+
+        // Collect all player Nano addresses
+        const playerAddresses = players
+            .map(p => p.nanoAddress)
+            .filter(addr => addr); // Filter out any null/undefined
+
+        // Validate all players are registered
+        const validation = wageringManager.validateAllPlayersRegistered(players);
+        if (!validation.valid) {
+            alert(`Cannot start wagering game. The following players must register with Nano:\n\n${validation.invalidPlayers.join('\n')}`);
+            return;
+        }
+
+        // Show payment UI for all players
+        await wageringManager.showPaymentUI(currentSessionId, playerAddresses);
+
+        // Game will start after wager-ready event (handled below)
+        return;
+    }
+
+    // Regular game - start immediately
     wsManager.sendGameStart();
 }
 
@@ -695,6 +753,102 @@ export function onPlayerTookShot() {
     console.log('Shot taken, timer stopped');
 }
 
+// Check for active game session on page load and attempt to rejoin
+async function checkAndRejoinActiveGame() {
+    const savedSession = loadActiveGameSession();
+    if (!savedSession) {
+        console.log('No active game session found');
+        return;
+    }
+
+    console.log('Found saved game session, attempting to rejoin:', savedSession);
+
+    try {
+        // Verify session still exists on server
+        const response = await fetch(`http://localhost:3001/api/game/session/${savedSession.sessionId}`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${savedSession.playerToken}`
+            }
+        });
+
+        if (!response.ok) {
+            console.log('Saved game session no longer valid, clearing');
+            clearActiveGameSession();
+            return;
+        }
+
+        const sessionData = await response.json();
+        console.log('Session still active on server, rejoining:', sessionData);
+
+        // Restore state
+        currentSessionId = savedSession.sessionId;
+        currentRoomCode = savedSession.roomCode;
+        localPlayerId = savedSession.playerId;
+        localPlayerToken = savedSession.playerToken;
+        isHost = savedSession.isHost;
+        gameMode = savedSession.gameMode;
+        isWageringGame = savedSession.isWageringGame;
+        wagerAmount = savedSession.wagerAmount;
+        players = sessionData.players;
+
+        // Reconnect WebSocket
+        wsManager.connect(currentSessionId, localPlayerToken);
+
+        // Show game UI (game is in progress)
+        hideLobby();
+        startMultiplayerGame();
+
+        updateStatus('Rejoined game!');
+        alert('Rejoined your active game!');
+
+    } catch (error) {
+        console.error('Error rejoining game:', error);
+        clearActiveGameSession();
+    }
+}
+
+// LocalStorage helpers for active game session
+function saveActiveGameSession() {
+    const sessionData = {
+        sessionId: currentSessionId,
+        roomCode: currentRoomCode,
+        playerId: localPlayerId,
+        playerToken: localPlayerToken,
+        isHost,
+        gameMode,
+        isWageringGame,
+        wagerAmount,
+        savedAt: Date.now()
+    };
+    localStorage.setItem('letsgolf_activeGame', JSON.stringify(sessionData));
+    console.log('Active game session saved to localStorage');
+}
+
+function loadActiveGameSession() {
+    const stored = localStorage.getItem('letsgolf_activeGame');
+    if (!stored) return null;
+
+    try {
+        const sessionData = JSON.parse(stored);
+        // Expire after 24 hours
+        if (Date.now() - sessionData.savedAt > 24 * 60 * 60 * 1000) {
+            clearActiveGameSession();
+            return null;
+        }
+        return sessionData;
+    } catch (error) {
+        console.error('Error loading active game session:', error);
+        return null;
+    }
+}
+
+function clearActiveGameSession() {
+    localStorage.removeItem('letsgolf_activeGame');
+    console.log('Active game session cleared from localStorage');
+}
+
 function resetState() {
     currentSessionId = null;
     currentRoomCode = null;
@@ -707,6 +861,7 @@ function resetState() {
     currentPlayerIndex = -1;
     isGameFinished = false;
     hideScoreboard();
+    clearActiveGameSession();
 }
 
 // Exports for other modules

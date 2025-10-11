@@ -15,15 +15,23 @@ class PlayerManager {
     if (stored) {
       // Existing player
       if (stored.playerType === 'registered') {
-        // Validate token
+        // Validate token expiry first
         if (this.isTokenExpired(stored.tokenExpiry)) {
           // Token expired, downgrade to guest
           console.log('Session expired, creating guest account');
           this.createGuestPlayer();
         } else {
-          // Restore registered player
-          this.currentPlayer = stored;
-          console.log('Restored registered player:', stored.username);
+          // Verify with server that user still exists
+          const isValid = await this.verifySessionWithServer(stored.sessionToken);
+          if (isValid) {
+            // Restore registered player
+            this.currentPlayer = stored;
+            console.log('Restored registered player:', stored.username);
+          } else {
+            // Server doesn't recognize user (server restart), downgrade to guest
+            console.log('User not found on server (server restart), creating guest account');
+            this.createGuestPlayer();
+          }
         }
       } else {
         // Guest player
@@ -180,6 +188,27 @@ class PlayerManager {
   }
 
   // Private helpers
+
+  async verifySessionWithServer(sessionToken) {
+    try {
+      const response = await fetch('http://localhost:3001/api/auth/verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sessionToken}`
+        }
+      });
+
+      if (response.ok) {
+        return true; // User exists on server
+      } else {
+        return false; // User not found or token invalid
+      }
+    } catch (error) {
+      console.error('Error verifying session with server:', error);
+      return false; // Assume invalid on error
+    }
+  }
 
   loadFromLocalStorage() {
     const stored = localStorage.getItem('golfGamePlayer');

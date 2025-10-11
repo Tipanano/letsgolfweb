@@ -12,6 +12,7 @@ import * as playHole from './modes/playHole.js'; // Import the Play Hole mode lo
 import { getRandomInRange } from './utils/gameUtils.js'; // Import getRandomInRange
 import { initMultiplayerUI } from './multiplayerTest.js'; // Import multiplayer test
 import { playerManager } from './playerManager.js'; // Import player manager
+import * as nanoAuth from './nanoAuth.js'; // Import Nano authentication
 
 // --- Game Data ---
 const AVAILABLE_HOLE_FILES = [ // This would ideally be fetched or dynamically discovered
@@ -235,6 +236,17 @@ ui.showMainMenu();
 
 // Initialize multiplayer UI
 initMultiplayerUI();
+
+// Initialize Nano authentication
+nanoAuth.init();
+
+// Hook up "Sign in with Nano" button
+const registerBtn = document.getElementById('register-btn-placeholder');
+if (registerBtn) {
+    registerBtn.addEventListener('click', () => {
+        nanoAuth.showRegistrationModal();
+    });
+}
 
 
 // Add global key listeners that call the input handler

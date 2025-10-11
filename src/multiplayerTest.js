@@ -1,11 +1,16 @@
 // Simple test UI for multiplayer
 import * as multiplayerManager from './multiplayerManager.js';
+import { wageringManager } from './wageringManager.js';
+import { playerManager } from './playerManager.js';
 
 export function initMultiplayerUI() {
     console.log('Initializing multiplayer UI...');
 
     // Initialize the multiplayer manager
     multiplayerManager.init();
+
+    // Initialize the wagering manager
+    wageringManager.init();
 
     // Test Connection button
     document.getElementById('test-connection-btn')?.addEventListener('click', async () => {
@@ -23,8 +28,29 @@ export function initMultiplayerUI() {
 
     // Host Game button
     document.getElementById('host-game-btn')?.addEventListener('click', async () => {
+        const player = playerManager.getPlayerData();
+
+        // Ask if they want wagering (only for registered players)
+        let wagerAmount = null;
+        if (player.type === 'registered') {
+            const wantWagering = confirm('Do you want to create a wagering game?\n\nAll players will need to pay a Nano wager to play. Winner takes all!');
+
+            if (wantWagering) {
+                // Show wager setup modal
+                const canWager = wageringManager.showWagerSetup();
+                if (!canWager) {
+                    return; // User not eligible for wagering
+                }
+
+                // Wait for user to set wager amount in modal
+                // The modal will close when they click "Create Wagering Game"
+                return; // The wager modal's "Create Wagering Game" button will handle the rest
+            }
+        }
+
+        // Create regular (non-wagering) game
         updateStatus('Creating game...');
-        const result = await multiplayerManager.hostGame('closest-to-flag');
+        const result = await multiplayerManager.hostGame('closest-to-flag', { wagerAmount: null });
         if (result) {
             updateStatus(`✅ Hosting! Code: ${result.roomCode}`);
         }
