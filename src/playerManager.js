@@ -78,7 +78,7 @@ class PlayerManager {
   /**
    * Upgrade guest to registered player (after Nano auth)
    */
-  async upgradeToRegistered(username, nanoAddress, sessionToken) {
+  async upgradeToRegistered(username, nanoAddress, sessionToken, linkedAddresses = null) {
     // Migrate guest stats to server
     const guestStats = this.currentPlayer.stats;
 
@@ -88,7 +88,9 @@ class PlayerManager {
     this.currentPlayer = {
       playerType: 'registered',
       username: username,
-      nanoAddress: nanoAddress,
+      nanoAddress: nanoAddress, // Primary address (for backwards compatibility)
+      linkedAddresses: linkedAddresses || [nanoAddress], // Array of all linked addresses (max 5)
+      // TODO: Add profile page UI to link additional addresses (payment verification required)
       sessionToken: sessionToken,
       tokenExpiry: Date.now() + (7 * 24 * 60 * 60 * 1000), // 7 days
       stats: guestStats, // Keep local cache
@@ -112,6 +114,24 @@ class PlayerManager {
    */
   isGuest() {
     return this.currentPlayer?.playerType === 'guest';
+  }
+
+  /**
+   * Get current player data
+   */
+  getPlayerData() {
+    return {
+      type: this.currentPlayer?.playerType || 'guest',
+      playerType: this.currentPlayer?.playerType || 'guest',
+      username: this.currentPlayer?.username || null,
+      nanoAddress: this.currentPlayer?.nanoAddress || null,
+      linkedAddresses: this.currentPlayer?.linkedAddresses || null, // Array of all linked addresses
+      sessionToken: this.currentPlayer?.sessionToken || null,
+      guestName: this.currentPlayer?.guestName || null,
+      guestId: this.currentPlayer?.guestId || null,
+      stats: this.currentPlayer?.stats || null,
+      preferences: this.currentPlayer?.preferences || null
+    };
   }
 
   /**

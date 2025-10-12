@@ -27,34 +27,20 @@ export function initMultiplayerUI() {
     });
 
     // Host Game button
-    document.getElementById('host-game-btn')?.addEventListener('click', async () => {
+    document.getElementById('host-game-btn')?.addEventListener('click', () => {
         const player = playerManager.getPlayerData();
 
-        // Ask if they want wagering (only for registered players)
-        let wagerAmount = null;
+        // Show game type choice modal (only for registered players)
         if (player.type === 'registered') {
-            const wantWagering = confirm('Do you want to create a wagering game?\n\nAll players will need to pay a Nano wager to play. Winner takes all!');
-
-            if (wantWagering) {
-                // Show wager setup modal
-                const canWager = wageringManager.showWagerSetup();
-                if (!canWager) {
-                    return; // User not eligible for wagering
-                }
-
-                // Wait for user to set wager amount in modal
-                // The modal will close when they click "Create Wagering Game"
-                return; // The wager modal's "Create Wagering Game" button will handle the rest
-            }
-        }
-
-        // Create regular (non-wagering) game
-        updateStatus('Creating game...');
-        const result = await multiplayerManager.hostGame('closest-to-flag', { wagerAmount: null });
-        if (result) {
-            updateStatus(`✅ Hosting! Code: ${result.roomCode}`);
+            showGameTypeModal();
+        } else {
+            // Guests can only create regular games
+            createRegularGame();
         }
     });
+
+    // Setup game type modal handlers
+    setupGameTypeModal();
 
     // Join Game button
     document.getElementById('join-game-btn')?.addEventListener('click', async () => {
@@ -75,4 +61,51 @@ function updateStatus(message) {
         statusDiv.textContent = message;
     }
     console.log('Status:', message);
+}
+
+// Game Type Modal Functions
+function showGameTypeModal() {
+    const modal = document.getElementById('game-type-modal');
+    if (modal) {
+        modal.style.display = 'flex';
+    }
+}
+
+function hideGameTypeModal() {
+    const modal = document.getElementById('game-type-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+function setupGameTypeModal() {
+    // Regular game button
+    document.getElementById('create-regular-game-btn')?.addEventListener('click', () => {
+        hideGameTypeModal();
+        createRegularGame();
+    });
+
+    // Wagering game button
+    document.getElementById('create-wagering-game-choice-btn')?.addEventListener('click', () => {
+        hideGameTypeModal();
+        // Show wager setup modal
+        const canWager = wageringManager.showWagerSetup();
+        if (!canWager) {
+            updateStatus('❌ You must be registered to create wagering games');
+        }
+        // The wager modal's "Create Wagering Game" button will handle the rest
+    });
+
+    // Cancel button
+    document.getElementById('cancel-game-type-btn')?.addEventListener('click', () => {
+        hideGameTypeModal();
+    });
+}
+
+async function createRegularGame() {
+    updateStatus('Creating game...');
+    const result = await multiplayerManager.hostGame('closest-to-flag', { wagerAmount: null });
+    if (result) {
+        updateStatus(`✅ Hosting! Code: ${result.roomCode}`);
+    }
 }

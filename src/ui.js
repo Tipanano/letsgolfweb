@@ -2,6 +2,8 @@ import { clubs, defaultPlayerBag } from './clubs.js'; // Import club data and de
 import { metersToYards, YARDS_TO_METERS } from './utils/unitConversions.js'; // Import conversion utilities
 import { getWind, getTemperature } from './gameLogic/state.js'; // Import environment state getters (Corrected Path)
 import { clearPlayHoleState } from './gameLogic/persistentGameState.js';
+import { toast } from './ui/toast.js';
+import { modal } from './ui/modal.js';
 
 // --- DOM Element References ---
 // --- DOM Element References ---
@@ -737,11 +739,16 @@ export function addSwingSpeedInputListener(callback) {
 export function addResetGameDataListener() {
     const resetButton = document.getElementById('reset-game-data-button');
     if (resetButton) {
-        resetButton.addEventListener('click', () => {
-            if (confirm('Are you sure you want to reset all saved game data for Play Hole mode? This action cannot be undone.')) {
+        resetButton.addEventListener('click', async () => {
+            const confirmed = await modal.confirm(
+                'Are you sure you want to reset all saved game data for Play Hole mode? This action cannot be undone.',
+                'Reset Game Data',
+                'warning'
+            );
+            if (confirmed) {
                 clearPlayHoleState();
-                alert('Game data reset. Reloading the page.');
-                window.location.reload();
+                toast.info('Game data reset. Reloading the page...');
+                setTimeout(() => window.location.reload(), 1000);
             }
         });
     } else {

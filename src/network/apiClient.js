@@ -32,8 +32,9 @@ async function fetchWithAuth(endpoint, method = 'GET', body = null, idToken = nu
     const response = await fetch(`${BASE_URL}${endpoint}`, config);
 
     if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: response.statusText }));
-        throw new Error(`API request failed: ${response.status} ${errorData.message || ''}`);
+        const errorData = await response.json().catch(() => ({ error: { message: response.statusText } }));
+        const errorMessage = errorData.error?.message || errorData.message || response.statusText;
+        throw new Error(errorMessage);
     }
     return response.json();
 }
@@ -67,13 +68,10 @@ export async function createGameSession(idToken, gameSettings) {
  * @param {string} [playerName] - Optional player name.
  * @returns {Promise<object>} Server response, e.g., { sessionId, courseData, players }.
  */
-export async function joinGameSession(idToken, gameCode, playerName = null, nanoAddress = null) {
+export async function joinGameSession(idToken, gameCode, playerName = null) {
     const body = { roomCode: gameCode };
     if (playerName) {
         body.playerName = playerName;
-    }
-    if (nanoAddress) {
-        body.nanoAddress = nanoAddress;
     }
     return fetchWithAuth('/game/join', 'POST', body, idToken);
 }

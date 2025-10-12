@@ -1,4 +1,6 @@
 import { playerManager } from './playerManager.js';
+import { toast } from './ui/toast.js';
+import { modal } from './ui/modal.js';
 
 const API_BASE = 'http://localhost:3001/api';
 
@@ -40,12 +42,12 @@ class WageringManager {
     const player = playerManager.getPlayerData();
 
     if (player.type !== 'registered') {
-      alert('You must be a registered player to create wagering games!\n\nPlease sign in with Nano first.');
+      modal.alert('You must be a registered player to create wagering games!\n\nPlease sign in with Nano first.', 'Registration Required', 'warning');
       return false;
     }
 
     if (!player.nanoAddress) {
-      alert('You must have a Nano address to create wagering games!');
+      modal.alert('You must have a Nano address to create wagering games!', 'Nano Address Required', 'warning');
       return false;
     }
 
@@ -83,7 +85,7 @@ class WageringManager {
     const wagerAmount = parseFloat(wagerInput.value);
 
     if (!wagerAmount || wagerAmount < 0.001) {
-      alert('Wager amount must be at least 0.001 NANO');
+      modal.alert('Wager amount must be at least 0.001 NANO', 'Invalid Amount', 'warning');
       return;
     }
 
@@ -113,19 +115,23 @@ class WageringManager {
   /**
    * Show payment UI for all players (including host)
    * @param {string} sessionId - Game session ID
-   * @param {array} playerAddresses - Array of all player Nano addresses
+   * @param {array} players - Array of all player objects (with name, nanoAddress, linkedAddresses)
+   * @param {number} wagerAmount - Wager amount in NANO
    */
-  async showPaymentUI(sessionId, playerAddresses) {
+  async showPaymentUI(sessionId, players, wagerAmount) {
     this.currentSessionId = sessionId;
+    this.wagerAmount = wagerAmount; // Store the wager amount
+    this.players = players; // Store players for UI updates
     const player = playerManager.getPlayerData();
 
     if (!player.nanoAddress) {
-      alert('You must have a Nano address to participate in wagering games!');
+      modal.alert('You must have a Nano address to participate in wagering games!', 'Nano Address Required', 'warning');
       return;
     }
 
     try {
       // Create escrow account on server
+      // Server will get player data (including userId and linkedAddresses) from the session
       const response = await fetch(`${API_BASE}/escrow/create`, {
         method: 'POST',
         headers: {
@@ -134,8 +140,7 @@ class WageringManager {
         },
         body: JSON.stringify({
           sessionId,
-          wagerAmount: this.wagerAmount,
-          playerAddresses
+          wagerAmount: this.wagerAmount
         })
       });
 
@@ -159,15 +164,18 @@ class WageringManager {
       // Generate QR code
       this.generateQRCode(`nano:${data.escrowAddress}?amount=${this.wagerAmount}`);
 
-      // Start polling for payments
-      this.startPolling(playerAddresses);
+      // Show initial player list (all waiting)
+      this.updatePlayerStatusUI([], players);
+
+      // Start polling for payments (no longer need to pass addresses - server handles it)
+      this.startPolling();
 
       // Start countdown timer
       this.startTimer();
 
     } catch (error) {
       console.error('Error creating escrow:', error);
-      alert('Failed to create wagering game: ' + error.message);
+      await modal.alert('Failed to create wagering game: ' + error.message, 'Escrow Error', 'error');
       this.hideModal();
     }
   }
@@ -215,7 +223,7 @@ class WageringManager {
         const status = await response.json();
 
         // Update player status UI
-        this.updatePlayerStatusUI(status.players, playerAddresses);
+        this.updatePlayerStatusUI(status.players, this.players);
 
         // Check if all paid
         if (status.allPaid && status.status === 'ready') {
@@ -240,25 +248,51 @@ class WageringManager {
 
   /**
    * Update player payment status UI
+   * @param {array} paymentPlayers - Payment status from server (address, hasPaid)
+   * @param {array} gamePlayers - Full player objects from game (name, nanoAddress, linkedAddresses)
    */
-  updatePlayerStatusUI(players, playerAddresses) {
+  updatePlayerStatusUI(paymentPlayers, gamePlayers) {
     const statusList = document.getElementById('wager-player-status-list');
     statusList.innerHTML = '';
 
-    playerAddresses.forEach(address => {
-      const playerStatus = players.find(p => p.address === address);
-      const hasPaid = playerStatus?.hasPaid || false;
+    const currentPlayer = playerManager.getPlayerData();
+    const currentPlayerAddress = currentPlayer?.nanoAddress;
+
+    // Add warning about linked addresses (only shown to current player)
+    const warning = document.createElement('div');
+    warning.style.cssText = 'padding: 10px; margin-bottom: 10px; background: #FFF3E0; border-left: 4px solid #FF9800; font-size: 13px; line-height: 1.4;';
+    warning.innerHTML = '<strong>⚠️ Important:</strong> Pay with one of your linked addresses below, or funds will be lost!';
+    statusList.appendChild(warning);
+
+    gamePlayers.forEach(gamePlayer => {
+      const paymentStatus = paymentPlayers.find(p => p.address === gamePlayer.nanoAddress);
+      const hasPaid = paymentStatus?.hasPaid || false;
+      const isCurrentPlayer = gamePlayer.nanoAddress === currentPlayerAddress;
 
       const statusItem = document.createElement('div');
-      statusItem.style.cssText = 'padding: 8px; margin: 5px 0; background: white; border-radius: 5px; display: flex; justify-content: space-between; align-items: center;';
+      statusItem.style.cssText = 'padding: 10px; margin: 5px 0; background: white; border-radius: 5px; border: 1px solid #e0e0e0;';
 
-      const addressShort = address.substring(0, 10) + '...' + address.substring(address.length - 6);
       const statusIcon = hasPaid ? '✅' : '⏳';
       const statusText = hasPaid ? 'Paid' : 'Waiting';
 
+      // Only show linked addresses for the current player
+      const linkedAddressesHTML = isCurrentPlayer && gamePlayer.linkedAddresses && gamePlayer.linkedAddresses.length > 0
+        ? `<div style="font-size: 11px; color: #666; margin-top: 4px;">
+             <div style="font-style: italic; margin-bottom: 2px;">Your linked addresses:</div>
+             ${gamePlayer.linkedAddresses.map(addr =>
+               `<div style="font-family: monospace;">${addr.substring(0, 12)}...${addr.substring(addr.length - 8)}</div>`
+             ).join('')}
+           </div>`
+        : '';
+
       statusItem.innerHTML = `
-        <span style="font-family: monospace; font-size: 12px;">${addressShort}</span>
-        <span>${statusIcon} ${statusText}</span>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-weight: 600;">${gamePlayer.name}${isCurrentPlayer ? ' (You)' : ''}</div>
+            ${linkedAddressesHTML}
+          </div>
+          <span style="font-size: 14px;">${statusIcon} ${statusText}</span>
+        </div>
       `;
 
       statusList.appendChild(statusItem);

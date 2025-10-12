@@ -1,6 +1,8 @@
 // Nano Authentication Handler - Revised Flow
 import { playerManager } from './playerManager.js';
 import * as ui from './ui.js';
+import { toast } from './ui/toast.js';
+import { modal as alertModal } from './ui/modal.js';
 
 const API_BASE = 'http://localhost:3001/api';
 
@@ -11,6 +13,7 @@ const qrCodeSection = document.getElementById('qr-code-section');
 const usernameInput = document.getElementById('nano-username-input');
 const usernameSubmitBtn = document.getElementById('nano-username-submit');
 const cancelBtn = document.getElementById('nano-auth-cancel');
+const copyAddressBtn = document.getElementById('copy-nano-address-btn');
 const qrCodeContainer = document.getElementById('qr-code-container');
 const addressDisplay = document.getElementById('nano-address-display');
 const statusMessage = document.getElementById('auth-status-message');
@@ -67,7 +70,7 @@ export async function showRegistrationModal() {
         statusMessage.textContent = 'Waiting for payment...';
     } catch (error) {
         console.error('Auth start error:', error);
-        alert(error.message);
+        await alertModal.alert(error.message, 'Authentication Error', 'error');
         hideModal();
     }
 }
@@ -164,7 +167,7 @@ async function submitUsername() {
     const username = usernameInput.value.trim();
 
     if (!username || username.length < 3) {
-        alert('Username must be at least 3 characters');
+        await alertModal.alert('Username must be at least 3 characters', 'Invalid Username', 'warning');
         return;
     }
 
@@ -189,7 +192,7 @@ async function submitUsername() {
         await handleLoginSuccess(result);
     } catch (error) {
         console.error('Username submission error:', error);
-        alert(error.message);
+        await alertModal.alert(error.message, 'Registration Error', 'error');
     }
 }
 
@@ -203,7 +206,8 @@ async function handleLoginSuccess(data) {
     await playerManager.upgradeToRegistered(
         data.username,
         data.nano_address,
-        data.session_token
+        data.session_token,
+        data.linked_addresses || [data.nano_address] // Pass linked addresses or fallback to primary
     );
 
     // Update UI
@@ -215,7 +219,7 @@ async function handleLoginSuccess(data) {
         const message = data.is_new_user
             ? `Welcome, ${data.username}! Your account has been created.`
             : `Welcome back, ${data.username}!`;
-        alert(message);
+        toast.success(message, 5000);
     }, 1000);
 }
 
@@ -240,11 +244,38 @@ function startExpiryTimer() {
 }
 
 /**
+ * Copy Nano address to clipboard
+ */
+function copyNanoAddress() {
+    const address = addressDisplay.textContent;
+
+    if (!address || address === 'nano_...') {
+        return;
+    }
+
+    navigator.clipboard.writeText(address).then(() => {
+        // Show feedback
+        const originalText = copyAddressBtn.textContent;
+        copyAddressBtn.textContent = 'Copied!';
+        copyAddressBtn.style.background = '#4CAF50';
+
+        setTimeout(() => {
+            copyAddressBtn.textContent = originalText;
+            copyAddressBtn.style.background = '#2196F3';
+        }, 2000);
+    }).catch(err => {
+        console.error('Failed to copy address:', err);
+        toast.error('Failed to copy address');
+    });
+}
+
+/**
  * Initialize event listeners
  */
 export function init() {
     usernameSubmitBtn?.addEventListener('click', submitUsername);
     cancelBtn?.addEventListener('click', hideModal);
+    copyAddressBtn?.addEventListener('click', copyNanoAddress);
 
     usernameInput?.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {

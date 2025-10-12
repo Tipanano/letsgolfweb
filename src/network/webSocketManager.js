@@ -119,6 +119,22 @@ export function connect(sessionId, idToken) {
             customEventCallbacks['game:canStart'](data);
         }
     });
+
+    // Listen for payment:status event (wagering games)
+    socket.on('payment:status', (data) => {
+        console.log('💰 Payment status update:', data);
+        if (customEventCallbacks['payment:status']) {
+            customEventCallbacks['payment:status'](data);
+        }
+    });
+
+    // Listen for payment:complete event (all players paid)
+    socket.on('payment:complete', (data) => {
+        console.log('✅ All payments complete:', data);
+        if (customEventCallbacks['payment:complete']) {
+            customEventCallbacks['payment:complete'](data);
+        }
+    });
 }
 
 // Storage for custom event callbacks

@@ -7,6 +7,8 @@ import { setGameMode, GAME_MODES } from './main.js';
 import * as visuals from './visuals.js';
 import { playerManager } from './playerManager.js';
 import { wageringManager } from './wageringManager.js';
+import { toast } from './ui/toast.js';
+import { modal } from './ui/modal.js';
 
 // State
 let currentSessionId = null;
@@ -26,6 +28,7 @@ let isGameFinished = false; // Track if the game has finished
 let isWageringGame = false;
 let wagerAmount = null;
 let escrowStatus = null;
+let paymentStatusPollInterval = null;
 
 // Mock token for development
 const generateDevToken = () => 'dev-token-' + Math.random().toString(36).substring(7);
@@ -78,7 +81,11 @@ export async function hostGame(mode = 'closest-to-flag', settings = {}) {
     try {
         // Use playerManager for ID and name
         localPlayerId = playerManager.getPlayerId();
-        localPlayerToken = generateDevToken(); // Still use dev token for now
+
+        // Use real session token for registered users, dev token for guests
+        const player = playerManager.getPlayerData();
+        localPlayerToken = player.sessionToken || generateDevToken();
+
         gameMode = mode;
         isHost = true;
 
@@ -86,13 +93,13 @@ export async function hostGame(mode = 'closest-to-flag', settings = {}) {
         isWageringGame = settings.wagerAmount ? true : false;
         wagerAmount = settings.wagerAmount || null;
 
-        const player = playerManager.getPlayerData();
         const response = await apiClient.createGameSession(localPlayerToken, {
-            maxPlayers: 4,
-            courseId: 'default',
             playerName: playerManager.getDisplayName(),
-            wagerAmount: settings.wagerAmount || null,
-            hostNanoAddress: player.nanoAddress || null
+            settings: {
+                maxPlayers: 4,
+                courseId: 'default',
+                wagerAmount: settings.wagerAmount || null
+            }
         });
 
         currentSessionId = response.sessionId;
@@ -113,7 +120,7 @@ export async function hostGame(mode = 'closest-to-flag', settings = {}) {
         return { sessionId: currentSessionId, roomCode: currentRoomCode };
     } catch (error) {
         console.error('Failed to host game:', error);
-        alert('Failed to create game: ' + error.message);
+        await modal.alert(error.message, 'Failed to Create Game', 'error');
         return null;
     }
 }
@@ -122,15 +129,17 @@ export async function joinGame(roomCode) {
     try {
         // Use playerManager for ID and name
         localPlayerId = playerManager.getPlayerId();
-        localPlayerToken = generateDevToken(); // Still use dev token for now
+
+        // Use real session token for registered users, dev token for guests
+        const player = playerManager.getPlayerData();
+        localPlayerToken = player.sessionToken || generateDevToken();
+
         isHost = false;
 
-        const player = playerManager.getPlayerData();
         const response = await apiClient.joinGameSession(
             localPlayerToken,
             roomCode,
-            playerManager.getDisplayName(),
-            player.nanoAddress || null  // Pass Nano address for wagering games
+            playerManager.getDisplayName()
         );
 
         currentSessionId = response.sessionId;
@@ -149,7 +158,7 @@ export async function joinGame(roomCode) {
         return { sessionId: currentSessionId, roomCode };
     } catch (error) {
         console.error('Failed to join game:', error);
-        alert('Failed to join game: ' + error.message);
+        await modal.alert(error.message, 'Failed to Join Game', 'error');
         return null;
     }
 }
@@ -252,6 +261,47 @@ function setupWebSocketHandlers() {
         console.log('🏁 Game finished event received:', data);
         handleGameFinished(data);
     });
+
+    // Listen for payment status updates (wagering games)
+    wsManager.setOnCustomEventCallback('payment:status', (data) => {
+        console.log('💰 Payment status update:', data);
+        handlePaymentStatus(data);
+    });
+
+    // Listen for payment complete (all players paid)
+    wsManager.setOnCustomEventCallback('payment:complete', (data) => {
+        console.log('✅ All payments complete!', data);
+        escrowStatus = 'ready';
+        // Game will start automatically via server's game:started event
+    });
+}
+
+function handlePaymentStatus(data) {
+    console.log('💰 Updating payment status:', data);
+
+    // Update players with payment status
+    if (data.players && Array.isArray(data.players)) {
+        data.players.forEach(paymentPlayer => {
+            const player = players.find(p => p.nanoAddress === paymentPlayer.address);
+            if (player) {
+                player.hasPaid = paymentPlayer.hasPaid;
+            }
+        });
+    }
+
+    // Update escrow status
+    escrowStatus = data.status;
+
+    // Refresh lobby display to show payment badges
+    updateLobbyDisplay();
+
+    // Update status message
+    if (data.allPaid) {
+        updateStatus('✅ All players paid! Starting game...');
+    } else {
+        const paidCount = data.players.filter(p => p.hasPaid).length;
+        updateStatus(`💰 Waiting for payments: ${paidCount}/${data.players.length} paid`);
+    }
 }
 
 function handleGameFinished(data) {
@@ -308,20 +358,19 @@ async function handleStartClick() {
     if (isWageringGame) {
         console.log('Wagering game - initiating payment flow...');
 
-        // Collect all player Nano addresses
-        const playerAddresses = players
-            .map(p => p.nanoAddress)
-            .filter(addr => addr); // Filter out any null/undefined
-
         // Validate all players are registered
         const validation = wageringManager.validateAllPlayersRegistered(players);
         if (!validation.valid) {
-            alert(`Cannot start wagering game. The following players must register with Nano:\n\n${validation.invalidPlayers.join('\n')}`);
+            await modal.alert(
+                `Cannot start wagering game. The following players must register with Nano:\n\n${validation.invalidPlayers.join('\n')}`,
+                'Unregistered Players',
+                'warning'
+            );
             return;
         }
 
-        // Show payment UI for all players
-        await wageringManager.showPaymentUI(currentSessionId, playerAddresses);
+        // Show payment UI for all players (pass full player objects)
+        await wageringManager.showPaymentUI(currentSessionId, players, wagerAmount);
 
         // Game will start after wager-ready event (handled below)
         return;
@@ -343,9 +392,10 @@ function handleLeaveClick() {
 function handleCopyRoomCode() {
     if (currentRoomCode) {
         navigator.clipboard.writeText(currentRoomCode).then(() => {
-            alert('Room code copied: ' + currentRoomCode);
+            toast.success(`Room code copied: ${currentRoomCode}`);
         }).catch(err => {
             console.error('Failed to copy:', err);
+            toast.error('Failed to copy room code');
         });
     }
 }
@@ -370,18 +420,36 @@ function updateLobbyDisplay() {
         lobbyRoomCode.textContent = currentRoomCode || '------';
     }
 
+    // Show/hide wagering info
+    const wagerInfo = document.getElementById('lobby-wager-info');
+    const wagerAmountSpan = document.getElementById('lobby-wager-amount');
+    if (isWageringGame && wagerAmount) {
+        if (wagerInfo) wagerInfo.style.display = 'block';
+        if (wagerAmountSpan) wagerAmountSpan.textContent = `${wagerAmount} NANO`;
+    } else {
+        if (wagerInfo) wagerInfo.style.display = 'none';
+    }
+
     // Update player list
     if (lobbyPlayerList) {
         lobbyPlayerList.innerHTML = '';
         players.forEach(player => {
             const playerDiv = document.createElement('div');
-            playerDiv.style.cssText = 'padding: 5px; margin: 3px 0; background: #f9f9f9; border-radius: 3px;';
+            playerDiv.style.cssText = 'padding: 5px; margin: 3px 0; background: #f9f9f9; border-radius: 3px; display: flex; justify-content: space-between; align-items: center;';
 
             const isYou = player.id === localPlayerId;
             const hostBadge = player.isHost ? ' 👑' : '';
             const readyBadge = player.isReady ? ' ✅' : '';
 
-            playerDiv.textContent = `${player.name || 'Player'}${hostBadge}${readyBadge}${isYou ? ' (You)' : ''}`;
+            // Payment status badge (only shown during payment phase)
+            let paymentBadge = '';
+            if (escrowStatus === 'awaiting_payments' && player.hasPaid) {
+                paymentBadge = ' 💰';
+            } else if (escrowStatus === 'awaiting_payments' && !player.hasPaid) {
+                paymentBadge = ' ⏳';
+            }
+
+            playerDiv.textContent = `${player.name || 'Player'}${hostBadge}${readyBadge}${paymentBadge}${isYou ? ' (You)' : ''}`;
 
             lobbyPlayerList.appendChild(playerDiv);
         });
@@ -672,7 +740,7 @@ function startShotTimer(messageTemplate) {
 
     shotTimer.startTimer(() => {
         console.log('Shot timer expired!');
-        alert('Time\'s up! You took too long.');
+        modal.alert('Time\'s up! You took too long.', 'Timer Expired', 'warning');
         // TODO: Auto-forfeit turn or take random shot
     }, messageTemplate);
 }
@@ -801,7 +869,7 @@ async function checkAndRejoinActiveGame() {
         startMultiplayerGame();
 
         updateStatus('Rejoined game!');
-        alert('Rejoined your active game!');
+        toast.success('Rejoined your active game!');
 
     } catch (error) {
         console.error('Error rejoining game:', error);
