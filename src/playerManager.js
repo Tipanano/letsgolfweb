@@ -211,7 +211,8 @@ class PlayerManager {
 
   async verifySessionWithServer(sessionToken) {
     try {
-      const response = await fetch('http://localhost:3001/api/auth/verify', {
+      const { API_BASE_URL } = await import('./config.js');
+      const response = await fetch(`${API_BASE_URL}/auth/verify`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -252,23 +253,24 @@ class PlayerManager {
   }
 
   async migrateStatsToServer(username, nanoAddress, stats, sessionToken) {
+    // TODO: Endpoint not implemented yet - users register before setting username anyway
     // POST to server to save guest stats under new account
-    try {
-      await fetch('/api/user/migrate-stats', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${sessionToken}`
-        },
-        body: JSON.stringify({
-          username,
-          nanoAddress,
-          guestStats: stats
-        })
-      });
-    } catch (error) {
-      console.error('Failed to migrate stats:', error);
-    }
+    // try {
+    //   await fetch('/api/user/migrate-stats', {
+    //     method: 'POST',
+    //     headers: {
+    //       'Content-Type': 'application/json',
+    //       'Authorization': `Bearer ${sessionToken}`
+    //     },
+    //     body: JSON.stringify({
+    //       username,
+    //       nanoAddress,
+    //       guestStats: stats
+    //     })
+    //   });
+    // } catch (error) {
+    //   console.error('Failed to migrate stats:', error);
+    // }
   }
 
   async syncStatsToServer() {

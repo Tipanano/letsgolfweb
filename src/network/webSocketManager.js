@@ -2,9 +2,11 @@
 // Using Socket.IO client (CDN or npm install socket.io-client)
 
 // Socket.IO server URL - update for production
-const WEBSOCKET_URL = 'http://localhost:3001';
+import { WEBSOCKET_URL } from '../config.js';
 
 let socket = null;
+let currentSessionId = null; // Store current session ID
+let currentIdToken = null; // Store current ID token
 let onMessageCallback = null; // Callback for general message handling
 let onOpenCallback = null;
 let onCloseCallback = null;
@@ -28,10 +30,35 @@ let onGameStateUpdateCallback = null; // For more general game state sync
  * @param {string} idToken - The Firebase ID token for authentication.
  */
 export function connect(sessionId, idToken) {
+    console.log('🔌 [WS] connect() called with:', {
+        sessionId,
+        hasIdToken: !!idToken,
+        socketExists: !!socket,
+        socketConnected: socket?.connected
+    });
+
+    // Store session info for reconnections
+    currentSessionId = sessionId;
+    currentIdToken = idToken;
+
+    console.log('💾 [WS] Stored session info:', {
+        currentSessionId,
+        hasCurrentIdToken: !!currentIdToken
+    });
+
     if (socket && socket.connected) {
-        console.warn('Socket.IO is already connected.');
+        console.warn('⚠️ [WS] Socket.IO is already connected. Rejoining with new session.');
+        // If already connected, just rejoin with the new session
+        if (currentSessionId) {
+            console.log('📤 [WS] Emitting join-session (already connected):', { sessionId: currentSessionId });
+            socket.emit('join-session', { sessionId: currentSessionId, playerId: currentIdToken });
+        } else {
+            console.error('❌ [WS] No currentSessionId available!');
+        }
         return;
     }
+
+    console.log('🆕 [WS] Creating new Socket.IO connection to:', WEBSOCKET_URL);
 
     // Connect to Socket.IO server
     socket = window.io(WEBSOCKET_URL, {
@@ -41,10 +68,19 @@ export function connect(sessionId, idToken) {
     });
 
     socket.on('connect', () => {
-        console.log('Socket.IO connection established:', socket.id);
+        console.log('✅ [WS] Socket.IO connection established:', socket.id);
+        console.log('📊 [WS] Current state:', {
+            currentSessionId,
+            hasCurrentIdToken: !!currentIdToken
+        });
 
-        // Join the game session room
-        socket.emit('join-session', { sessionId, playerId: idToken });
+        // Join the game session room using stored values (handles reconnections)
+        if (currentSessionId) {
+            console.log('📤 [WS] Emitting join-session:', { sessionId: currentSessionId });
+            socket.emit('join-session', { sessionId: currentSessionId, playerId: currentIdToken });
+        } else {
+            console.error('❌ [WS] No sessionId available for join-session event');
+        }
 
         if (onOpenCallback) {
             onOpenCallback();
@@ -120,6 +156,14 @@ export function connect(sessionId, idToken) {
         }
     });
 
+    // Listen for escrow:created event (wagering games)
+    socket.on('escrow:created', (data) => {
+        console.log('💰 Escrow created:', data);
+        if (customEventCallbacks['escrow:created']) {
+            customEventCallbacks['escrow:created'](data);
+        }
+    });
+
     // Listen for payment:status event (wagering games)
     socket.on('payment:status', (data) => {
         console.log('💰 Payment status update:', data);
@@ -133,6 +177,14 @@ export function connect(sessionId, idToken) {
         console.log('✅ All payments complete:', data);
         if (customEventCallbacks['payment:complete']) {
             customEventCallbacks['payment:complete'](data);
+        }
+    });
+
+    // Listen for game:cancelled event (host left)
+    socket.on('game:cancelled', (data) => {
+        console.log('❌ Game cancelled:', data);
+        if (customEventCallbacks['game:cancelled']) {
+            customEventCallbacks['game:cancelled'](data);
         }
     });
 }
@@ -204,6 +256,9 @@ export function disconnect() {
         socket.disconnect();
         socket = null;
     }
+    // Clear stored session info
+    currentSessionId = null;
+    currentIdToken = null;
 }
 
 /**

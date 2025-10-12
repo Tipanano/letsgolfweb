@@ -1,7 +1,9 @@
 // src/network/apiClient.js
 
 // Server URL - update this for production
-const BASE_URL = 'http://localhost:3001/api';
+import { API_BASE_URL } from '../config.js';
+
+const BASE_URL = API_BASE_URL;
 
 /**
  * A helper function to make authenticated API requests.

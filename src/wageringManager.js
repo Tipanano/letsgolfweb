@@ -2,7 +2,9 @@ import { playerManager } from './playerManager.js';
 import { toast } from './ui/toast.js';
 import { modal } from './ui/modal.js';
 
-const API_BASE = 'http://localhost:3001/api';
+import { API_BASE_URL } from './config.js';
+
+const API_BASE = API_BASE_URL;
 
 /**
  * Wagering Manager - Handles client-side wagering/escrow functionality
@@ -113,25 +115,13 @@ class WageringManager {
   }
 
   /**
-   * Show payment UI for all players (including host)
-   * @param {string} sessionId - Game session ID
-   * @param {array} players - Array of all player objects (with name, nanoAddress, linkedAddresses)
-   * @param {number} wagerAmount - Wager amount in NANO
+   * Create escrow without showing UI (for host)
+   * Server will broadcast escrow:created which shows UI for all players
    */
-  async showPaymentUI(sessionId, players, wagerAmount) {
-    this.currentSessionId = sessionId;
-    this.wagerAmount = wagerAmount; // Store the wager amount
-    this.players = players; // Store players for UI updates
+  async createEscrow(sessionId, wagerAmount) {
     const player = playerManager.getPlayerData();
 
-    if (!player.nanoAddress) {
-      modal.alert('You must have a Nano address to participate in wagering games!', 'Nano Address Required', 'warning');
-      return;
-    }
-
     try {
-      // Create escrow account on server
-      // Server will get player data (including userId and linkedAddresses) from the session
       const response = await fetch(`${API_BASE}/escrow/create`, {
         method: 'POST',
         headers: {
@@ -140,7 +130,7 @@ class WageringManager {
         },
         body: JSON.stringify({
           sessionId,
-          wagerAmount: this.wagerAmount
+          wagerAmount
         })
       });
 
@@ -149,35 +139,46 @@ class WageringManager {
       }
 
       const data = await response.json();
-      this.currentEscrowAddress = data.escrowAddress;
-      this.expiryTime = Date.now() + (data.expiresIn * 1000);
-
-      // Show modal with payment info
-      this.modal.style.display = 'flex';
-      this.setupSection.style.display = 'none';
-      this.paymentSection.style.display = 'block';
-
-      // Update UI
-      document.getElementById('wager-amount-display').textContent = `${this.wagerAmount} NANO`;
-      document.getElementById('wager-escrow-address').textContent = data.escrowAddress;
-
-      // Generate QR code
-      this.generateQRCode(`nano:${data.escrowAddress}?amount=${this.wagerAmount}`);
-
-      // Show initial player list (all waiting)
-      this.updatePlayerStatusUI([], players);
-
-      // Start polling for payments (no longer need to pass addresses - server handles it)
-      this.startPolling();
-
-      // Start countdown timer
-      this.startTimer();
-
+      console.log('✅ Escrow created:', data);
+      // Don't show UI here - wait for broadcast
     } catch (error) {
       console.error('Error creating escrow:', error);
       await modal.alert('Failed to create wagering game: ' + error.message, 'Escrow Error', 'error');
-      this.hideModal();
+      throw error;
     }
+  }
+
+  /**
+   * Show payment UI from broadcast event (for all players including host)
+   * Called when escrow:created event is received
+   */
+  showPaymentUIFromBroadcast(sessionId, escrowAddress, wagerAmount, expiresIn, players) {
+    this.currentSessionId = sessionId;
+    this.currentEscrowAddress = escrowAddress;
+    this.wagerAmount = wagerAmount;
+    this.expiryTime = Date.now() + (expiresIn * 1000);
+    this.players = players;
+
+    // Show modal with payment info
+    this.modal.style.display = 'flex';
+    this.setupSection.style.display = 'none';
+    this.paymentSection.style.display = 'block';
+
+    // Update UI
+    document.getElementById('wager-amount-display').textContent = `${wagerAmount} NANO`;
+    document.getElementById('wager-escrow-address').textContent = escrowAddress;
+
+    // Generate QR code
+    this.generateQRCode(`nano:${escrowAddress}?amount=${wagerAmount}`);
+
+    // Show initial player list (all waiting)
+    this.updatePlayerStatusUI([], players);
+
+    // Start polling for payments
+    this.startPolling();
+
+    // Start countdown timer
+    this.startTimer();
   }
 
   /**
@@ -189,8 +190,8 @@ class WageringManager {
 
     new QRCode(container, {
       text: data,
-      width: 256,
-      height: 256,
+      width: 134,
+      height: 134,
       colorDark: "#000000",
       colorLight: "#ffffff",
       correctLevel: QRCode.CorrectLevel.H
@@ -220,10 +221,17 @@ class WageringManager {
           }
         });
 
+        if (!response.ok) {
+          console.error(`❌ [WAGER] Payment status check failed: ${response.status}`);
+          return;
+        }
+
         const status = await response.json();
 
         // Update player status UI
-        this.updatePlayerStatusUI(status.players, this.players);
+        if (status.players && this.players) {
+          this.updatePlayerStatusUI(status.players, this.players);
+        }
 
         // Check if all paid
         if (status.allPaid && status.status === 'ready') {
@@ -337,6 +345,17 @@ class WageringManager {
    * Cancel wager
    */
   async cancelWager() {
+    // Show confirmation dialog
+    const confirmed = await modal.confirm(
+      'Cancelling the payment will make you leave the game and you will not be able to rejoin. Are you sure?',
+      'Leave Game',
+      'warning'
+    );
+
+    if (!confirmed) {
+      return; // User cancelled
+    }
+
     if (this.currentSessionId) {
       try {
         const player = playerManager.getPlayerData();
@@ -352,6 +371,9 @@ class WageringManager {
     }
 
     this.hideModal();
+
+    // Trigger leaving the game
+    window.dispatchEvent(new CustomEvent('leave-game'));
   }
 
   /**

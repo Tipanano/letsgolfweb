@@ -68,9 +68,25 @@ export function init() {
 
     // Listen for wager-ready event (all players paid)
     window.addEventListener('wager-ready', (event) => {
-        console.log('All players paid! Starting game...');
+        console.log('All players paid!');
         escrowStatus = 'ready';
-        wsManager.sendGameStart();
+
+        // Only host sends the start game command
+        if (isHost) {
+            console.log('🎮 Host starting game...');
+            wsManager.sendGameStart();
+        } else {
+            console.log('⏳ Waiting for host to start game...');
+        }
+    });
+
+    // Listen for leave-game event (from wagering cancel)
+    window.addEventListener('leave-game', () => {
+        console.log('Leaving game due to payment cancellation...');
+        wsManager.disconnect();
+        hideLobby();
+        resetState();
+        ui.showMainMenu();
     });
 
     // Check for active game session on page load
@@ -93,6 +109,12 @@ export async function hostGame(mode = 'closest-to-flag', settings = {}) {
         isWageringGame = settings.wagerAmount ? true : false;
         wagerAmount = settings.wagerAmount || null;
 
+        console.log('🎮 [HOST] Creating game session...', {
+            playerId: localPlayerId,
+            playerName: playerManager.getDisplayName(),
+            wagerAmount: settings.wagerAmount || null
+        });
+
         const response = await apiClient.createGameSession(localPlayerToken, {
             playerName: playerManager.getDisplayName(),
             settings: {
@@ -105,12 +127,16 @@ export async function hostGame(mode = 'closest-to-flag', settings = {}) {
         currentSessionId = response.sessionId;
         currentRoomCode = response.roomCode;
 
-        console.log('Game created:', currentRoomCode);
+        console.log('✅ [HOST] Game created:', {
+            sessionId: currentSessionId,
+            roomCode: currentRoomCode
+        });
 
         // Don't initialize players array locally - wait for server to send it
         // The server will send game:stateUpdate when we connect via WebSocket
 
         // Connect WebSocket (this will trigger game:stateUpdate with the player list)
+        console.log('🔌 [HOST] Connecting WebSocket with sessionId:', currentSessionId);
         wsManager.connect(currentSessionId, localPlayerToken);
 
         // Show lobby (player list will update when we receive game:stateUpdate)
@@ -136,6 +162,12 @@ export async function joinGame(roomCode) {
 
         isHost = false;
 
+        console.log('🚪 [JOIN] Joining game...', {
+            roomCode,
+            playerId: localPlayerId,
+            playerName: playerManager.getDisplayName()
+        });
+
         const response = await apiClient.joinGameSession(
             localPlayerToken,
             roomCode,
@@ -146,9 +178,14 @@ export async function joinGame(roomCode) {
         currentRoomCode = roomCode;
         players = response.players || [];
 
-        console.log('Joined game:', roomCode);
+        console.log('✅ [JOIN] Joined game:', {
+            sessionId: currentSessionId,
+            roomCode,
+            existingPlayers: players.length
+        });
 
         // Connect WebSocket
+        console.log('🔌 [JOIN] Connecting WebSocket with sessionId:', currentSessionId);
         wsManager.connect(currentSessionId, localPlayerToken);
 
         // Show lobby
@@ -262,6 +299,12 @@ function setupWebSocketHandlers() {
         handleGameFinished(data);
     });
 
+    // Listen for escrow created (wagering games)
+    wsManager.setOnCustomEventCallback('escrow:created', (data) => {
+        console.log('💰 Escrow created, showing payment UI:', data);
+        handleEscrowCreated(data);
+    });
+
     // Listen for payment status updates (wagering games)
     wsManager.setOnCustomEventCallback('payment:status', (data) => {
         console.log('💰 Payment status update:', data);
@@ -274,6 +317,39 @@ function setupWebSocketHandlers() {
         escrowStatus = 'ready';
         // Game will start automatically via server's game:started event
     });
+
+    // Listen for game cancelled (host left)
+    wsManager.setOnCustomEventCallback('game:cancelled', (data) => {
+        console.log('❌ Game cancelled:', data);
+        handleGameCancelled(data);
+    });
+}
+
+function handleGameCancelled(data) {
+    // Hide payment modal if showing
+    wageringManager.hideModal();
+
+    // Show alert
+    modal.alert(data.message, 'Game Cancelled', 'warning').then(() => {
+        // Return to main menu
+        wsManager.disconnect();
+        hideLobby();
+        resetState();
+        ui.showMainMenu();
+    });
+}
+
+function handleEscrowCreated(data) {
+    console.log('💰 Escrow created, showing payment UI for all players');
+
+    // Show payment UI for all players (host and joiners)
+    wageringManager.showPaymentUIFromBroadcast(
+        currentSessionId,
+        data.escrowAddress,
+        data.wagerAmount,
+        data.expiresIn,
+        players
+    );
 }
 
 function handlePaymentStatus(data) {
@@ -354,7 +430,7 @@ async function handleStartClick() {
 
     console.log('Host starting game...');
 
-    // If this is a wagering game, show payment UI first
+    // If this is a wagering game, create escrow first
     if (isWageringGame) {
         console.log('Wagering game - initiating payment flow...');
 
@@ -369,10 +445,26 @@ async function handleStartClick() {
             return;
         }
 
-        // Show payment UI for all players (pass full player objects)
-        await wageringManager.showPaymentUI(currentSessionId, players, wagerAmount);
+        // Disable start button and show loading state
+        lobbyStartBtn.disabled = true;
+        lobbyStartBtn.textContent = 'Creating escrow...';
+        lobbyStartBtn.style.opacity = '0.6';
+        lobbyStartBtn.style.cursor = 'not-allowed';
 
-        // Game will start after wager-ready event (handled below)
+        try {
+            // Create escrow - server will broadcast escrow:created to all players
+            // which will show the payment UI for everyone (host + joiners)
+            await wageringManager.createEscrow(currentSessionId, wagerAmount);
+
+            // Payment UI will be shown via escrow:created broadcast
+            // Game will start after all payments are received
+        } catch (error) {
+            // Re-enable button on error
+            lobbyStartBtn.disabled = false;
+            lobbyStartBtn.textContent = 'Start Game';
+            lobbyStartBtn.style.opacity = '1';
+            lobbyStartBtn.style.cursor = 'pointer';
+        }
         return;
     }
 
@@ -380,8 +472,9 @@ async function handleStartClick() {
     wsManager.sendGameStart();
 }
 
-function handleLeaveClick() {
-    if (confirm('Leave the game?')) {
+async function handleLeaveClick() {
+    const confirmed = await modal.confirm('Leave the game?', 'Confirm', 'warning');
+    if (confirmed) {
         wsManager.disconnect();
         hideLobby();
         resetState();
@@ -833,7 +926,8 @@ async function checkAndRejoinActiveGame() {
 
     try {
         // Verify session still exists on server
-        const response = await fetch(`http://localhost:3001/api/game/session/${savedSession.sessionId}`, {
+        const { API_BASE_URL } = await import('./config.js');
+        const response = await fetch(`${API_BASE_URL}/game/session/${savedSession.sessionId}`, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',

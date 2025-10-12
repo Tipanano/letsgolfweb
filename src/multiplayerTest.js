@@ -2,6 +2,7 @@
 import * as multiplayerManager from './multiplayerManager.js';
 import { wageringManager } from './wageringManager.js';
 import { playerManager } from './playerManager.js';
+import { modal } from './ui/modal.js';
 
 export function initMultiplayerUI() {
     console.log('Initializing multiplayer UI...');
@@ -16,7 +17,9 @@ export function initMultiplayerUI() {
     document.getElementById('test-connection-btn')?.addEventListener('click', async () => {
         updateStatus('Testing connection...');
         try {
-            const response = await fetch('http://localhost:3001/health');
+            const { API_BASE_URL } = await import('./config.js');
+            const baseUrl = API_BASE_URL.replace('/api', '');
+            const response = await fetch(`${baseUrl}/health`);
             const data = await response.json();
             updateStatus(`✅ Connected! Active sessions: ${data.activeSessions}`);
             console.log('Server health:', data);
@@ -44,7 +47,7 @@ export function initMultiplayerUI() {
 
     // Join Game button
     document.getElementById('join-game-btn')?.addEventListener('click', async () => {
-        const roomCode = prompt('Enter room code:');
+        const roomCode = await modal.prompt('Enter room code:', 'Join Game', '', 'ABC123');
         if (!roomCode) return;
 
         updateStatus('Joining...');

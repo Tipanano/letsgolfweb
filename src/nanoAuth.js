@@ -3,8 +3,9 @@ import { playerManager } from './playerManager.js';
 import * as ui from './ui.js';
 import { toast } from './ui/toast.js';
 import { modal as alertModal } from './ui/modal.js';
+import { API_BASE_URL } from './config.js';
 
-const API_BASE = 'http://localhost:3001/api';
+const API_BASE = API_BASE_URL;
 
 // Modal elements
 const modal = document.getElementById('nano-auth-modal');

@@ -369,12 +369,12 @@
 
     <!-- Wagering/Escrow Modal -->
     <div id="wager-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 2000; justify-content: center; align-items: center;">
-        <div style="background: white; padding: 30px; border-radius: 10px; max-width: 500px; text-align: center;">
-            <h2 id="wager-title">Wagering Game</h2>
+        <div style="background: white; padding: 20px; border-radius: 10px; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto; text-align: center;">
+            <h2 id="wager-title" style="margin: 0 0 15px 0; font-size: 1.3em;">Wagering Game</h2>
 
             <!-- Wager setup (for host) -->
             <div id="wager-setup-section" style="display: none;">
-                <p>Create a wagering game where all players contribute Nano to a pot. Winner takes all!</p>
+                <p style="margin: 10px 0;">Create a wagering game where all players contribute Nano to a pot. Winner takes all!</p>
                 <label>Wager Amount (NANO):</label>
                 <input type="number" id="wager-amount-input" min="0.001" step="0.001" value="0.1" style="padding: 8px; margin: 10px 0; width: 200px;">
                 <br>
@@ -384,27 +384,35 @@
 
             <!-- Payment section -->
             <div id="wager-payment-section" style="display: none;">
-                <p id="wager-payment-message">Send <strong id="wager-amount-display">0.1 NANO</strong> to join the game:</p>
-                <div id="wager-qr-container" style="margin: 20px auto; padding: 20px; background: white; border: 2px solid #4CAF50; border-radius: 10px; display: inline-block;">
-                    <!-- QR code will be inserted here -->
+                <div style="display: flex; gap: 15px; align-items: flex-start; margin-bottom: 15px;">
+                    <!-- Left: QR Code -->
+                    <div style="flex-shrink: 0;">
+                        <div id="wager-qr-container" style="padding: 8px; background: white; border: 2px solid #4CAF50; border-radius: 8px; width: 150px; height: 150px; display: flex; align-items: center; justify-content: center;">
+                            <!-- QR code will be inserted here -->
+                        </div>
+                    </div>
+                    <!-- Right: Address and Info -->
+                    <div style="flex: 1; text-align: left;">
+                        <p style="margin: 0 0 8px 0; font-size: 14px;">Send <strong id="wager-amount-display" style="color: #FF9800;">0.1 NANO</strong></p>
+                        <p id="wager-escrow-address" style="font-family: monospace; font-size: 10px; word-break: break-all; background: #f5f5f5; padding: 6px; border-radius: 3px; margin: 0 0 8px 0;">nano_...</p>
+                        <button id="copy-wager-address-btn" style="padding: 6px 12px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; width: 100%;">Copy Address</button>
+                        <div id="wager-timer" style="margin-top: 8px; color: #666; font-size: 13px;">⏱️ <span id="wager-timer-countdown">10:00</span></div>
+                    </div>
                 </div>
-                <p id="wager-escrow-address" style="font-family: monospace; font-size: 12px; word-break: break-all; background: #f5f5f5; padding: 10px; border-radius: 5px; margin: 15px 0;">nano_...</p>
-                <button id="copy-wager-address-btn" style="padding: 8px 16px; background: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer;">Copy Address</button>
 
-                <div style="margin-top: 20px; padding: 15px; background: #f5f5f5; border-radius: 5px;">
-                    <h3>Payment Status</h3>
-                    <div id="wager-player-status-list" style="text-align: left; margin-top: 10px;">
+                <div style="margin-top: 12px; padding: 12px; background: #f5f5f5; border-radius: 5px;">
+                    <h3 style="margin: 0 0 8px 0; font-size: 1em;">Payment Status</h3>
+                    <div id="wager-player-status-list" style="text-align: left; max-height: 120px; overflow-y: auto;">
                         <!-- Player payment status will be inserted here -->
                     </div>
                 </div>
 
-                <p style="color: #666; font-size: 14px; margin-top: 15px;">
+                <p style="color: #666; font-size: 13px; margin-top: 12px;">
                     <span id="wager-status-message">Waiting for all players to pay...</span>
                 </p>
-                <div id="wager-timer" style="margin-top: 10px; color: #666; font-size: 14px;">Expires in: <span id="wager-timer-countdown">10:00</span></div>
             </div>
 
-            <button id="cancel-wager-btn" style="margin-top: 20px; padding: 10px 25px; background: #999; color: white; border: none; border-radius: 5px; cursor: pointer;">Cancel</button>
+            <button id="cancel-wager-btn" style="margin-top: 15px; padding: 8px 20px; background: #999; color: white; border: none; border-radius: 5px; cursor: pointer;">Cancel</button>
         </div>
     </div>
 
