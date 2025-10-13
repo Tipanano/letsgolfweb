@@ -9,6 +9,9 @@ import { playerManager } from './playerManager.js';
 import { wageringManager } from './wageringManager.js';
 import { toast } from './ui/toast.js';
 import { modal } from './ui/modal.js';
+import * as closestToFlag from './modes/closestToFlag.js';
+import * as playHole from './modes/playHole.js';
+import * as logic from './logic.js';
 
 // State
 let currentSessionId = null;
@@ -48,7 +51,7 @@ const lobbyTargetDistance = document.getElementById('lobby-target-distance');
 // Scoreboard Elements
 const scoreboard = document.getElementById('multiplayer-scoreboard');
 const scoreboardPlayerList = document.getElementById('multiplayer-player-list');
-const playAgainBtn = document.getElementById('play-again-btn');
+const gameLeaveBtn = document.getElementById('game-leave-btn');
 
 // Player scores (distance from hole in CTF)
 let playerScores = {}; // { playerId: { distanceMeters, distanceYards, hasShot } }
@@ -61,7 +64,7 @@ export function init() {
     lobbyStartBtn?.addEventListener('click', handleStartClick);
     lobbyLeaveBtn?.addEventListener('click', handleLeaveClick);
     copyRoomCodeBtn?.addEventListener('click', handleCopyRoomCode);
-    playAgainBtn?.addEventListener('click', handlePlayAgainClick);
+    gameLeaveBtn?.addEventListener('click', handleGameLeaveClick);
 
     // Set up WebSocket callbacks
     setupWebSocketHandlers();
@@ -323,6 +326,18 @@ function setupWebSocketHandlers() {
         console.log('❌ Game cancelled:', data);
         handleGameCancelled(data);
     });
+
+    // Listen for payout complete (wagering games)
+    wsManager.setOnCustomEventCallback('payout:complete', (data) => {
+        console.log('💰 Payout complete!', data);
+        handlePayoutComplete(data);
+    });
+
+    // Listen for payout error (wagering games)
+    wsManager.setOnCustomEventCallback('payout:error', (data) => {
+        console.error('❌ Payout error:', data);
+        handlePayoutError(data);
+    });
 }
 
 function handleGameCancelled(data) {
@@ -381,7 +396,7 @@ function handlePaymentStatus(data) {
 }
 
 function handleGameFinished(data) {
-    const { winner, gameMode, playerStates } = data;
+    const { winner, gameMode, playerStates, players: allPlayers } = data;
 
     if (!winner) {
         console.error('No winner in game:finished event');
@@ -397,16 +412,95 @@ function handleGameFinished(data) {
     const isLocalWinner = winner.id === localPlayerId;
     const winnerDistance = (winner.distanceFromHole * 1.09361).toFixed(1); // Convert meters to yards
 
+    // Show status message
     const message = isLocalWinner
         ? `🏆 You won! ${winnerDistance} yards from the hole!`
         : `${winner.name} won with ${winnerDistance} yards from the hole`;
 
     shotTimer.setStatusMessage(message);
 
-    // Show Play Again button
-    if (playAgainBtn) {
-        playAgainBtn.style.display = 'block';
+    // Build results summary
+    const playersList = (allPlayers || players).map(p => {
+        const state = playerStates[p.id];
+        const distance = state?.distanceFromHole ? (state.distanceFromHole * 1.09361).toFixed(1) : 'N/A';
+        const isWinner = p.id === winner.id;
+        return `${isWinner ? '🏆 ' : ''}${p.name}: ${distance} yards${isWinner ? ' - WINNER!' : ''}`;
+    }).join('\n');
+
+    // Check if payout data exists (wagering game)
+    const payoutData = window.lastPayoutData;
+    let payoutInfo = '';
+    if (payoutData && isWageringGame) {
+        payoutInfo = `\n\n**💰 Payout:** ${payoutData.payoutAmount} NANO sent to winner`;
+        if (isLocalWinner) {
+            payoutInfo += `\n📍 Address: ${payoutData.payoutAddress.substring(0, 20)}...`;
+        }
+        // Clear the payout data
+        window.lastPayoutData = null;
     }
+
+    const title = isLocalWinner ? '🎉 You Won!' : '🏁 Game Over';
+    const summaryMessage = `**${winner.name}** won with **${winnerDistance} yards** from the hole!${payoutInfo}\n\n**Results:**\n${playersList}`;
+
+    // Show modal with game summary
+    modal.confirm(summaryMessage, title, {
+        confirmText: 'Play Again',
+        cancelText: 'Return to Menu',
+        type: isLocalWinner ? 'success' : 'info'
+    }).then(playAgain => {
+        if (playAgain) {
+            // TODO: Implement play again functionality
+            console.log('Play again requested');
+            toast.info('Play again feature coming soon!');
+            returnToMenu();
+        } else {
+            returnToMenu();
+        }
+    });
+}
+
+function returnToMenu() {
+    console.log('Returning to menu from multiplayer...');
+
+    // Terminate game modes
+    if (gameMode === 'closest-to-flag') {
+        closestToFlag.terminateMode();
+    } else if (gameMode === 'play-hole') {
+        playHole.terminateMode();
+    }
+
+    // Reset core game logic, UI, and visuals
+    logic.resetSwing();
+
+    // Disconnect WebSocket and reset multiplayer state
+    wsManager.disconnect();
+    hideLobby();
+    resetState();
+
+    // Show main menu
+    ui.showMainMenu();
+}
+
+function handlePayoutComplete(data) {
+    console.log('💰 Payout completed successfully:', data);
+
+    const isLocalWinner = data.winner.id === localPlayerId;
+    const payoutNano = data.payoutAmount;
+
+    // Show toast notification
+    if (isLocalWinner) {
+        toast.success(`🎉 You won ${payoutNano} NANO! Sent to ${data.payoutAddress.substring(0, 15)}...`);
+    } else {
+        toast.info(`${data.winner.name} received ${payoutNano} NANO payout`);
+    }
+
+    // Store payout data to show in game finished modal
+    window.lastPayoutData = data;
+}
+
+function handlePayoutError(data) {
+    console.error('❌ Payout error:', data);
+    toast.error('Payout failed: ' + data.message);
 }
 
 function handleReadyClick() {
@@ -479,6 +573,33 @@ async function handleLeaveClick() {
         hideLobby();
         resetState();
         ui.showMainMenu();
+    }
+}
+
+async function handleGameLeaveClick() {
+    const confirmed = await modal.confirm(
+        'Are you sure you want to leave the game? If you have paid for wagering, you will be refunded.',
+        'Leave Game',
+        'warning'
+    );
+
+    if (confirmed) {
+        try {
+            // Call API to leave game and trigger refunds if applicable
+            const result = await apiClient.leaveGame(localPlayerToken, currentSessionId);
+
+            if (result.refund && result.refund.refunded) {
+                toast.success(`Refunded ${result.refund.amount} NANO to your address`);
+            }
+
+            // Disconnect and return to menu
+            wsManager.disconnect();
+            resetState();
+            ui.showMainMenu();
+        } catch (error) {
+            console.error('Error leaving game:', error);
+            toast.error('Failed to leave game: ' + error.message);
+        }
     }
 }
 
@@ -648,86 +769,16 @@ export function updatePlayerScore(playerId, distanceMeters, distanceYards) {
     };
     updateScoreboard();
 
-    // Check if all players have finished
-    checkForGameCompletion();
-}
-
-function checkForGameCompletion() {
-    // Only check in CTF mode
-    if (gameMode !== 'closest-to-flag') return;
-
-    // Check if all players have shot
-    const allPlayersFinished = players.every(player => playerScores[player.id]?.hasShot);
-
-    if (allPlayersFinished) {
-        console.log('All players have finished! Determining winner...');
-        showWinner();
-    }
-}
-
-function showWinner() {
-    // Find the player with the shortest distance
-    let winner = null;
-    let bestDistance = Infinity;
-
-    players.forEach(player => {
-        const score = playerScores[player.id];
-        if (score && score.distanceMeters < bestDistance) {
-            bestDistance = score.distanceMeters;
-            winner = player;
-        }
-    });
-
-    if (!winner) {
-        console.error('Could not determine winner');
-        return;
-    }
-
-    const isLocalWinner = winner.id === localPlayerId;
-    const winnerName = winner.name || 'Player';
-    const winnerDistance = playerScores[winner.id].distanceYards.toFixed(1);
-
-    // Show winner message in top center status
-    const message = isLocalWinner
-        ? `🏆 You won! ${winnerDistance} yards from the hole!`
-        : `${winnerName} won with ${winnerDistance} yards from the hole`;
-
-    shotTimer.setStatusMessage(message);
-
-    // Show Play Again button
-    if (playAgainBtn) {
-        playAgainBtn.style.display = 'block';
-    }
-
-    console.log('Winner:', winnerName, 'Distance:', winnerDistance, 'yards');
-}
-
-function handlePlayAgainClick() {
-    console.log('Play again clicked');
-
-    // Reset player scores and game finished flag
-    playerScores = {};
-    isGameFinished = false;
-
-    // Hide Play Again button
-    if (playAgainBtn) {
-        playAgainBtn.style.display = 'none';
-    }
-
-    // Update scoreboard to reset
-    updateScoreboard();
-
-    // Reset the game state (but keep multiplayer session)
-    // This will allow players to take new shots
-    shotTimer.setStatusMessage('Starting new round...');
-
-    // TODO: Need to coordinate with server to reset game state for all players
-    // For now, just reset locally
-    console.log('New round started');
+    // Server will determine winner and send game:finished event
 }
 
 async function startMultiplayerGame() {
     console.log('Starting multiplayer Closest to Flag game...');
+
+    // Safety: Reset game state from any previous game
+    logic.resetSwing();
+    isGameFinished = false;
+    playerScores = {};
 
     // Show game view FIRST so canvas can get proper dimensions
     ui.showGameView();

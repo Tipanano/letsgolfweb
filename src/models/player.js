@@ -5,7 +5,7 @@
  */
 export class Player {
     /**
-     * @param {string} playerId - The unique identifier for the player (e.g., Firebase UID).
+     * @param {string} playerId - The unique identifier for the player.
      * @param {string} displayName - The display name of the player.
      */
     constructor(playerId, displayName) {

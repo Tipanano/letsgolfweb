@@ -42,7 +42,11 @@ class ModalManager {
    * @param {string} type - 'info', 'warning', 'error', 'success'
    * @returns {Promise<boolean>} Resolves with true/false based on user choice
    */
-  confirm(message, title = '', type = 'warning') {
+  confirm(message, title = '', options = {}) {
+    const type = options.type || 'warning';
+    const confirmText = options.confirmText || 'OK';
+    const cancelText = options.cancelText || 'Cancel';
+
     return new Promise((resolve) => {
       this.show({
         title,
@@ -50,7 +54,7 @@ class ModalManager {
         type,
         buttons: [
           {
-            text: 'Cancel',
+            text: cancelText,
             primary: false,
             onClick: () => {
               this.hide();
@@ -58,7 +62,7 @@ class ModalManager {
             }
           },
           {
-            text: 'OK',
+            text: confirmText,
             primary: true,
             onClick: () => {
               this.hide();

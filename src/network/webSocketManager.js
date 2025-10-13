@@ -6,7 +6,7 @@ import { WEBSOCKET_URL } from '../config.js';
 
 let socket = null;
 let currentSessionId = null; // Store current session ID
-let currentIdToken = null; // Store current ID token
+let currentAuthToken = null; // Store current auth token
 let onMessageCallback = null; // Callback for general message handling
 let onOpenCallback = null;
 let onCloseCallback = null;
@@ -27,23 +27,23 @@ let onGameStateUpdateCallback = null; // For more general game state sync
 /**
  * Connects to the Socket.IO server for a given game session.
  * @param {string} sessionId - The ID of the game session to connect to.
- * @param {string} idToken - The Firebase ID token for authentication.
+ * @param {string} authToken - The auth token for authentication.
  */
-export function connect(sessionId, idToken) {
+export function connect(sessionId, authToken) {
     console.log('🔌 [WS] connect() called with:', {
         sessionId,
-        hasIdToken: !!idToken,
+        hasAuthToken: !!authToken,
         socketExists: !!socket,
         socketConnected: socket?.connected
     });
 
     // Store session info for reconnections
     currentSessionId = sessionId;
-    currentIdToken = idToken;
+    currentAuthToken = authToken;
 
     console.log('💾 [WS] Stored session info:', {
         currentSessionId,
-        hasCurrentIdToken: !!currentIdToken
+        hasCurrentAuthToken: !!currentAuthToken
     });
 
     if (socket && socket.connected) {
@@ -51,7 +51,7 @@ export function connect(sessionId, idToken) {
         // If already connected, just rejoin with the new session
         if (currentSessionId) {
             console.log('📤 [WS] Emitting join-session (already connected):', { sessionId: currentSessionId });
-            socket.emit('join-session', { sessionId: currentSessionId, playerId: currentIdToken });
+            socket.emit('join-session', { sessionId: currentSessionId, playerId: currentAuthToken });
         } else {
             console.error('❌ [WS] No currentSessionId available!');
         }
@@ -63,7 +63,7 @@ export function connect(sessionId, idToken) {
     // Connect to Socket.IO server
     socket = window.io(WEBSOCKET_URL, {
         auth: {
-            token: idToken
+            token: authToken
         }
     });
 
@@ -71,13 +71,13 @@ export function connect(sessionId, idToken) {
         console.log('✅ [WS] Socket.IO connection established:', socket.id);
         console.log('📊 [WS] Current state:', {
             currentSessionId,
-            hasCurrentIdToken: !!currentIdToken
+            hasCurrentAuthToken: !!currentAuthToken
         });
 
         // Join the game session room using stored values (handles reconnections)
         if (currentSessionId) {
             console.log('📤 [WS] Emitting join-session:', { sessionId: currentSessionId });
-            socket.emit('join-session', { sessionId: currentSessionId, playerId: currentIdToken });
+            socket.emit('join-session', { sessionId: currentSessionId, playerId: currentAuthToken });
         } else {
             console.error('❌ [WS] No sessionId available for join-session event');
         }
@@ -121,6 +121,13 @@ export function connect(sessionId, idToken) {
     socket.on('game:started', (data) => {
         console.log('Game started:', data);
         if (onGameStartCallback) onGameStartCallback(data);
+    });
+
+    socket.on('game:finished', (data) => {
+        console.log('🏁 Game finished:', data);
+        if (customEventCallbacks['game:finished']) {
+            customEventCallbacks['game:finished'](data);
+        }
     });
 
     socket.on('chat:message', (data) => {
@@ -258,7 +265,7 @@ export function disconnect() {
     }
     // Clear stored session info
     currentSessionId = null;
-    currentIdToken = null;
+    currentAuthToken = null;
 }
 
 /**

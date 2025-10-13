@@ -172,7 +172,7 @@ class WageringManager {
     this.generateQRCode(`nano:${escrowAddress}?amount=${wagerAmount}`);
 
     // Show initial player list (all waiting)
-    this.updatePlayerStatusUI([], players);
+    this.updatePlayerStatusUI([], players, wagerAmount);
 
     // Start polling for payments
     this.startPolling();
@@ -230,7 +230,7 @@ class WageringManager {
 
         // Update player status UI
         if (status.players && this.players) {
-          this.updatePlayerStatusUI(status.players, this.players);
+          this.updatePlayerStatusUI(status.players, this.players, status.wagerAmount);
         }
 
         // Check if all paid
@@ -256,10 +256,11 @@ class WageringManager {
 
   /**
    * Update player payment status UI
-   * @param {array} paymentPlayers - Payment status from server (address, hasPaid)
+   * @param {array} paymentPlayers - Payment status from server (address, hasPaid, prepaidBalance)
    * @param {array} gamePlayers - Full player objects from game (name, nanoAddress, linkedAddresses)
+   * @param {string} wagerAmount - Required wager amount in NANO
    */
-  updatePlayerStatusUI(paymentPlayers, gamePlayers) {
+  updatePlayerStatusUI(paymentPlayers, gamePlayers, wagerAmount) {
     const statusList = document.getElementById('wager-player-status-list');
     statusList.innerHTML = '';
 
@@ -275,6 +276,7 @@ class WageringManager {
     gamePlayers.forEach(gamePlayer => {
       const paymentStatus = paymentPlayers.find(p => p.address === gamePlayer.nanoAddress);
       const hasPaid = paymentStatus?.hasPaid || false;
+      const prepaidBalance = paymentStatus?.prepaidBalance || '0';
       const isCurrentPlayer = gamePlayer.nanoAddress === currentPlayerAddress;
 
       const statusItem = document.createElement('div');
@@ -282,6 +284,27 @@ class WageringManager {
 
       const statusIcon = hasPaid ? '✅' : '⏳';
       const statusText = hasPaid ? 'Paid' : 'Waiting';
+
+      // Show prepaid balance for current player with helpful context
+      let balanceHTML = '';
+      if (isCurrentPlayer && prepaidBalance !== '0') {
+        const balance = parseFloat(prepaidBalance);
+        const required = parseFloat(wagerAmount || this.wagerAmount);
+
+        if (balance >= required) {
+          // Has enough - show balance
+          balanceHTML = `<div style="font-size: 12px; color: #4CAF50; margin-top: 4px;">
+                          💰 Your balance: ${prepaidBalance} NANO
+                        </div>`;
+        } else {
+          // Not enough - show how much more needed
+          const needed = (required - balance).toFixed(6);
+          balanceHTML = `<div style="font-size: 12px; color: #FF9800; margin-top: 4px;">
+                          💰 Balance: ${prepaidBalance} NANO
+                          <br>⚠️ Need ${needed} more NANO to start
+                        </div>`;
+        }
+      }
 
       // Only show linked addresses for the current player
       const linkedAddressesHTML = isCurrentPlayer && gamePlayer.linkedAddresses && gamePlayer.linkedAddresses.length > 0
@@ -297,6 +320,7 @@ class WageringManager {
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <div>
             <div style="font-weight: 600;">${gamePlayer.name}${isCurrentPlayer ? ' (You)' : ''}</div>
+            ${balanceHTML}
             ${linkedAddressesHTML}
           </div>
           <span style="font-size: 14px;">${statusIcon} ${statusText}</span>

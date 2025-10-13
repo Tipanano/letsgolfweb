@@ -6,23 +6,21 @@ import { Player, createPlayer } from '../models/player.js';
 
 let currentSessionId = null;
 let currentGameCode = null;
-let localPlayerId = null; // Firebase UID of the local player
-let idToken = null; // Firebase ID token
+let localPlayerId = null;
+let authToken = null;
 let players = []; // Array of Player objects in the current session
 let onPlayerListUpdateCallback = null; // Callback when the player list changes
 let onSessionJoinErrorCallback = null;
 let onSessionCreateErrorCallback = null;
 
 /**
- * Initializes the session manager with the local player's ID and Firebase token.
- * @param {string} playerId - The Firebase UID of the local player.
- * @param {string} token - The Firebase ID token.
+ * Initializes the session manager with the local player's ID and auth token.
+ * @param {string} playerId - The local player's ID.
+ * @param {string} token - The auth token.
  */
 export function initialize(playerId, token) {
     localPlayerId = playerId;
-    idToken = token;
-    // Potentially authenticate with the server if not done elsewhere
-    // apiClient.authenticateUserWithServer(token).catch(err => console.error("Server auth error:", err));
+    authToken = token;
 }
 
 /**
@@ -31,13 +29,13 @@ export function initialize(playerId, token) {
  * @returns {Promise<boolean>} True if session creation and WebSocket connection were successful.
  */
 export async function hostNewGame(gameSettings) {
-    if (!idToken) {
-        console.error('SessionManager: ID token not set. Call initialize first.');
+    if (!authToken) {
+        console.error('SessionManager: Auth token not set. Call initialize first.');
         if (onSessionCreateErrorCallback) onSessionCreateErrorCallback('Authentication token not available.');
         return false;
     }
     try {
-        const response = await apiClient.createGameSession(idToken, gameSettings);
+        const response = await apiClient.createGameSession(authToken, gameSettings);
         currentSessionId = response.sessionId;
         currentGameCode = response.gameCode; // Server should return a game code
         console.log(`Game session created: ${currentSessionId}, Code: ${currentGameCode}`);
@@ -48,7 +46,7 @@ export async function hostNewGame(gameSettings) {
         // The server's response from createGameSession or joinGameSession should ideally provide initial player data.
         // This part might need adjustment based on actual server responses.
 
-        RWS.connect(currentSessionId, idToken);
+        RWS.connect(currentSessionId, authToken);
         // Setup WebSocket event handlers specific to session management if needed
         // e.g., RWS.setOnPlayerJoinedCallback, RWS.setOnPlayerLeftCallback
 
@@ -76,13 +74,13 @@ export async function hostNewGame(gameSettings) {
  * @returns {Promise<boolean>} True if joining and WebSocket connection were successful.
  */
 export async function joinExistingGame(gameCodeToJoin) {
-    if (!idToken) {
-        console.error('SessionManager: ID token not set. Call initialize first.');
+    if (!authToken) {
+        console.error('SessionManager: Auth token not set. Call initialize first.');
         if (onSessionJoinErrorCallback) onSessionJoinErrorCallback('Authentication token not available.');
         return false;
     }
     try {
-        const response = await apiClient.joinGameSession(idToken, gameCodeToJoin);
+        const response = await apiClient.joinGameSession(authToken, gameCodeToJoin);
         currentSessionId = response.sessionId;
         currentGameCode = gameCodeToJoin; // We already have this
         // The response should ideally include the list of current players and course data
@@ -95,7 +93,7 @@ export async function joinExistingGame(gameCodeToJoin) {
         }
 
 
-        RWS.connect(currentSessionId, idToken);
+        RWS.connect(currentSessionId, authToken);
         // Setup WebSocket event handlers
         // RWS.setOnPlayerJoinedCallback, RWS.setOnPlayerLeftCallback
 
@@ -115,8 +113,6 @@ export async function joinExistingGame(gameCodeToJoin) {
 export function leaveGame() {
     if (currentSessionId) {
         RWS.disconnect();
-        // Optionally, notify the server that the player is leaving via an API call
-        // apiClient.leaveGameSession(idToken, currentSessionId).catch(err => console.error("Error notifying server of leave:", err));
         console.log(`Left game session: ${currentSessionId}`);
     }
     currentSessionId = null;
