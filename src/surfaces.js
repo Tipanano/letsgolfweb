@@ -12,7 +12,7 @@ export const SURFACES = {
       velocityReduction: 0.00
     },
     height: 0.03, // Visual height
-    ballLieOffset: 0.68 // On top
+    ballLieOffset: 0.16 // Same as fairway - ball sits slightly into grass (then tee height is added)
   },
   GREEN: {
     name: 'Green',

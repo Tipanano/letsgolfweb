@@ -187,6 +187,11 @@ ui.addResetGameDataListener(); // Added listener for the new reset button
 
 ui.addClubChangeListener((clubKey) => {
     logic.setSelectedClub(clubKey);
+
+    // Update tee and ball position if on tee box
+    if (currentMode === GAME_MODES.CLOSEST_TO_FLAG) {
+        visuals.showBallAtAddress(); // Refresh ball/tee for new club
+    }
 });
 
 ui.addShotTypeChangeListener((shotType) => {

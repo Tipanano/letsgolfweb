@@ -1,9 +1,14 @@
 import { getWind, getTemperature } from './state.js'; // Import environment state getters
+import { handleObstacleCollision } from '../obstaclePhysics.js'; // Import obstacle collision
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js'; // For Vector3 operations
+import { getSurfaceProperties } from '../surfaces.js'; // Import getSurfaceProperties
+import { getFlagPosition } from '../visuals/holeView.js'; // To get hole coordinates
+import { BALL_RADIUS } from '../visuals/core.js'; // For ground check, hole interaction, and obstacle collision
 
 // --- Step-by-Step Flight Simulation ---
 // Takes initial position, velocity, spin vector (RPM), and the selected club object.
 // Returns simulation results including landing position, carry distance, peak height, time of flight, landing angle, and trajectory points.
-export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club) {
+export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club, obstacles = []) {
     // --- Get Environment Conditions at Start of Shot ---
     let currentWind = getWind(); // { speed, direction }
     const currentTemperature = getTemperature(); // degrees C
@@ -217,6 +222,25 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club) 
         position.y += velocity.y * dt;
         position.z += velocity.z * dt;
 
+        // 5b. Check for obstacle collision (only if ball is near ground level)
+        // Trees/bushes affect ball when it's at their height
+        if (obstacles.length > 0 && position.y < 10) { // Check obstacles if below 10m height
+            const obstacleResult = handleObstacleCollision(
+                position.x,
+                position.z,
+                BALL_RADIUS,
+                velocity.x,
+                velocity.z,
+                obstacles
+            );
+
+            if (obstacleResult.collided) {
+                velocity.x = obstacleResult.velocityX;
+                velocity.z = obstacleResult.velocityZ;
+                console.log(`Ball hit ${obstacleResult.obstacle.type} (${obstacleResult.obstacle.size})!`);
+            }
+        }
+
         // 6. Track Peak Height
         if (position.y > peakHeight) {
             peakHeight = position.y;
@@ -270,11 +294,6 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club) 
 
 
 // --- Ground Roll Simulation ---
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js'; // For Vector3 operations
-// Import getSurfaceProperties which implicitly uses SURFACES
-import { getSurfaceProperties } from '../surfaces.js';
-import { BALL_RADIUS } from '../visuals/core.js'; // For ground check and hole interaction
-import { getFlagPosition } from '../visuals/holeView.js'; // To get hole coordinates
 
 const MIN_ROLL_SPEED = 0.05; // m/s - Speed below which the ball is considered stopped
 const GROUND_FRICTION_TIME_STEP = 0.02; // seconds - Simulation step for ground roll

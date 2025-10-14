@@ -1,17 +1,18 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
 import { TextureLoader } from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js'; // Import TextureLoader
 // Import both relative and target line angles
-import { getShotDirectionAngle, getCurrentTargetLineAngle } from '../gameLogic/state.js';
+import { getShotDirectionAngle, getCurrentTargetLineAngle, getSelectedClub } from '../gameLogic/state.js';
 import * as MeasurementView from './measurementView.js';
 // Import position getters needed for re-applying hole view camera
 import { getCurrentBallPosition as getPlayHoleBallPosition } from '../modes/playHole.js';
 import { getFlagPosition, getCurrentHoleObjects } from './holeView.js'; // Import getCurrentHoleObjects
+import { getTargetObjects } from './targetView.js'; // Import target view objects for CTF mode
 import { createTeeMesh } from './objects.js'; // Import the tee creator
 import { getSurfaceProperties } from '../surfaces.js'; // Import surface properties getter
 
 import { YARDS_TO_METERS } from '../utils/unitConversions.js';
 
-export let scene, camera, renderer, ball, trajectoryLine, teeMesh; // Add teeMesh
+export let scene, camera, renderer, ball, trajectoryLine, teeMesh, smallTeeMesh; // Add teeMesh and smallTeeMesh
 // export const BALL_RADIUS = 0.2; // Old, incorrect value
 export const BALL_RADIUS = 0.021336; // Regulation radius (1.68 inches / 2) in meters
 
@@ -135,9 +136,11 @@ export function initCoreVisuals(canvasElement) {
      ball.scale.copy(BALL_SCALE_VECTOR_ENLARGED); // Start with enlarged scale
      scene.add(ball);
 
-    // 6. Tee Mesh (created but hidden initially)
-    teeMesh = createTeeMesh(); // Create the tee using the imported function
+    // 6. Tee Meshes (created but hidden initially)
+    teeMesh = createTeeMesh('large'); // Large tee for driver/woods
+    smallTeeMesh = createTeeMesh('small'); // Small tee for irons/hybrids
     scene.add(teeMesh);
+    scene.add(smallTeeMesh);
 
     // Position ball and potentially tee initially
     showBallAtAddress();
@@ -443,7 +446,7 @@ export function showBallAtAddress(position = null, surfaceType = null) {
     // Create a new Vector3 from the plain object if position is provided
     const ballPos = position
         ? new THREE.Vector3(position.x, position.y, position.z)
-        : new THREE.Vector3(0, BALL_RADIUS, 0); // Default if position is null
+        : new THREE.Vector3(0, 0, 0); // Default if position is null (Y will be calculated below)
     console.log(`>>> ballPos created: (${ballPos.x.toFixed(2)}, ${ballPos.y.toFixed(2)}, ${ballPos.z.toFixed(2)}) from position:`, position); // ADDED LOG
 
     // Determine surface type. Use provided type, otherwise default to 'TEE'
@@ -451,37 +454,53 @@ export function showBallAtAddress(position = null, surfaceType = null) {
     // but for now, we'll allow overriding or default to TEE.
     const currentSurface = surfaceType || 'TEE'; // Default to TEE if not specified
 
-    // Adjust ball Y position based on surface offset (using logic similar to simulation end)
+    // --- Tee Visibility and Positioning ---
+    let teeHeightOffset = 0; // Additional height from tee
+    if (teeMesh && smallTeeMesh) {
+        if (currentSurface === 'TEE') {
+            // Determine tee size based on club type
+            const selectedClub = getSelectedClub();
+            const clubType = selectedClub?.type || 'iron';
+            const useLargeTee = clubType === 'driver' || clubType === 'wood';
+
+            // Tee heights accounting for 10x ball scale (visual representation)
+            // The ball is scaled 10x for visibility, so tee height needs similar scaling
+            const largeTeeHeight = 0.50; // 50mm tee with 10x visual scale
+            const smallTeeHeight = 0.15; // 15mm tee with 10x visual scale
+            teeHeightOffset = useLargeTee ? largeTeeHeight : smallTeeHeight;
+
+            // Position and show appropriate tee
+            const activeTee = useLargeTee ? teeMesh : smallTeeMesh;
+            const inactiveTee = useLargeTee ? smallTeeMesh : teeMesh;
+
+            activeTee.position.set(ballPos.x, 0.0, ballPos.z);
+            activeTee.visible = true;
+            inactiveTee.visible = false;
+
+            console.log(`Showing ${useLargeTee ? 'large' : 'small'} tee for ${clubType}, ball lifted by ${teeHeightOffset}m`);
+        } else {
+            teeMesh.visible = false;
+            smallTeeMesh.visible = false;
+            // console.log("Hiding tee."); // Reduce console noise
+        }
+    }
+
+    // Adjust ball Y position based on surface offset and tee height
     // This is crucial for placing the ball correctly *before* the shot
     const surfaceProps = typeof getSurfaceProperties === 'function' ? getSurfaceProperties(currentSurface) : null;
     if (surfaceProps && typeof surfaceProps.ballLieOffset === 'number' && surfaceProps.ballLieOffset !== -1) { // Check if getSurfaceProperties exists
-        ballPos.y = BALL_RADIUS + surfaceProps.ballLieOffset;
-        console.log(`showBallAtAddress: Surface=${currentSurface}, Offset=${surfaceProps.ballLieOffset.toFixed(3)}, Setting ball Y to ${ballPos.y.toFixed(3)}`);
+        ballPos.y = BALL_RADIUS + surfaceProps.ballLieOffset + teeHeightOffset;
+        console.log(`showBallAtAddress: Surface=${currentSurface}, Offset=${surfaceProps.ballLieOffset.toFixed(3)}, TeeHeight=${teeHeightOffset.toFixed(3)}, Setting ball Y to ${ballPos.y.toFixed(3)}`);
     } else {
         // Default Y if no surface info or water
-        ballPos.y = BALL_RADIUS;
-         console.log(`showBallAtAddress: No valid surface/offset for ${currentSurface}, setting ball Y to default ${ballPos.y.toFixed(3)}`);
+        ballPos.y = BALL_RADIUS + teeHeightOffset;
+         console.log(`showBallAtAddress: No valid surface/offset for ${currentSurface}, setting ball Y to default ${ballPos.y.toFixed(3)} with tee height ${teeHeightOffset.toFixed(3)}`);
     }
 
     console.log(`>>> PRE-COPY ballPos: (${ballPos.x.toFixed(2)}, ${ballPos.y.toFixed(2)}, ${ballPos.z.toFixed(2)})`); // ADDED LOG
     ball.position.copy(ballPos);
     ball.visible = true;
     console.log(`Showing ball at address position: (${ballPos.x.toFixed(2)}, ${ballPos.y.toFixed(2)}, ${ballPos.z.toFixed(2)}) on surface: ${currentSurface}`);
-
-    // --- Tee Visibility and Positioning ---
-    if (teeMesh) {
-        if (currentSurface === 'TEE') {
-            // Position tee directly below the ball's center
-            // The tee's origin is at its base due to geometry.translate in createTeeMesh
-            teeMesh.position.set(ballPos.x, 0.0, ballPos.z); // Place base of tee at ground level (y=0) under the ball
-            // Adjust tee height slightly if needed visually? For now, base at y=0.
-            teeMesh.visible = true;
-            console.log("Showing tee.");
-        } else {
-            teeMesh.visible = false;
-            // console.log("Hiding tee."); // Reduce console noise
-        }
-    }
 }
 
 // Function to hide the ball and tee
@@ -492,6 +511,9 @@ export function hideBall() {
     }
     if (teeMesh) {
         teeMesh.visible = false;
+    }
+    if (smallTeeMesh) {
+        smallTeeMesh.visible = false;
         // console.log("Hiding tee."); // Reduce console noise
     }
 }
@@ -1155,12 +1177,21 @@ export function getActiveCameraMode() {
 
 // --- Course Objects Getter for Raycasting ---
 /**
- * Returns an array of THREE.Object3D that constitute the currently loaded hole objects.
+ * Returns an array of THREE.Object3D that constitute the currently loaded hole/target objects.
  * These are used by MeasurementView for raycasting.
+ * Checks both hole view (playHole) and target view (CTF) objects.
  * @returns {Array<THREE.Object3D>}
  */
 export function getCourseObjects() {
-    return getCurrentHoleObjects ? getCurrentHoleObjects() : [];
+    // Try hole objects first (playHole mode)
+    const holeObjects = getCurrentHoleObjects ? getCurrentHoleObjects() : [];
+    if (holeObjects.length > 0) {
+        return holeObjects;
+    }
+
+    // Fall back to target objects (CTF mode)
+    const targetObjects = getTargetObjects ? getTargetObjects() : [];
+    return targetObjects;
 }
 
 

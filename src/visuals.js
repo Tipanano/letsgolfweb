@@ -297,7 +297,7 @@ export function animateBallFlightWithLanding(shotData, trajectoryColor = 0xffff0
             console.log(`Updating overlay: distance from hole = ${shotData.distanceFromHoleMeters.toFixed(2)}m`);
             ui.updateVisualOverlayInfo('closest-to-flag', {
                 distToFlag: shotData.distanceFromHoleMeters,
-                lie: 'Tee' // TODO: Get actual lie from shot data
+                lie: shotData.surfaceName || 'Tee'
             });
         }
 
@@ -450,23 +450,25 @@ export function activateGreenCamera() {
 
 // --- New Measurement Camera Activation ---
 export function activateMeasurementCamera() {
-    if (!CoreVisuals.ball || !HoleVisuals.getFlagPosition) {
-        console.error("Cannot activate measurement camera: Ball or flag position unavailable.");
+    if (!CoreVisuals.ball) {
+        console.error("Cannot activate measurement camera: Ball position unavailable.");
         return;
     }
+
     const ballPosition = CoreVisuals.ball.position.clone();
-    const flagPosition = HoleVisuals.getFlagPosition(); // Assuming this returns a THREE.Vector3
+    let flagPosition = null;
+
+    // Get flag position based on current visual mode
+    if (currentVisualMode === VISUAL_MODES.HOLE && HoleVisuals.getFlagPosition) {
+        flagPosition = HoleVisuals.getFlagPosition();
+    } else if (currentVisualMode === VISUAL_MODES.TARGET && TargetVisuals.getFlagPosition) {
+        flagPosition = TargetVisuals.getFlagPosition();
+    }
 
     if (!ballPosition || !flagPosition) {
         console.error("Measurement camera activation failed: Ball or flag position is null.");
         return;
     }
-
-    // Deactivate other visual elements if necessary (e.g., target lines from target view)
-    // unloadCurrentView(); // This might be too much, let's see.
-    // TargetVisuals.hideTargetElements();
-    // RangeVisuals.removeRangeVisuals(coreScene);
-
 
     console.log("Activating Measurement Camera...");
     MeasurementView.activate(ballPosition, flagPosition);

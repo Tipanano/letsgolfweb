@@ -1,6 +1,7 @@
 // Logic for the "Closest to the Flag" game mode
 import * as ui from '../ui.js'; // Import UI functions
 import { metersToYards, yardsToMeters } from '../utils/unitConversions.js'; // Import conversion utilities
+import { getSurfaceProperties } from '../surfaces.js'; // Import surface properties
 
 // --- State ---
 let targetDistanceMeters = 0; // Store internally in meters
@@ -68,9 +69,14 @@ export function handleShotResult(shotData) {
     const distanceRemainingMeters = Math.abs(targetDistanceMeters - endDistanceMeters);
     const distanceFromHoleMeters = Math.sqrt(distanceRemainingMeters**2 + sideDistanceMeters**2);
 
+    // Check if the shot landed on a penalty surface
+    const surfaceName = shotData.surfaceName;
+    const surfaceProps = surfaceName ? getSurfaceProperties(surfaceName) : null;
+    const isPenalty = surfaceProps?.isPenalty || false;
+
     // Convert to yards for display
     const distanceFromHoleYards = metersToYards(distanceFromHoleMeters);
-    console.log(`Shot ${shotsTaken}: Landed ${distanceFromHoleYards.toFixed(1)} yards from the hole.`);
+    console.log(`Shot ${shotsTaken}: Landed ${distanceFromHoleYards.toFixed(1)} yards from the hole${isPenalty ? ' (PENALTY)' : ''}.`);
 
     if (distanceFromHoleMeters < bestDistanceToHoleMeters) {
         bestDistanceToHoleMeters = distanceFromHoleMeters;
@@ -83,7 +89,8 @@ export function handleShotResult(shotData) {
     // Return the distance for multiplayer to send to server
     return {
         distanceFromHoleMeters,
-        distanceFromHoleYards
+        distanceFromHoleYards,
+        isPenalty // Flag for server to use when determining winner
     };
 
     // TODO: Decide if the game ends (e.g., after 1 shot, or multiple)

@@ -17,7 +17,8 @@ import {
 import { getCurrentGameMode } from './main.js'; // Import the function to get the current game mode
 import { prepareNextShot } from './gameLogic/actions.js';
 import { getCurrentBallPosition, getCurrentHoleLayout, getHoleJustCompleted } from './modes/playHole.js'; // Import playHole getters (Adjusted path)
-import { getFlagPosition } from './visuals/holeView.js'; // Import flag position getter
+import { getFlagPosition as getHoleFlagPosition } from './visuals/holeView.js'; // Import flag position getter for hole mode
+import { getFlagPosition as getTargetFlagPosition } from './visuals/targetView.js'; // Import flag position getter for CTF mode
 // --- Constants for Aiming ---
 const AIM_INCREMENT_FULL = 0.5; // Degrees per key press
 const AIM_INCREMENT_CHIP = 0.2; // Degrees per key press
@@ -375,7 +376,15 @@ export function handleMouseDown(event) {
         // Get current ball and flag positions (needed for context in handleCourseClick)
         // Ensure these are THREE.Vector3 instances
         const currentBallPosition = ball ? ball.position.clone() : null;
-        const currentFlagPosition = getFlagPosition ? getFlagPosition() : null; // Already a Vector3 or null
+
+        // Get flag position based on current game mode
+        const currentMode = getCurrentGameMode();
+        let currentFlagPosition = null;
+        if (currentMode === 'closest-to-flag') {
+            currentFlagPosition = getTargetFlagPosition ? getTargetFlagPosition() : null;
+        } else {
+            currentFlagPosition = getHoleFlagPosition ? getHoleFlagPosition() : null;
+        }
 
         if (!currentBallPosition || !currentFlagPosition) {
             console.warn("handleMouseDown: Could not get ball or flag position for measurement click.");

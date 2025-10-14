@@ -2,11 +2,16 @@
 
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
 import * as CoreVisuals from './core.js'; // May need core functions
+import { renderObstacles, clearObstacles } from './obstacles.js'; // Import obstacle rendering
+import { createObstacle, OBSTACLE_TYPES, OBSTACLE_SIZES } from '../obstacleConfig.js'; // Import obstacle creation
+import { generateCTFHoleConfig, metersToYards } from '../holeConfigGenerator.js'; // Import hole config generator
 
 let scene = null;
 let canvasWidth = 0;
 let canvasHeight = 0;
 let targetDistanceYards = 0; // In yards
+let currentHoleConfig = null; // Store current hole configuration
+let greenRadiusMeters = null; // Store green radius for camera
 
 // --- 3D Objects ---
 let greenMesh = null;
@@ -14,21 +19,26 @@ let flagstickMesh = null;
 let flagMesh = null;
 let groundMesh = null; // Add ground
 let fairwayMesh = null; // Add fairway
+let teeBoxMesh = null; // Add tee box
 let targetGroup = null; // Group to hold all target elements
 const landingMarkers = []; // Array to hold landing spot markers
+let currentObstacles = []; // Array to store obstacle data
 
 // --- Constants ---
 const ROUGH_COLOR = 0x228B22; // Forest green
 const FAIRWAY_COLOR = 0x3CB371; // Medium sea green
 const GREEN_COLOR = 0x3A913F; // Darker green
+const TEE_COLOR = 0x6AC46A; // Tee box green (lighter than fairway)
 const FLAG_COLOR = 0xFF0000; // Red
 const FLAGSTICK_COLOR = 0xcccccc; // White/Gray
 
 import { YARDS_TO_METERS } from '../utils/unitConversions.js';
 
 const Y_OFFSET_GROUND = 0;
+const Y_OFFSET_WATER = 0.005; // Water below fairway (matches surfaces.js - fairway wins)
 const Y_OFFSET_FAIRWAY = 0.01;
-const Y_OFFSET_GREEN = 0.02;
+const Y_OFFSET_TEE = 0.03; // Tee box slightly above fairway
+const Y_OFFSET_GREEN = 0.02; // Green above fairway and water
 const Y_OFFSET_FLAGSTICK = 0.02; // Base of flagstick on green level
 
 export function setScene(coreScene, width, height) {
@@ -39,6 +49,12 @@ export function setScene(coreScene, width, height) {
 
 export function setTargetDistance(distanceYards) {
     targetDistanceYards = distanceYards;
+}
+
+// Set hole configuration (from server in multiplayer, or generated locally)
+export function setHoleConfig(holeConfig) {
+    currentHoleConfig = holeConfig;
+    console.log('CTF: Hole config set:', holeConfig);
 }
 
 // Creates the 3D objects for the target view
@@ -53,38 +69,74 @@ function createTargetElements() {
     const targetZ = targetDistanceYards * YARDS_TO_METERS; // Target distance in meters
 
     // --- Ground (Rough) ---
-    // Make it wide and long enough to cover the view towards the target
+    // Make it wide and long enough to cover the view, extending behind the tee box
     const groundWidth = 100; // Meters
-    const groundLength = targetZ + 50; // Extend 50m past the target
+    const groundBehindTee = 30; // Extend 30m behind the tee box
+    const groundLength = targetZ + 50 + groundBehindTee; // Total length
     const groundGeometry = new THREE.PlaneGeometry(groundWidth, groundLength);
     const groundMaterial = new THREE.MeshLambertMaterial({ color: ROUGH_COLOR, side: THREE.DoubleSide });
     groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
     groundMesh.rotation.x = -Math.PI / 2;
     groundMesh.position.y = Y_OFFSET_GROUND;
-    groundMesh.position.z = groundLength / 2; // Center the ground plane
+    groundMesh.position.z = (groundLength / 2) - groundBehindTee; // Shift to extend behind start
     targetGroup.add(groundMesh);
 
-    // --- Fairway ---
-    // Simple rectangle leading to the green
-    const fairwayWidth = 25; // Meters
-    const fairwayLength = targetZ; // Length up to the green center
-    const fairwayGeometry = new THREE.PlaneGeometry(fairwayWidth, fairwayLength);
-    const fairwayMaterial = new THREE.MeshLambertMaterial({ color: FAIRWAY_COLOR, side: THREE.DoubleSide });
-    fairwayMesh = new THREE.Mesh(fairwayGeometry, fairwayMaterial);
-    fairwayMesh.rotation.x = -Math.PI / 2;
-    fairwayMesh.position.y = Y_OFFSET_FAIRWAY; // Slightly above rough
-    fairwayMesh.position.z = fairwayLength / 2; // Center it leading up to target
-    targetGroup.add(fairwayMesh);
+    // --- Tee Box ---
+    const teeWidth = 8; // Meters (width)
+    const teeDepth = 6; // Meters (depth)
+    const teeGeometry = new THREE.PlaneGeometry(teeWidth, teeDepth);
+    const teeMaterial = new THREE.MeshLambertMaterial({ color: TEE_COLOR, side: THREE.DoubleSide });
+    teeBoxMesh = new THREE.Mesh(teeGeometry, teeMaterial);
+    teeBoxMesh.rotation.x = -Math.PI / 2;
+    teeBoxMesh.position.y = Y_OFFSET_FAIRWAY + 0.001; // Just above fairway level
+    teeBoxMesh.position.z = 0; // Center the tee box at Z=0 (where ball starts)
+    targetGroup.add(teeBoxMesh);
 
-    // --- Green ---
-    const greenRadiusMeters = 15 * YARDS_TO_METERS; // Example: 15 yard radius green
-    const greenGeometry = new THREE.CircleGeometry(greenRadiusMeters, 32);
+    // --- Green (calculate position first to angle fairway towards it) ---
+    // Use holeConfig for green dimensions if available
+    const greenWidthMeters = currentHoleConfig?.greenWidthMeters || 18;
+    const greenDepthMeters = currentHoleConfig?.greenDepthMeters || 14;
+    const greenOffsetMeters = currentHoleConfig?.greenOffsetMeters || 0;
+
+    // Create organic green shape with slight irregularities
+    const greenShape = new THREE.Shape();
+    const greenSegments = 16; // Points around the perimeter
+    const baseRadiusX = greenWidthMeters / 2;
+    const baseRadiusZ = greenDepthMeters / 2;
+
+    for (let i = 0; i <= greenSegments; i++) {
+        const angle = (i / greenSegments) * Math.PI * 2;
+        // Add slight random variation to radius (±5% of base radius)
+        const radiusVariationX = baseRadiusX * (1 + (Math.random() - 0.5) * 0.1);
+        const radiusVariationZ = baseRadiusZ * (1 + (Math.random() - 0.5) * 0.1);
+        const x = Math.cos(angle) * radiusVariationX;
+        const z = Math.sin(angle) * radiusVariationZ;
+
+        if (i === 0) {
+            greenShape.moveTo(x, z);
+        } else {
+            greenShape.lineTo(x, z);
+        }
+    }
+    greenShape.closePath();
+
+    const greenGeometry = new THREE.ShapeGeometry(greenShape);
     const greenMaterial = new THREE.MeshLambertMaterial({ color: GREEN_COLOR, side: THREE.DoubleSide });
     greenMesh = new THREE.Mesh(greenGeometry, greenMaterial);
-    greenMesh.rotation.x = -Math.PI / 2; // Rotate to lay flat
+    greenMesh.rotation.x = Math.PI / 2; // Rotate to lay flat
     greenMesh.position.y = Y_OFFSET_GREEN; // Slightly above fairway
+    greenMesh.position.x = greenOffsetMeters; // Offset left/right from centerline
     greenMesh.position.z = targetZ; // Position it AT the target distance
     targetGroup.add(greenMesh);
+
+    // Store approximate green radius for camera (average of width and depth radii)
+    greenRadiusMeters = (greenWidthMeters + greenDepthMeters) / 4; // Average radius
+
+    // --- Flag position within green ---
+    const holePositionX = currentHoleConfig?.holePositionX || 0;
+    const holePositionY = currentHoleConfig?.holePositionY || 0;
+    const flagX = greenOffsetMeters + (holePositionX * greenWidthMeters / 2);
+    const flagZ = targetZ + (holePositionY * greenDepthMeters / 2);
 
     // --- Flagstick ---
     const flagstickHeight = 2.5; // Meters
@@ -92,8 +144,8 @@ function createTargetElements() {
     const flagstickGeometry = new THREE.CylinderGeometry(flagstickRadius, flagstickRadius, flagstickHeight, 8);
     const flagstickMaterial = new THREE.MeshBasicMaterial({ color: FLAGSTICK_COLOR });
     flagstickMesh = new THREE.Mesh(flagstickGeometry, flagstickMaterial);
-    // Position base on the green surface, centered at target Z
-    flagstickMesh.position.set(0, flagstickHeight / 2 + Y_OFFSET_FLAGSTICK, targetZ);
+    // Position base on the green surface at hole position
+    flagstickMesh.position.set(flagX, flagstickHeight / 2 + Y_OFFSET_FLAGSTICK, flagZ);
     targetGroup.add(flagstickMesh);
 
     // --- Flag ---
@@ -101,20 +153,233 @@ function createTargetElements() {
     const flagMaterial = new THREE.MeshBasicMaterial({ color: FLAG_COLOR, side: THREE.DoubleSide });
     flagMesh = new THREE.Mesh(flagGeometry, flagMaterial);
     // Position relative to the top of the flagstick
-    flagMesh.position.set(0.25, flagstickMesh.position.y + flagstickHeight / 2 - 0.15, targetZ);
+    flagMesh.position.set(flagX + 0.25, flagstickMesh.position.y + flagstickHeight / 2 - 0.15, flagZ);
     targetGroup.add(flagMesh);
+
+    // --- Fairway (angled towards green center with organic shape) ---
+    // Adjust fairway based on water hazard position
+    const waterPosition = currentHoleConfig?.waterHazard?.position; // 'front', 'left', 'right', 'behind', or undefined
+
+    let fairwayWidth = 25; // Base width (meters)
+    let fairwayExtension = 10; // Extend past green center (meters)
+    let fairwayApproachDistance = 40; // Length before green
+
+    // Adjust fairway dimensions based on water position
+    if (waterPosition === 'front') {
+        // Water in front - shorten fairway approach so it stops before green
+        fairwayApproachDistance = 30; // Stop 10m before green (less aggressive)
+        fairwayExtension = 0;
+    } else if (waterPosition === 'behind') {
+        // Water behind - extend fairway past green
+        fairwayExtension = 12; // Extend past green but not too far
+    } else if (waterPosition === 'left' || waterPosition === 'right') {
+        // Water on side - cut fairway width on that side
+        fairwayWidth = 25; // Keep normal width, but we'll cut one edge
+    }
+
+    const fairwayStartZ = targetZ - fairwayApproachDistance; // Start position
+    const fairwayLength = fairwayApproachDistance + fairwayExtension; // Total length
+
+    // Calculate angle from tee (0,0) to green center
+    const angleToGreen = Math.atan2(greenOffsetMeters, targetZ);
+
+    // Create organic fairway shape with slight variations on edges and bowed ends
+    const fairwayShape = new THREE.Shape();
+    const lengthSegments = 3; // Segments along the length (left/right edges)
+    const endSegments = 5; // Segments for the curved ends (front/back)
+
+    // Random bow amount for front and back (can bow inward or outward)
+    const backBow = (Math.random() - 0.5) * 6; // ±3m bow
+    const frontBow = (Math.random() - 0.5) * 6; // ±3m bow
+
+    // Determine width modifiers based on water position
+    const leftWidthMultiplier = waterPosition === 'left' ? 0.65 : 1.0; // Cut left side if water on left
+    const rightWidthMultiplier = waterPosition === 'right' ? 0.65 : 1.0; // Cut right side if water on right
+
+    // Start at back-left corner
+    fairwayShape.moveTo(-fairwayWidth / 2 * leftWidthMultiplier, -fairwayLength / 2);
+
+    // Back edge (curved/bowed) from left to right
+    for (let i = 1; i < endSegments; i++) {
+        const t = i / endSegments;
+        const xLeft = -fairwayWidth / 2 * leftWidthMultiplier;
+        const xRight = fairwayWidth / 2 * rightWidthMultiplier;
+        const x = xLeft + (xRight - xLeft) * t;
+        // Parabolic curve for bow effect
+        const bowOffset = -backBow * 4 * t * (1 - t); // Peak at middle
+        fairwayShape.lineTo(x, -fairwayLength / 2 + bowOffset);
+    }
+
+    // Right edge with slight variations
+    for (let i = 0; i <= lengthSegments; i++) {
+        const t = i / lengthSegments;
+        const y = -fairwayLength / 2 + fairwayLength * t;
+        const widthVariation = (Math.random() - 0.5) * 4; // ±2m variation
+        fairwayShape.lineTo(fairwayWidth / 2 * rightWidthMultiplier + widthVariation, y);
+    }
+
+    // Front edge (curved/bowed) from right to left
+    for (let i = 1; i < endSegments; i++) {
+        const t = i / endSegments;
+        const xRight = fairwayWidth / 2 * rightWidthMultiplier;
+        const xLeft = -fairwayWidth / 2 * leftWidthMultiplier;
+        const x = xRight + (xLeft - xRight) * t;
+        // Parabolic curve for bow effect
+        const bowOffset = frontBow * 4 * t * (1 - t); // Peak at middle
+        fairwayShape.lineTo(x, fairwayLength / 2 + bowOffset);
+    }
+
+    // Left edge with slight variations (going back to start)
+    for (let i = lengthSegments; i > 0; i--) {
+        const t = i / lengthSegments;
+        const y = -fairwayLength / 2 + fairwayLength * t;
+        const widthVariation = (Math.random() - 0.5) * 4; // ±2m variation
+        fairwayShape.lineTo(-fairwayWidth / 2 * leftWidthMultiplier + widthVariation, y);
+    }
+
+    fairwayShape.closePath();
+
+    const fairwayGeometry = new THREE.ShapeGeometry(fairwayShape);
+    const fairwayMaterial = new THREE.MeshLambertMaterial({ color: FAIRWAY_COLOR, side: THREE.DoubleSide });
+    fairwayMesh = new THREE.Mesh(fairwayGeometry, fairwayMaterial);
+    fairwayMesh.rotation.x = Math.PI / 2; // Lay flat (note: ShapeGeometry needs different rotation than PlaneGeometry)
+    fairwayMesh.rotation.z = angleToGreen; // Rotate around Z axis to angle towards green
+
+    // Position fairway - center point should be halfway to green, offset towards green position
+    const fairwayCenterZ = fairwayStartZ + (fairwayLength / 2);
+    const fairwayCenterX = greenOffsetMeters * (fairwayCenterZ / targetZ); // Proportional offset
+    fairwayMesh.position.set(fairwayCenterX, Y_OFFSET_FAIRWAY, fairwayCenterZ);
+    targetGroup.add(fairwayMesh);
+
+    // --- Water Hazard (if present in hole config) ---
+    // Water is rendered below fairway (matches playHole mode - fairway wins visually and in lie detection)
+    if (currentHoleConfig?.waterHazard) {
+        const water = currentHoleConfig.waterHazard;
+        console.log('CTF: Rendering water hazard:', water);
+
+        let waterGeometry;
+
+        if (water.type === 'ellipse' && water.center && water.radiusX && water.radiusZ) {
+            // Create organic elliptical water shape with irregular edges
+            const waterShape = new THREE.Shape();
+            const segments = 24; // Points around perimeter for smooth but varied shape
+
+            for (let i = 0; i <= segments; i++) {
+                const angle = (i / segments) * Math.PI * 2;
+                // Add slight random variation to each radius (±8% variation)
+                const radiusXVar = water.radiusX * (1 + (Math.random() - 0.5) * 0.16);
+                const radiusZVar = water.radiusZ * (1 + (Math.random() - 0.5) * 0.16);
+                const x = Math.cos(angle) * radiusXVar;
+                const z = Math.sin(angle) * radiusZVar;
+
+                if (i === 0) {
+                    waterShape.moveTo(x, z);
+                } else {
+                    waterShape.lineTo(x, z);
+                }
+            }
+            waterShape.closePath();
+            waterGeometry = new THREE.ShapeGeometry(waterShape);
+
+        } else if (water.type === 'circle' && water.center && water.radius) {
+            // Legacy support for circular water
+            waterGeometry = new THREE.CircleGeometry(water.radius, 32);
+        } else {
+            console.warn('Unknown water hazard type:', water);
+            return;
+        }
+
+        const waterMaterial = new THREE.MeshStandardMaterial({
+            color: water.surface?.color || '#4682B4',
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.85
+        });
+        const waterMesh = new THREE.Mesh(waterGeometry, waterMaterial);
+        waterMesh.rotation.x = Math.PI / 2; // Lay flat (ShapeGeometry orientation)
+        waterMesh.position.set(
+            water.center.x,
+            Y_OFFSET_WATER, // Use constant for consistent layering
+            water.center.z
+        );
+        waterMesh.receiveShadow = true;
+        targetGroup.add(waterMesh);
+        console.log(`Water hazard added at (${water.center.x.toFixed(1)}, ${water.center.z.toFixed(1)}), type=${water.type}, Y=${Y_OFFSET_WATER}`);
+    }
 
     // Add the whole group to the main scene
     scene.add(targetGroup);
     console.log(`Target elements created/updated at Z = ${targetZ.toFixed(1)}m`);
     console.log(`✅ Target group added to scene. Children count: ${targetGroup.children.length}`);
     console.log(`📦 Scene now has ${scene.children.length} children total`);
+
+    // Generate and render obstacles
+    generateObstacles(targetZ, fairwayWidth);
+}
+
+// Generate random obstacles in the rough only (not on fairway or green)
+function generateObstacles(targetZ, fairwayWidth) {
+    currentObstacles = []; // Clear existing obstacles
+
+    // Use holeConfig for green parameters if available
+    const greenWidthMeters = currentHoleConfig?.greenWidthMeters || 18;
+    const greenDepthMeters = currentHoleConfig?.greenDepthMeters || 14;
+    const greenOffsetMeters = currentHoleConfig?.greenOffsetMeters || 0;
+    const greenRadiusMeters = Math.max(greenWidthMeters, greenDepthMeters) / 2;
+
+    const obstacleCount = Math.floor(Math.random() * 18) + 12; // 12-29 obstacles (3x more)
+    const types = [OBSTACLE_TYPES.TREE, OBSTACLE_TYPES.BUSH];
+    const sizes = [OBSTACLE_SIZES.SMALL, OBSTACLE_SIZES.MEDIUM, OBSTACLE_SIZES.LARGE];
+
+    for (let i = 0; i < obstacleCount; i++) {
+        const type = types[Math.floor(Math.random() * types.length)];
+        const size = sizes[Math.floor(Math.random() * sizes.length)];
+
+        // Random position along the course
+        const z = Math.random() * targetZ * 0.8 + targetZ * 0.1; // 10%-90% of distance
+
+        // Only place in the rough (outside fairway and green)
+        const side = Math.random() < 0.5 ? -1 : 1;
+        const x = side * (fairwayWidth / 2 + Math.random() * 20); // 0-20m into rough
+
+        // Check if obstacle would be on the green (avoid green area with offset)
+        const greenCenterX = greenOffsetMeters;
+        const greenCenterZ = targetZ;
+        const dx = x - greenCenterX;
+        const dz = z - greenCenterZ;
+        const distanceToGreenCenter = Math.sqrt(dx * dx + dz * dz);
+
+        if (distanceToGreenCenter < greenRadiusMeters + 5) {
+            // Too close to green, skip this obstacle
+            i--;
+            continue;
+        }
+
+        const obstacle = createObstacle(type, size, x, z);
+        currentObstacles.push(obstacle);
+    }
+
+    // Render obstacles
+    renderObstacles(scene, currentObstacles);
+    console.log(`Generated ${currentObstacles.length} obstacles (all in rough), green offset: ${greenOffsetMeters}m`);
+}
+
+// Export obstacles for physics calculations
+export function getObstacles() {
+    return currentObstacles;
 }
 
 // Shows the target elements (creates if needed)
 export function drawTargetView() {
     if (!scene) return;
     console.log("Drawing Target View (3D) for distance:", targetDistanceYards);
+
+    // Generate hole config if not already set (single-player mode)
+    if (!currentHoleConfig) {
+        const distanceMeters = targetDistanceYards * 0.9144; // Convert yards to meters
+        currentHoleConfig = generateCTFHoleConfig(distanceMeters);
+        console.log('CTF: Generated local hole config:', currentHoleConfig);
+    }
 
     if (!targetGroup) {
         createTargetElements();
@@ -153,6 +418,9 @@ export function hideTargetElements() {
     }
     // Hide landing markers too
     landingMarkers.forEach(marker => marker.visible = false);
+    // Clear obstacles
+    clearObstacles(scene);
+    currentObstacles = [];
 }
 
 // Removes the target elements from the scene entirely
@@ -161,6 +429,7 @@ export function removeTargetElements() {
         // Remove individual elements first
         if(groundMesh) targetGroup.remove(groundMesh);
         if(fairwayMesh) targetGroup.remove(fairwayMesh);
+        if(teeBoxMesh) targetGroup.remove(teeBoxMesh);
         if(greenMesh) targetGroup.remove(greenMesh);
         if(flagstickMesh) targetGroup.remove(flagstickMesh);
         if(flagMesh) targetGroup.remove(flagMesh);
@@ -170,6 +439,7 @@ export function removeTargetElements() {
         // Dispose geometries and materials if needed
         groundMesh?.geometry.dispose(); groundMesh?.material.dispose();
         fairwayMesh?.geometry.dispose(); fairwayMesh?.material.dispose();
+        teeBoxMesh?.geometry.dispose(); teeBoxMesh?.material.dispose();
         greenMesh?.geometry.dispose(); greenMesh?.material.dispose();
         flagstickMesh?.geometry.dispose(); flagstickMesh?.material.dispose();
         flagMesh?.geometry.dispose(); flagMesh?.material.dispose();
@@ -177,6 +447,7 @@ export function removeTargetElements() {
         targetGroup = null;
         groundMesh = null;
         fairwayMesh = null;
+        teeBoxMesh = null;
         greenMesh = null;
         flagstickMesh = null;
         flagMesh = null;
@@ -189,6 +460,10 @@ export function removeTargetElements() {
          marker.material.dispose();
      });
      landingMarkers.length = 0; // Clear the array
+
+     // Clear obstacles
+     clearObstacles(scene);
+     currentObstacles = [];
 }
 
 
@@ -252,8 +527,19 @@ export function getGreenCenter() {
     return greenMesh ? greenMesh.position.clone() : null; // Return a clone to prevent external modification
 }
 
-// Returns the radius of the green in meters
+// Returns the radius of the green in meters (approximate average radius)
 export function getGreenRadius() {
-    // Assuming greenGeometry is CircleGeometry and radius is stored
-    return greenMesh?.geometry?.parameters?.radius || null;
+    return greenRadiusMeters;
+}
+
+// Returns the flag position (for measurement camera)
+export function getFlagPosition() {
+    return flagstickMesh ? flagstickMesh.position.clone() : null;
+}
+
+// Returns target view objects for raycasting (measurement camera)
+export function getTargetObjects() {
+    if (!targetGroup) return [];
+    // Return all children that can be raycasted (meshes)
+    return targetGroup.children.filter(child => child.isMesh);
 }

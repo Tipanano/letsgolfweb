@@ -24,6 +24,7 @@ import { getCurrentGameMode } from '../main.js'; // Import mode checker
 import { getCurrentBallPosition as getPlayHoleBallPosition } from '../modes/playHole.js'; // Import position getter
 import { BALL_RADIUS } from '../visuals/core.js'; // Import BALL_RADIUS
 import { getFlagPosition, getGreenCenter, getGreenRadius } from '../visuals/holeView.js'; // For hole/green checks
+import { getObstacles } from '../visuals/targetView.js'; // Import obstacles getter for CTF mode
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js'; // For Vector3
 
 // --- Calculation Functions ---
@@ -125,7 +126,9 @@ export function calculateFullSwingShot() {
 
     // --- Run Flight Simulation ---
     // Initial position already determined above
-    const flightSimulationResult = simulateFlightStepByStep(initialPositionObj, initialVelocityObj, spinVectorRPM, selectedClub);
+    // Get obstacles if in CTF mode
+    const obstacles = (currentMode === 'closest-to-flag') ? getObstacles() : [];
+    const flightSimulationResult = simulateFlightStepByStep(initialPositionObj, initialVelocityObj, spinVectorRPM, selectedClub, obstacles);
 
     // --- Extract Results from Flight Simulation ---
     carryDistance = flightSimulationResult.carryDistance;
@@ -390,7 +393,9 @@ export function calculateChipShot() {
 
     // --- Run Flight Simulation ---
     // Initial position already determined above
-    const flightSimulationResult = simulateFlightStepByStep(initialPositionObj, initialVelocityObj, spinVectorRPM, selectedClub);
+    // Get obstacles if in CTF mode
+    const obstacles_chip = (currentMode === 'closest-to-flag') ? getObstacles() : [];
+    const flightSimulationResult = simulateFlightStepByStep(initialPositionObj, initialVelocityObj, spinVectorRPM, selectedClub, obstacles_chip);
 
     // --- Extract Results ---
     carryDistance = flightSimulationResult.carryDistance;

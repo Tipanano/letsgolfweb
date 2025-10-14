@@ -757,7 +757,8 @@ function updateScoreboard() {
         let scoreText = '';
 
         if (score && score.hasShot) {
-            scoreText = `<strong>${score.distanceYards.toFixed(1)} yd</strong>`;
+            const penaltyIndicator = score.isPenalty ? ' <span style="color: #ff0000; font-weight: bold;">(PENALTY)</span>' : '';
+            scoreText = `<strong>${score.distanceYards.toFixed(1)} yd</strong>${penaltyIndicator}`;
         } else if (isCurrent) {
             scoreText = '<em>shooting...</em>';
         } else {
@@ -780,10 +781,11 @@ function updateScoreboard() {
     });
 }
 
-export function updatePlayerScore(playerId, distanceMeters, distanceYards) {
+export function updatePlayerScore(playerId, distanceMeters, distanceYards, isPenalty = false) {
     playerScores[playerId] = {
         distanceMeters,
         distanceYards,
+        isPenalty,
         hasShot: true
     };
     updateScoreboard();
@@ -810,6 +812,12 @@ async function startMultiplayerGame() {
 
     // Initialize CTF mode with server-provided target distance (or null for single-player)
     await setGameMode(GAME_MODES.CLOSEST_TO_FLAG, null, targetDistance);
+
+    // Pass hole config to targetView if available
+    if (holeConfig) {
+        const { setHoleConfig } = await import('./visuals/targetView.js');
+        setHoleConfig(holeConfig);
+    }
 
     // Show multiplayer scoreboard
     showScoreboard();
@@ -867,8 +875,9 @@ function handlePlayerShot(data) {
 
     // Update scoreboard with player's distance (for both local and remote players)
     if (shotData && shotData.distanceFromHoleMeters !== undefined && shotData.distanceFromHoleYards !== undefined) {
-        console.log('Updating player score with distance:', shotData.distanceFromHoleYards, 'yards');
-        updatePlayerScore(playerId, shotData.distanceFromHoleMeters, shotData.distanceFromHoleYards);
+        const isPenalty = shotData.isPenalty || false;
+        console.log('Updating player score with distance:', shotData.distanceFromHoleYards, 'yards', isPenalty ? '(PENALTY)' : '');
+        updatePlayerScore(playerId, shotData.distanceFromHoleMeters, shotData.distanceFromHoleYards, isPenalty);
     } else {
         console.warn('Shot data missing distance fields:', shotData);
     }
