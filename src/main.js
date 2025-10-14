@@ -298,7 +298,7 @@ if (logoutBtn) {
     logoutBtn.addEventListener('click', () => {
         playerManager.logout();
         // Update UI to reflect guest status
-        const player = playerManager.getCurrentPlayer();
+        const player = playerManager.currentPlayer;
         ui.updatePlayerDisplay(player.guestName, player.playerType);
         console.log('Logged out, reverted to guest account');
     });

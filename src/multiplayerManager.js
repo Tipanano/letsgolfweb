@@ -838,12 +838,22 @@ async function startMultiplayerGame() {
         playTurnNotificationSound();
         modal.alert('It\'s your turn! Take your shot.', 'Your Turn!', 'success');
         startShotTimer('Your shot, {time} seconds left');
+
+        // Switch to camera 1 (static behind ball) for your turn
+        const { activateHoleViewCamera } = await import('./visuals.js');
+        activateHoleViewCamera();
+        console.log('Switched to camera 1 (static) for your turn');
     } else {
         // Show waiting message for other players
         const currentPlayer = players[currentPlayerIndex];
         const playerName = currentPlayer?.name || 'Player';
         console.log('Waiting for', playerName, '\'s turn');
         startWatchingTimer(playerName);
+
+        // Switch to camera 3 (reverse angle) for watching
+        const { activateReverseCamera } = await import('./visuals.js');
+        activateReverseCamera();
+        console.log('Switched to camera 3 (reverse) for watching');
     }
 }
 
@@ -867,6 +877,12 @@ function handleTurnChange(data) {
         playTurnNotificationSound();
         modal.alert('It\'s your turn! Take your shot.', 'Your Turn!', 'success');
         startShotTimer('Your shot, {time} seconds left');
+
+        // Switch to camera 1 (static behind ball) for your turn
+        import('./visuals.js').then(({ activateHoleViewCamera }) => {
+            activateHoleViewCamera();
+            console.log('Switched to camera 1 (static) for your turn');
+        });
     } else {
         // Stop timer if it was running
         shotTimer.stopTimer();
@@ -876,6 +892,12 @@ function handleTurnChange(data) {
         const playerName = currentPlayer?.name || 'Player';
         console.log('Waiting for', playerName, '\'s turn');
         startWatchingTimer(playerName);
+
+        // Switch to camera 3 (reverse angle) for watching
+        import('./visuals.js').then(({ activateReverseCamera }) => {
+            activateReverseCamera();
+            console.log('Switched to camera 3 (reverse) for watching');
+        });
     }
 }
 
