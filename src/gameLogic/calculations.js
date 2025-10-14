@@ -155,8 +155,8 @@ export function calculateFullSwingShot() {
     }
 
     // --- Run Ground Simulation (if not holed out) ---
+    let landingSurfaceType = 'OUT_OF_BOUNDS'; // Default to OOB - declare outside block for scope
     if (!isHoledOut) {
-        let landingSurfaceType = 'OUT_OF_BOUNDS'; // Default to OOB
         const currentHoleLayout = getCurrentHoleLayout(); // Get layout (might be null)
 
         if (currentMode === 'play-hole' && currentHoleLayout) {
@@ -425,8 +425,8 @@ export function calculateChipShot() {
     }
 
     // --- Run Ground Simulation (if not holed out) ---
+    let landingSurfaceType = 'OUT_OF_BOUNDS'; // Default to OOB - declare outside block for scope
     if (!isHoledOut) {
-        let landingSurfaceType = 'OUT_OF_BOUNDS'; // Default to OOB
         const currentHoleLayout = getCurrentHoleLayout(); // Get layout (might be null)
 
         if (currentMode === 'play-hole' && currentHoleLayout) {

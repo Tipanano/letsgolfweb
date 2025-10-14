@@ -1296,16 +1296,31 @@ if (rightFoot) {
 if (switchHoleButton) {
     switchHoleButton.addEventListener('click', (event) => {
         event.stopPropagation(); // Prevent click-outside from immediately closing if it's already open
-        if (holeSelectPopup) {
-            const isVisible = holeSelectPopup.style.display === 'block';
-            if (isVisible) {
-                hideHoleSelectPopup();
+
+        // Import getCurrentGameMode at the top of the file if not already imported
+        const currentMode = window.getCurrentGameMode ? window.getCurrentGameMode() : null;
+
+        if (currentMode === 'closest-to-flag') {
+            // In CTF mode, generate a new hole layout
+            console.log('UI: Generating new CTF hole layout...');
+            if (window.generateNewCTFHole) {
+                window.generateNewCTFHole();
             } else {
-                // Hide other popups if open
-                hideBallPosInfoPopup();
-                hideSwingSpeedInfoPopup();
-                hideShotResultPopup();
-                showHoleSelectPopup(); // This will populate and show
+                console.error('generateNewCTFHole function not available');
+            }
+        } else {
+            // In Play Hole mode, show the hole selection popup
+            if (holeSelectPopup) {
+                const isVisible = holeSelectPopup.style.display === 'block';
+                if (isVisible) {
+                    hideHoleSelectPopup();
+                } else {
+                    // Hide other popups if open
+                    hideBallPosInfoPopup();
+                    hideSwingSpeedInfoPopup();
+                    hideShotResultPopup();
+                    showHoleSelectPopup(); // This will populate and show
+                }
             }
         }
     });
@@ -1315,6 +1330,29 @@ if (closeHoleSelectPopupButton) {
     closeHoleSelectPopupButton.addEventListener('click', () => {
         hideHoleSelectPopup();
     });
+}
+
+/**
+ * Update switch hole button text based on current game mode
+ * @param {string} gameMode - Current game mode ('play-hole', 'closest-to-flag', etc.)
+ */
+export function updateSwitchHoleButton(gameMode, isMultiplayer = false) {
+    if (!switchHoleButton) return;
+
+    if (gameMode === 'closest-to-flag') {
+        if (isMultiplayer) {
+            // Hide the button in multiplayer CTF (server controls hole generation)
+            switchHoleButton.style.display = 'none';
+        } else {
+            // Show as "New Hole" in single player CTF
+            switchHoleButton.style.display = 'block';
+            switchHoleButton.textContent = 'New Hole';
+        }
+    } else {
+        // Show as "Switch Hole" in Play Hole mode
+        switchHoleButton.style.display = 'block';
+        switchHoleButton.textContent = 'Switch Hole';
+    }
 }
 
 /**

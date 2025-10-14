@@ -45,6 +45,33 @@ async function switchGameToHole(holeFileName) {
     }
 }
 
+// Function to generate a new CTF hole layout
+function generateNewCTFHole() {
+    if (currentMode !== GAME_MODES.CLOSEST_TO_FLAG) {
+        console.warn("Cannot generate new CTF hole when not in CTF mode.");
+        return;
+    }
+
+    console.log("Main: Generating new CTF hole layout...");
+
+    // Clear the current hole config so a new one will be generated
+    visuals.clearTargetViewConfig();
+
+    // Terminate and reinitialize CTF mode (this will generate a new hole config)
+    closestToFlag.terminateMode();
+    const actualTargetDistance = closestToFlag.initializeMode();
+
+    // Reset game state
+    logic.resetSwing();
+
+    // Regenerate visuals with new hole (will create new config since we cleared it)
+    visuals.switchToTargetView(actualTargetDistance);
+    visuals.showBallAtAddress();
+
+    ui.updateStatus('Ready');
+    console.log("Main: New CTF hole generated successfully.");
+}
+
 
 // Function to change the game mode
 export async function setGameMode(newMode, initialHoleName = null, targetDistance = null) { // Made async, added initialHoleName and targetDistance
@@ -103,11 +130,15 @@ export async function setGameMode(newMode, initialHoleName = null, targetDistanc
     }
     
     console.log(`Game mode ${currentMode} initialized and visuals set up.`);
+
+    // Update switch hole button text based on mode and multiplayer status
+    const isMultiplayer = multiplayerManager.getCurrentSessionId() !== null;
+    ui.updateSwitchHoleButton(currentMode, isMultiplayer);
 }
 
-// Make switchGameToHole globally accessible for UI or set via callback
-// window.switchGameToHole = switchGameToHole; // Option 1: Global
-// Option 2: Pass as callback (preferred) - will do this below
+// Make functions globally accessible for UI
+window.generateNewCTFHole = generateNewCTFHole;
+window.getCurrentGameMode = getCurrentGameMode;
 
 // Function to get the current game mode (needed by inputHandler)
 export function getCurrentGameMode() {
@@ -166,7 +197,9 @@ updateEnvironmentDisplay();
 logic.registerShotCompletionCallback(handleShotCompletion);
 
 // Set initial UI state for the default mode (will be overridden by showMainMenu initially)
-ui.setGameModeClass(currentMode); 
+ui.setGameModeClass(currentMode);
+const isMultiplayer = multiplayerManager.getCurrentSessionId() !== null;
+ui.updateSwitchHoleButton(currentMode, isMultiplayer); // Set initial button text 
 
 // Canvas and Visuals Initialization (deferred)
 const canvas = document.getElementById('golf-canvas');
@@ -219,6 +252,11 @@ document.getElementById('mode-btn-hole')?.addEventListener('click', () => {
 // --- Connect "Back to Menu" Button ---
 function handleBackToMenu() {
     console.log("Returning to Main Menu...");
+
+    // Clear the hole configuration to prevent stale data from persisting
+    // This ensures a clean slate when starting a new game (especially important for multiplayer)
+    visuals.clearTargetViewConfig();
+
     // Terminate current mode-specific logic if active
     if (currentMode === GAME_MODES.CLOSEST_TO_FLAG) {
         closestToFlag.terminateMode();
@@ -227,7 +265,7 @@ function handleBackToMenu() {
     }
     // Reset core game logic and UI elements (like shot result, timing bars)
     logic.resetSwing(); // This also calls ui.resetUI() and visuals.resetVisuals()
-    
+
     // visuals.resetVisuals(); // Covered by logic.resetSwing() -> ui.resetUI() -> visuals.resetVisuals()
     // ui.resetUI(); // Covered by logic.resetSwing()
 
@@ -251,6 +289,18 @@ const registerBtn = document.getElementById('register-btn-placeholder');
 if (registerBtn) {
     registerBtn.addEventListener('click', () => {
         nanoAuth.showRegistrationModal();
+    });
+}
+
+// Hook up "Logout" button
+const logoutBtn = document.getElementById('logout-btn');
+if (logoutBtn) {
+    logoutBtn.addEventListener('click', () => {
+        playerManager.logout();
+        // Update UI to reflect guest status
+        const player = playerManager.getCurrentPlayer();
+        ui.updatePlayerDisplay(player.guestName, player.playerType);
+        console.log('Logged out, reverted to guest account');
     });
 }
 
@@ -303,7 +353,10 @@ function handleShotCompletion(shotData) {
     // Update debug timing (assuming getDebugTimingData exists and is accessible or passed)
     // ui.updateDebugTimingInfo(logic.getDebugTimingData()); // Need to expose getDebugTimingData or pass data
 
-    // 2. Trigger Visual Animation (using the version with landing callback)
+    // 2. Show shot feedback message immediately (while ball is in flight)
+    ui.updateStatus(shotData.message);
+
+    // 3. Trigger Visual Animation (using the version with landing callback)
     // Get local player color for trajectory line
     const localPlayerId = playerManager.getPlayerId();
     const players = multiplayerManager.getPlayers();
@@ -312,7 +365,7 @@ function handleShotCompletion(shotData) {
 
     visuals.animateBallFlightWithLanding(shotData, playerColor);
 
-    // 3. Update Game Mode Logic (if applicable)
+    // 4. Update Game Mode Logic (if applicable)
     let modeHandledStatusUpdate = false;
     if (currentMode === GAME_MODES.CLOSEST_TO_FLAG) {
         const distanceResult = closestToFlag.handleShotResult(shotData);
@@ -336,12 +389,6 @@ function handleShotCompletion(shotData) {
             lie: 'Tee' // Assuming range is always off a tee for now
             // Removed wind placeholder - live wind is handled separately
         });
-    }
-
-    // 4. Update overall game status (e.g., ready for next shot)
-    // Note: gameLogic sets its internal state to 'result' before calling back
-    if (!modeHandledStatusUpdate) {
-        ui.updateStatus('Result - Press (n) for next shot');
     }
 }
 

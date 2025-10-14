@@ -424,17 +424,29 @@ h2 {
 }
 
 
+/* --- Multiplayer Scoreboard (Fixed position above game interface) --- */
+#multiplayer-scoreboard {
+    background: rgba(255, 255, 255, 0.95);
+    border: 2px solid #4CAF50;
+    padding: 15px;
+    border-radius: 8px;
+    min-width: 220px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    margin: 0 auto 15px auto; /* Center horizontally and add space below */
+    max-width: 600px; /* Prevent it from getting too wide */
+}
+
 /* --- Bottom Controls Area (NEW) --- */
 #bottom-controls {
     background-color: #f8f9fa; /* Light background for the panel */
     border-top: 1px solid #ddd; /* Separator line */
     padding: 15px;
-    margin-top: 15px; 
+    margin-top: 15px;
     border-radius: 0 0 5px 5px; /* Optional: round bottom corners if game-interface has rounded top */
     display: flex;
-    flex-wrap: wrap; 
+    flex-wrap: wrap;
     gap: 15px 25px; /* Row gap and column gap */
-    justify-content: center; 
+    justify-content: center;
     align-items: center;
 }
 
@@ -689,6 +701,27 @@ body.mode-closest-to-flag #closest-to-flag-info {
 }
 
 #back-to-menu-button:active {
+    transform: translateY(0px);
+}
+
+#switch-hole-button {
+    padding: 12px 20px; /* Match back-to-menu-button */
+    font-size: 1em;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    border-radius: 6px;
+    background-color: #42a5f5; /* Blue color to differentiate from menu button */
+    color: white;
+    transition: background-color 0.3s ease, transform 0.1s ease;
+}
+
+#switch-hole-button:hover {
+    background-color: #1e88e5; /* Darker blue on hover */
+    transform: translateY(-1px);
+}
+
+#switch-hole-button:active {
     transform: translateY(0px);
 }
 

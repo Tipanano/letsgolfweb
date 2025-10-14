@@ -198,6 +198,18 @@ export function recordPuttKey(keyType, timestamp) {
     // UI updates handled in inputHandler
 }
 
+// Play impact sound based on current shot type
+export function playImpactSound() {
+    const shotType = getCurrentShotType();
+    if (shotType === 'full') {
+        regularShotSound.play().catch(e => console.error("Error playing regular shot sound:", e));
+    } else if (shotType === 'chip') {
+        chipShotSound.play().catch(e => console.error("Error playing chip shot sound:", e));
+    } else if (shotType === 'putt') {
+        puttShotSound.play().catch(e => console.error("Error playing putt shot sound:", e));
+    }
+}
+
 export function triggerFullSwingCalc() {
     const shotType = getCurrentShotType();
     const state = getGameState(); // Keep only one declaration
@@ -225,7 +237,7 @@ export function triggerChipCalc() {
              // Stop the chip animation loop (if not already stopped by timeout)
             stopChipDownswingAnimation();
             console.log("Action: Triggering chip calculation from key presses.");
-            chipShotSound.play().catch(e => console.error("Error playing regular shot sound:", e));
+            chipShotSound.play().catch(e => console.error("Error playing chip shot sound:", e));
             setGameState('calculatingChip'); // Set state BEFORE calling calculation
             calculateChipShot(); // Call the calculation function directly
         } else {
@@ -243,7 +255,7 @@ export function triggerPuttCalc() {
         if (getPuttHitTime()) {
              // Animation loop is stopped in recordPuttKey
             console.log("Action: Triggering putt calculation from key press.");
-            puttShotSound.play().catch(e => console.error("Error playing regular shot sound:", e));
+            puttShotSound.play().catch(e => console.error("Error playing putt shot sound:", e));
             setGameState('calculatingPutt'); // Set state BEFORE calling calculation
             calculatePuttShot(); // Call the calculation function directly
         } else {

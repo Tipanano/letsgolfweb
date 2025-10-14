@@ -109,6 +109,12 @@ export function switchToRangeView(initialScene = null) {
     CoreVisuals.showBallAtAddress(); // Ensure ball is visible
 }
 
+// Clear the current CTF hole config to force regeneration
+export function clearTargetViewConfig() {
+    TargetVisuals.clearHoleConfig();
+    console.log("Visuals: Cleared target view hole config");
+}
+
 // Accept scene as optional parameter for initial call (though less likely needed here)
 export function switchToTargetView(targetDistance, initialScene = null) {
     console.log(`🔵 switchToTargetView called: targetDistance=${targetDistance}, currentVisualMode=${currentVisualMode}`);
@@ -301,6 +307,12 @@ export function animateBallFlightWithLanding(shotData, trajectoryColor = 0xffff0
             });
         }
 
+        // Update status to show "Press 'n' for next shot" after ball has stopped
+        // (unless hole was completed, which is handled by mode-specific logic)
+        if (!shotData.isHoledOut) {
+            ui.updateStatus('Press (n) for next shot');
+        }
+
         // Notify multiplayer manager that ball has stopped, pass shot data
         multiplayerManager.onBallStopped(shotData);
     };
@@ -407,16 +419,39 @@ export function activateFollowBallCamera() {
 export function activateReverseCamera() {
     MeasurementView.deactivate(); // Ensure measurement view is off
     console.log("Activating Reverse Angle Camera");
-    let positionZ = 300 * YARDS_TO_METERS; // Default 300 yards for Range
 
-    if (currentVisualMode === VISUAL_MODES.TARGET && currentTargetDistanceYards > 0) {
-        positionZ = currentTargetDistanceYards * YARDS_TO_METERS;
-        console.log(`Using target distance for reverse camera: ${currentTargetDistanceYards} yards`);
+    let targetPosition = null;
+
+    if (currentVisualMode === VISUAL_MODES.TARGET) {
+        // CTF mode: Get green center for proper lateral alignment
+        const greenCenter = TargetVisuals.getGreenCenter();
+        if (greenCenter) {
+            targetPosition = greenCenter;
+            console.log(`Using TARGET green center for reverse camera: X=${greenCenter.x.toFixed(1)}, Z=${greenCenter.z.toFixed(1)}`);
+        } else {
+            // Fallback: use just the distance
+            const positionZ = currentTargetDistanceYards > 0 ? currentTargetDistanceYards * YARDS_TO_METERS : 300 * YARDS_TO_METERS;
+            targetPosition = { x: 0, z: positionZ };
+            console.log(`Green center unavailable, using distance: ${positionZ.toFixed(1)}m`);
+        }
+    } else if (currentVisualMode === VISUAL_MODES.HOLE) {
+        // Hole mode: Get green center from hole visuals
+        const greenCenter = HoleVisuals.getGreenCenter();
+        if (greenCenter) {
+            targetPosition = greenCenter;
+            console.log(`Using HOLE green center for reverse camera: X=${greenCenter.x.toFixed(1)}, Z=${greenCenter.z.toFixed(1)}`);
+        } else {
+            // Fallback to centerline
+            targetPosition = { x: 0, z: 300 * YARDS_TO_METERS };
+            console.log("Green center unavailable in hole mode, using default.");
+        }
     } else {
-        console.log("Using default 300 yards for reverse camera.");
+        // Range mode - use centerline
+        targetPosition = { x: 0, z: 300 * YARDS_TO_METERS };
+        console.log("Using default 300 yards for reverse camera in Range mode.");
     }
 
-    CoreVisuals.setCameraReverseAngle(positionZ);
+    CoreVisuals.setCameraReverseAngle(targetPosition);
 }
 
 // Activate the green focus camera (works in Target and Hole modes)

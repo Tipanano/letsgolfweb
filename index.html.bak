@@ -82,6 +82,46 @@
     <!-- NEW Game Interface Wrapper -->
     <div id="game-interface">
 
+        <!-- 3. Timing Bars (Will be moved below after main-layout) -->
+        <div id="timing-bars-placeholder">
+            <h2>Backswing Length</h2>
+            <div class="timing-bar-container">
+            <span class="bar-label">Length:</span>
+            <div class="timing-bar backswing-bar">
+                <div class="ideal-window" id="ideal-backswing-marker"></div>
+                <div id="hip-initiation-marker" class="timing-marker"></div>
+                <div id="post-shot-ideal-j-window-on-backswing" class="ideal-timing-feedback-backswing"></div>
+                <div class="progress" id="progress-backswing"></div>
+            </div>
+        </div>
+
+        <h2>Downswing Timing</h2>
+        <!-- Remapped: a=Rotation, d=Arms, i=Wrists -->
+        <div class="timing-bar-container">
+            <span class="bar-label">Rotation (a):</span> <!-- Label stays 'a' -->
+            <div class="timing-bar">
+                <div class="ideal-window" id="window-a"></div> <!-- ID stays 'a' for Rotation -->
+                <div class="progress" id="progress-a"></div> <!-- ID stays 'a' for Rotation -->
+                <div class="marker" id="marker-a"></div>     <!-- ID stays 'a' for Rotation -->
+            </div>
+        </div>
+        <div class="timing-bar-container">
+             <span class="bar-label">Arms (d):</span> <!-- Label stays 'd' -->
+            <div class="timing-bar">
+                <div class="ideal-window" id="window-j"></div> <!-- ID stays 'j' for Arms -->
+                <div class="progress" id="progress-j"></div> <!-- ID stays 'j' for Arms -->
+                 <div class="marker" id="marker-j"></div>     <!-- ID stays 'j' for Arms -->
+           </div>
+        </div>
+        <div class="timing-bar-container">
+            <span class="bar-label">Wrists (i):</span> <!-- UPDATED KEY -->
+            <div class="timing-bar">
+                <div class="ideal-window" id="window-d"></div> <!-- ID stays 'd' for Wrists -->
+                <div class="progress" id="progress-d"></div> <!-- ID stays 'd' for Wrists -->
+                 <div class="marker" id="marker-d"></div>     <!-- ID stays 'd' for Wrists -->
+            </div>
+            </div>
+        </div>
 
         <!-- NEW Main Layout Container (Flex) -->
         <div id="main-layout">

@@ -20,6 +20,7 @@ let flagMesh = null;
 let groundMesh = null; // Add ground
 let fairwayMesh = null; // Add fairway
 let teeBoxMesh = null; // Add tee box
+let waterMesh = null; // Add water hazard
 let targetGroup = null; // Group to hold all target elements
 const landingMarkers = []; // Array to hold landing spot markers
 let currentObstacles = []; // Array to store obstacle data
@@ -41,6 +42,12 @@ const Y_OFFSET_TEE = 0.03; // Tee box slightly above fairway
 const Y_OFFSET_GREEN = 0.02; // Green above fairway and water
 const Y_OFFSET_FLAGSTICK = 0.02; // Base of flagstick on green level
 
+// Seeded random number generator for consistent organic shapes in multiplayer
+function seededRandom(seed, index) {
+    const x = Math.sin(seed * 12345.6789 + index * 789.123) * 10000;
+    return x - Math.floor(x);
+}
+
 export function setScene(coreScene, width, height) {
     scene = coreScene;
     canvasWidth = width;
@@ -59,12 +66,15 @@ export function setHoleConfig(holeConfig) {
 
 // Creates the 3D objects for the target view
 function createTargetElements() {
+    console.log(`createTargetElements called. targetGroup exists: ${!!targetGroup}`);
     if (targetGroup) {
         // Already created, maybe just update position/visibility
+        console.warn("targetGroup already exists, returning early without recreating!");
         targetGroup.visible = true;
         return;
     }
 
+    console.log("Creating new target elements for distance:", targetDistanceYards, "yards");
     targetGroup = new THREE.Group();
     const targetZ = targetDistanceYards * YARDS_TO_METERS; // Target distance in meters
 
@@ -103,12 +113,14 @@ function createTargetElements() {
     const greenSegments = 16; // Points around the perimeter
     const baseRadiusX = greenWidthMeters / 2;
     const baseRadiusZ = greenDepthMeters / 2;
+    const shapeSeed = currentHoleConfig?.shapeSeed || Math.random();
 
     for (let i = 0; i <= greenSegments; i++) {
         const angle = (i / greenSegments) * Math.PI * 2;
         // Add slight random variation to radius (±5% of base radius)
-        const radiusVariationX = baseRadiusX * (1 + (Math.random() - 0.5) * 0.1);
-        const radiusVariationZ = baseRadiusZ * (1 + (Math.random() - 0.5) * 0.1);
+        // Use seeded random for consistent shapes in multiplayer
+        const radiusVariationX = baseRadiusX * (1 + (seededRandom(shapeSeed, i * 2) - 0.5) * 0.1);
+        const radiusVariationZ = baseRadiusZ * (1 + (seededRandom(shapeSeed, i * 2 + 1) - 0.5) * 0.1);
         const x = Math.cos(angle) * radiusVariationX;
         const z = Math.sin(angle) * radiusVariationZ;
 
@@ -157,25 +169,16 @@ function createTargetElements() {
     targetGroup.add(flagMesh);
 
     // --- Fairway (angled towards green center with organic shape) ---
-    // Adjust fairway based on water hazard position
-    const waterPosition = currentHoleConfig?.waterHazard?.position; // 'front', 'left', 'right', 'behind', or undefined
+    // Get fairway adjustments from server config (if water hazard exists)
+    // This ensures all players have identical fairway shapes in multiplayer
+    const waterHazard = currentHoleConfig?.waterHazard;
+    const fairwayAdjustments = waterHazard?.fairwayAdjustments;
 
     let fairwayWidth = 25; // Base width (meters)
-    let fairwayExtension = 10; // Extend past green center (meters)
-    let fairwayApproachDistance = 40; // Length before green
-
-    // Adjust fairway dimensions based on water position
-    if (waterPosition === 'front') {
-        // Water in front - shorten fairway approach so it stops before green
-        fairwayApproachDistance = 30; // Stop 10m before green (less aggressive)
-        fairwayExtension = 0;
-    } else if (waterPosition === 'behind') {
-        // Water behind - extend fairway past green
-        fairwayExtension = 12; // Extend past green but not too far
-    } else if (waterPosition === 'left' || waterPosition === 'right') {
-        // Water on side - cut fairway width on that side
-        fairwayWidth = 25; // Keep normal width, but we'll cut one edge
-    }
+    let fairwayExtension = fairwayAdjustments?.extension ?? 10; // Use server value or default
+    let fairwayApproachDistance = fairwayAdjustments?.approachDistance ?? 40; // Use server value or default
+    const leftWidthMultiplier = fairwayAdjustments?.leftWidthMultiplier ?? 1.0; // Use server value or default
+    const rightWidthMultiplier = fairwayAdjustments?.rightWidthMultiplier ?? 1.0; // Use server value or default
 
     const fairwayStartZ = targetZ - fairwayApproachDistance; // Start position
     const fairwayLength = fairwayApproachDistance + fairwayExtension; // Total length
@@ -189,12 +192,9 @@ function createTargetElements() {
     const endSegments = 5; // Segments for the curved ends (front/back)
 
     // Random bow amount for front and back (can bow inward or outward)
-    const backBow = (Math.random() - 0.5) * 6; // ±3m bow
-    const frontBow = (Math.random() - 0.5) * 6; // ±3m bow
-
-    // Determine width modifiers based on water position
-    const leftWidthMultiplier = waterPosition === 'left' ? 0.65 : 1.0; // Cut left side if water on left
-    const rightWidthMultiplier = waterPosition === 'right' ? 0.65 : 1.0; // Cut right side if water on right
+    // Use seeded random for consistent shapes in multiplayer (indices 100-107 to avoid collision with green)
+    const backBow = (seededRandom(shapeSeed, 100) - 0.5) * 6; // ±3m bow
+    const frontBow = (seededRandom(shapeSeed, 101) - 0.5) * 6; // ±3m bow
 
     // Start at back-left corner
     fairwayShape.moveTo(-fairwayWidth / 2 * leftWidthMultiplier, -fairwayLength / 2);
@@ -214,7 +214,7 @@ function createTargetElements() {
     for (let i = 0; i <= lengthSegments; i++) {
         const t = i / lengthSegments;
         const y = -fairwayLength / 2 + fairwayLength * t;
-        const widthVariation = (Math.random() - 0.5) * 4; // ±2m variation
+        const widthVariation = (seededRandom(shapeSeed, 102 + i) - 0.5) * 4; // ±2m variation
         fairwayShape.lineTo(fairwayWidth / 2 * rightWidthMultiplier + widthVariation, y);
     }
 
@@ -233,7 +233,7 @@ function createTargetElements() {
     for (let i = lengthSegments; i > 0; i--) {
         const t = i / lengthSegments;
         const y = -fairwayLength / 2 + fairwayLength * t;
-        const widthVariation = (Math.random() - 0.5) * 4; // ±2m variation
+        const widthVariation = (seededRandom(shapeSeed, 106 + i) - 0.5) * 4; // ±2m variation
         fairwayShape.lineTo(-fairwayWidth / 2 * leftWidthMultiplier + widthVariation, y);
     }
 
@@ -267,8 +267,9 @@ function createTargetElements() {
             for (let i = 0; i <= segments; i++) {
                 const angle = (i / segments) * Math.PI * 2;
                 // Add slight random variation to each radius (±8% variation)
-                const radiusXVar = water.radiusX * (1 + (Math.random() - 0.5) * 0.16);
-                const radiusZVar = water.radiusZ * (1 + (Math.random() - 0.5) * 0.16);
+                // Use seeded random for consistent shapes in multiplayer (indices 200-247 to avoid collision)
+                const radiusXVar = water.radiusX * (1 + (seededRandom(shapeSeed, 200 + i * 2) - 0.5) * 0.16);
+                const radiusZVar = water.radiusZ * (1 + (seededRandom(shapeSeed, 200 + i * 2 + 1) - 0.5) * 0.16);
                 const x = Math.cos(angle) * radiusXVar;
                 const z = Math.sin(angle) * radiusZVar;
 
@@ -317,51 +318,64 @@ function createTargetElements() {
     generateObstacles(targetZ, fairwayWidth);
 }
 
-// Generate random obstacles in the rough only (not on fairway or green)
+// Generate obstacles - uses server data in multiplayer, or generates locally in single player
 function generateObstacles(targetZ, fairwayWidth) {
     currentObstacles = []; // Clear existing obstacles
 
-    // Use holeConfig for green parameters if available
-    const greenWidthMeters = currentHoleConfig?.greenWidthMeters || 18;
-    const greenDepthMeters = currentHoleConfig?.greenDepthMeters || 14;
-    const greenOffsetMeters = currentHoleConfig?.greenOffsetMeters || 0;
-    const greenRadiusMeters = Math.max(greenWidthMeters, greenDepthMeters) / 2;
+    // Check if obstacles are provided by server (multiplayer)
+    if (currentHoleConfig?.obstacles) {
+        console.log(`Using ${currentHoleConfig.obstacles.length} obstacles from server config`);
+        // Use server-provided obstacles
+        currentHoleConfig.obstacles.forEach(obstacleData => {
+            const obstacle = createObstacle(obstacleData.type, obstacleData.size, obstacleData.x, obstacleData.z);
+            currentObstacles.push(obstacle);
+        });
+    } else {
+        // Generate obstacles locally (single player)
+        console.log('Generating obstacles locally (single player mode)');
 
-    const obstacleCount = Math.floor(Math.random() * 18) + 12; // 12-29 obstacles (3x more)
-    const types = [OBSTACLE_TYPES.TREE, OBSTACLE_TYPES.BUSH];
-    const sizes = [OBSTACLE_SIZES.SMALL, OBSTACLE_SIZES.MEDIUM, OBSTACLE_SIZES.LARGE];
+        const greenWidthMeters = currentHoleConfig?.greenWidthMeters || 18;
+        const greenDepthMeters = currentHoleConfig?.greenDepthMeters || 14;
+        const greenOffsetMeters = currentHoleConfig?.greenOffsetMeters || 0;
+        const greenRadiusMeters = Math.max(greenWidthMeters, greenDepthMeters) / 2;
 
-    for (let i = 0; i < obstacleCount; i++) {
-        const type = types[Math.floor(Math.random() * types.length)];
-        const size = sizes[Math.floor(Math.random() * sizes.length)];
+        const obstacleCount = Math.floor(Math.random() * 18) + 12; // 12-29 obstacles
+        const types = [OBSTACLE_TYPES.TREE, OBSTACLE_TYPES.BUSH];
+        const sizes = [OBSTACLE_SIZES.SMALL, OBSTACLE_SIZES.MEDIUM, OBSTACLE_SIZES.LARGE];
 
-        // Random position along the course
-        const z = Math.random() * targetZ * 0.8 + targetZ * 0.1; // 10%-90% of distance
+        for (let i = 0; i < obstacleCount; i++) {
+            const type = types[Math.floor(Math.random() * types.length)];
+            const size = sizes[Math.floor(Math.random() * sizes.length)];
 
-        // Only place in the rough (outside fairway and green)
-        const side = Math.random() < 0.5 ? -1 : 1;
-        const x = side * (fairwayWidth / 2 + Math.random() * 20); // 0-20m into rough
+            // Random position along the course
+            const z = Math.random() * targetZ * 0.8 + targetZ * 0.1; // 10%-90% of distance
 
-        // Check if obstacle would be on the green (avoid green area with offset)
-        const greenCenterX = greenOffsetMeters;
-        const greenCenterZ = targetZ;
-        const dx = x - greenCenterX;
-        const dz = z - greenCenterZ;
-        const distanceToGreenCenter = Math.sqrt(dx * dx + dz * dz);
+            // Place in the rough, positioned relative to green offset
+            const offsetMultiplier = type === OBSTACLE_TYPES.TREE ? 0.8 : 1.0;
+            const referenceX = greenOffsetMeters * offsetMultiplier;
+            const side = Math.random() < 0.5 ? -1 : 1;
+            const x = referenceX + side * (fairwayWidth / 2 + Math.random() * 20);
 
-        if (distanceToGreenCenter < greenRadiusMeters + 5) {
-            // Too close to green, skip this obstacle
-            i--;
-            continue;
+            // Check if obstacle would be on the green
+            const greenCenterX = greenOffsetMeters;
+            const greenCenterZ = targetZ;
+            const dx = x - greenCenterX;
+            const dz = z - greenCenterZ;
+            const distanceToGreenCenter = Math.sqrt(dx * dx + dz * dz);
+
+            if (distanceToGreenCenter < greenRadiusMeters + 5) {
+                i--;
+                continue;
+            }
+
+            const obstacle = createObstacle(type, size, x, z);
+            currentObstacles.push(obstacle);
         }
-
-        const obstacle = createObstacle(type, size, x, z);
-        currentObstacles.push(obstacle);
     }
 
     // Render obstacles
     renderObstacles(scene, currentObstacles);
-    console.log(`Generated ${currentObstacles.length} obstacles (all in rough), green offset: ${greenOffsetMeters}m`);
+    console.log(`Rendered ${currentObstacles.length} obstacles, green offset: ${currentHoleConfig?.greenOffsetMeters || 0}m`);
 }
 
 // Export obstacles for physics calculations
@@ -509,13 +523,55 @@ export function resetView() {
     landingMarkers.length = 0; // Clear the array
 
     // Ensure target elements are visible if the mode is active
+    // DO NOT regenerate the hole - it should stay the same across shots in CTF mode
     if (targetGroup) {
         targetGroup.visible = true;
-        // Redraw or update position if needed based on current targetDistance
-        drawTargetView();
     }
 
-    console.log("TargetView (3D): Reset complete (landing markers removed).");
+    console.log("TargetView (3D): Reset complete (landing markers removed, hole unchanged).");
+}
+
+// Clear the current hole config to force regeneration of a new hole
+export function clearHoleConfig() {
+    currentHoleConfig = null;
+
+    // Also clear all visual elements so they get recreated with new dimensions
+    if (targetGroup && scene) {
+        // Remove all children from the group
+        while (targetGroup.children.length > 0) {
+            const child = targetGroup.children[0];
+            targetGroup.remove(child);
+            // Dispose geometries and materials
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) {
+                if (Array.isArray(child.material)) {
+                    child.material.forEach(mat => mat.dispose());
+                } else {
+                    child.material.dispose();
+                }
+            }
+        }
+        // Remove the group from the scene
+        scene.remove(targetGroup);
+        targetGroup = null;
+    }
+
+    // Clear mesh references
+    groundMesh = null;
+    teeBoxMesh = null;
+    fairwayMesh = null;
+    greenMesh = null;
+    flagstickMesh = null;
+    flagMesh = null;
+    waterMesh = null;
+
+    // Clear obstacles from scene (only if scene exists)
+    if (scene) {
+        clearObstacles(scene);
+    }
+    currentObstacles = [];
+
+    console.log("TargetView: Hole config and visual elements cleared, will regenerate on next draw");
 }
 
 // Duplicate setScene removed. The correct one is defined near the top.

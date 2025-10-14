@@ -810,14 +810,19 @@ async function startMultiplayerGame() {
     // Small delay to ensure DOM has updated and canvas has proper size
     await new Promise(resolve => setTimeout(resolve, 50));
 
+    // IMPORTANT: Set hole config BEFORE initializing game mode
+    // This ensures all players use the same hole layout from the server
+    if (holeConfig) {
+        const { clearHoleConfig, setHoleConfig } = await import('./visuals/targetView.js');
+        // Force clear any existing hole data to ensure a clean slate (defense in depth)
+        clearHoleConfig();
+        console.log('🧹 Cleared any existing hole config before setting server config');
+        setHoleConfig(holeConfig);
+        console.log('✅ Set server hole config before initializing CTF mode');
+    }
+
     // Initialize CTF mode with server-provided target distance (or null for single-player)
     await setGameMode(GAME_MODES.CLOSEST_TO_FLAG, null, targetDistance);
-
-    // Pass hole config to targetView if available
-    if (holeConfig) {
-        const { setHoleConfig } = await import('./visuals/targetView.js');
-        setHoleConfig(holeConfig);
-    }
 
     // Show multiplayer scoreboard
     showScoreboard();
@@ -829,6 +834,9 @@ async function startMultiplayerGame() {
     // Only start timer if it's this player's turn
     if (localPlayerIdx === currentPlayerIndex) {
         console.log('It\'s your turn! Starting timer...');
+        // Show alert modal with sound notification
+        playTurnNotificationSound();
+        modal.alert('It\'s your turn! Take your shot.', 'Your Turn!', 'success');
         startShotTimer('Your shot, {time} seconds left');
     } else {
         // Show waiting message for other players
@@ -855,6 +863,9 @@ function handleTurnChange(data) {
     // Check if it's now our turn
     if (localPlayerIdx === currentPlayerIndex) {
         console.log('It\'s now your turn!');
+        // Show alert modal with sound notification
+        playTurnNotificationSound();
+        modal.alert('It\'s your turn! Take your shot.', 'Your Turn!', 'success');
         startShotTimer('Your shot, {time} seconds left');
     } else {
         // Stop timer if it was running
@@ -917,6 +928,46 @@ function handlePlayerShot(data) {
     } else {
         console.warn('Received shot without trajectory data');
         isWatchingOtherPlayerShot = false;
+    }
+}
+
+// Play a notification sound to alert the player it's their turn
+function playTurnNotificationSound() {
+    // Create a simple beep sound using Web Audio API
+    try {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        // Create a pleasant notification sound (two beeps)
+        oscillator.frequency.value = 800; // Hz
+        oscillator.type = 'sine';
+
+        gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.1);
+
+        // Second beep
+        const oscillator2 = audioContext.createOscillator();
+        const gainNode2 = audioContext.createGain();
+        oscillator2.connect(gainNode2);
+        gainNode2.connect(audioContext.destination);
+
+        oscillator2.frequency.value = 1000;
+        oscillator2.type = 'sine';
+
+        gainNode2.gain.setValueAtTime(0.3, audioContext.currentTime + 0.15);
+        gainNode2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.25);
+
+        oscillator2.start(audioContext.currentTime + 0.15);
+        oscillator2.stop(audioContext.currentTime + 0.25);
+    } catch (error) {
+        console.error('Could not play notification sound:', error);
     }
 }
 
@@ -1160,9 +1211,12 @@ export function getPlayers() {
 }
 
 export function isLocalPlayerTurn() {
-    // For turn-based: check if it's our turn
-    // For now, always allow (simultaneous mode)
-    return true;
+    // Not in multiplayer - always allow
+    if (!currentSessionId) return true;
+
+    // Check if it's our turn based on currentPlayerIndex
+    const localPlayerIdx = players.findIndex(p => p.id === localPlayerId);
+    return localPlayerIdx === currentPlayerIndex;
 }
 
 export function hasLocalPlayerShot() {

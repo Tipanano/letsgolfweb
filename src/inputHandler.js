@@ -19,6 +19,7 @@ import { prepareNextShot } from './gameLogic/actions.js';
 import { getCurrentBallPosition, getCurrentHoleLayout, getHoleJustCompleted } from './modes/playHole.js'; // Import playHole getters (Adjusted path)
 import { getFlagPosition as getHoleFlagPosition } from './visuals/holeView.js'; // Import flag position getter for hole mode
 import { getFlagPosition as getTargetFlagPosition } from './visuals/targetView.js'; // Import flag position getter for CTF mode
+import { isLocalPlayerTurn } from './multiplayerManager.js'; // Import turn check for multiplayer
 // --- Constants for Aiming ---
 const AIM_INCREMENT_FULL = 0.5; // Degrees per key press
 const AIM_INCREMENT_CHIP = 0.2; // Degrees per key press
@@ -215,6 +216,11 @@ function handleFullSwingKeyDown(event, gameState) {
     const swingSpeed = GameLogic.getSwingSpeed(); // Get swing speed here as it's only needed for full swing markers
     // Start Backswing with 'w'
     if (event.key === 'w' && gameState === 'ready') {
+        // Check if it's the player's turn in multiplayer
+        if (!isLocalPlayerTurn()) {
+            updateStatus('Wait for your turn!');
+            return;
+        }
         GameLogic.startBackswing(); // Call action function in GameLogic
     }
 
@@ -287,6 +293,11 @@ function handleFullSwingKeyDown(event, gameState) {
 function handleChipKeyDown(event, gameState) {
     // Start Backswing with 'w'
     if (event.key === 'w' && gameState === 'ready') {
+        // Check if it's the player's turn in multiplayer
+        if (!isLocalPlayerTurn()) {
+            updateStatus('Wait for your turn!');
+            return;
+        }
         GameLogic.startBackswing();
     }
 
@@ -318,6 +329,11 @@ function handleChipKeyDown(event, gameState) {
 function handlePuttKeyDown(event, gameState) {
     // Start Backswing with 'w'
     if (event.key === 'w' && gameState === 'ready') {
+        // Check if it's the player's turn in multiplayer
+        if (!isLocalPlayerTurn()) {
+            updateStatus('Wait for your turn!');
+            return;
+        }
         GameLogic.startBackswing();
     }
 

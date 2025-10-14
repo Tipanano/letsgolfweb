@@ -895,14 +895,19 @@ export function setInitialFollowCameraLookingAtTarget(ballPosition, targetPositi
 }
 
 // Sets camera for Reverse Angle view - Aiming likely not applicable here
-export function setCameraReverseAngle(positionZ) {
-    if (!camera) return;
+export function setCameraReverseAngle(targetPosition) {
+    if (!camera || !targetPosition) return;
     const cameraHeight = 10; // Height above ground
-    const offsetBehind = 15; // Distance behind the target Z
-    camera.position.set(0, cameraHeight, positionZ + offsetBehind);
-    camera.lookAt(0, 0, 0); // Look back towards the tee (origin)
+    const offsetBehind = 30; // Distance behind the target Z (increased from 15 for better view)
+
+    // Use the target position's X coordinate to account for green lateral offset
+    const positionX = targetPosition.x || 0;
+    const positionZ = targetPosition.z || targetPosition; // Support both Vector3 and number for backward compatibility
+
+    camera.position.set(positionX, cameraHeight, positionZ + offsetBehind);
+    camera.lookAt(positionX, 0, 0); // Look towards the green center line, not just centerline
     setActiveCameraMode(CameraMode.REVERSE_ANGLE); // Set the mode
-    console.log(`Camera set to: Reverse Angle (looking from Z=${(positionZ + offsetBehind).toFixed(1)})`);
+    console.log(`Camera set to: Reverse Angle at (${positionX.toFixed(1)}, ${(positionZ + offsetBehind).toFixed(1)}) looking at (${positionX.toFixed(1)}, 0, 0)`);
 }
 
 // Sets camera for Green Focus view - Aiming likely not applicable here

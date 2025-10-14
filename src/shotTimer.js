@@ -1,7 +1,7 @@
 // Shot Timer for Multiplayer Mode
 // Manages the countdown timer for player turns
 
-const SHOT_TIME_LIMIT = 30; // seconds
+const SHOT_TIME_LIMIT = 60; // seconds
 let timerInterval = null;
 let timeRemaining = SHOT_TIME_LIMIT;
 let isRunning = false;

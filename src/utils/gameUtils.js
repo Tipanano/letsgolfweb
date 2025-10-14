@@ -124,7 +124,7 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
         }
     }
 
-    // 5. Water Hazards (Array of Polygons/Circles)
+    // 5. Water Hazards (Array of Polygons/Circles/Ellipses)
     if (holeLayout.waterHazards && Array.isArray(holeLayout.waterHazards)) {
         for (const water of holeLayout.waterHazards) {
             if (water.type === 'polygon' && water.vertices) {
@@ -135,6 +135,15 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
                 const dx = pointYards.x - water.center.x;
                 const dz = pointYards.z - water.center.z;
                 if (dx * dx + dz * dz <= water.radius * water.radius) {
+                    return 'WATER';
+                }
+            } else if (water.type === 'ellipse' && water.center && water.radiusX && water.radiusZ) {
+                // Check if point is inside ellipse using the ellipse equation: (x/a)^2 + (z/b)^2 <= 1
+                const dx = pointYards.x - water.center.x;
+                const dz = pointYards.z - water.center.z;
+                const normalized = (dx * dx) / (water.radiusX * water.radiusX) +
+                                  (dz * dz) / (water.radiusZ * water.radiusZ);
+                if (normalized <= 1) {
                     return 'WATER';
                 }
             }
