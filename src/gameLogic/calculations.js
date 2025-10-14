@@ -269,7 +269,8 @@ export function calculateFullSwingShot() {
         trajectory: flightSimulationResult.trajectoryPoints, // Now contains combined flight + roll
         sideDistance: sideDistance,
         finalPosition: { x: finalPosition.x, y: finalPosition.y, z: finalPosition.z }, // Convert final Vector3 back to object
-        isHoledOut: isHoledOut
+        isHoledOut: isHoledOut,
+        surfaceName: landingSurfaceType // Add surface type for lie display
     };
 
     // Update internal state
@@ -527,7 +528,8 @@ export function calculateChipShot() {
         trajectory: flightSimulationResult.trajectoryPoints, // Now contains combined flight + roll
         sideDistance: sideDistance,
         finalPosition: { x: finalPosition.x, y: finalPosition.y, z: finalPosition.z },
-        isHoledOut: isHoledOut
+        isHoledOut: isHoledOut,
+        surfaceName: landingSurfaceType // Add surface type for lie display
     };
 
     // Update internal state
@@ -615,6 +617,18 @@ export function calculatePuttShot() {
     console.log(`Calc (Putt): Final Position: (${finalPosition.x.toFixed(2)}, ${finalPosition.y.toFixed(2)}, ${finalPosition.z.toFixed(2)})m`);
     console.log(`Calc (Putt): Calculated Total Distance: ${totalDistance.toFixed(1)} m, Side Distance: ${sideDistance.toFixed(1)} m`);
 
+    // --- Determine Final Surface Type ---
+    let finalSurfaceType = 'GREEN'; // Default to green
+    if (!isHoledOut) {
+        const currentHoleLayout = getCurrentHoleLayout();
+        if (currentMode === 'play-hole' && currentHoleLayout) {
+            const finalPositionObj = { x: finalPosition.x, y: finalPosition.y, z: finalPosition.z };
+            finalSurfaceType = getSurfaceTypeAtPoint(finalPositionObj, currentHoleLayout);
+            finalSurfaceType = finalSurfaceType.toUpperCase().replace(' ', '_');
+            console.log(`Calc (Putt): Determined final surface: ${finalSurfaceType}`);
+        }
+    }
+
     // --- Determine Result Message ---
     if (isHoledOut) {
         resultMessage += " Sunk!";
@@ -651,7 +665,8 @@ export function calculatePuttShot() {
         trajectory: groundRollResult.rollTrajectoryPoints ? groundRollResult.rollTrajectoryPoints.map(p => ({ x: p.x, y: p.y, z: p.z })) : [initialPositionObj, { x: finalPosition.x, y: finalPosition.y, z: finalPosition.z }],
         sideDistance: sideDistance,
         finalPosition: { x: finalPosition.x, y: finalPosition.y, z: finalPosition.z },
-        isHoledOut: isHoledOut
+        isHoledOut: isHoledOut,
+        surfaceName: finalSurfaceType // Add surface type for lie display
     };
 
     // Update internal state
