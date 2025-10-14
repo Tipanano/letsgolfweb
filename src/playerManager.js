@@ -78,7 +78,7 @@ class PlayerManager {
   /**
    * Upgrade guest to registered player (after Nano auth)
    */
-  async upgradeToRegistered(username, nanoAddress, sessionToken, linkedAddresses = null) {
+  async upgradeToRegistered(username, nanoAddress, sessionToken, linkedAddresses = null, userId = null) {
     // Migrate guest stats to server
     const guestStats = this.currentPlayer.stats;
 
@@ -87,6 +87,7 @@ class PlayerManager {
     // Update player object
     this.currentPlayer = {
       playerType: 'registered',
+      userId: userId, // UUID from server
       username: username,
       nanoAddress: nanoAddress, // Primary address (for backwards compatibility)
       linkedAddresses: linkedAddresses || [nanoAddress], // Array of all linked addresses (max 5)
@@ -99,7 +100,7 @@ class PlayerManager {
     };
 
     this.saveToLocalStorage();
-    console.log('Upgraded to registered player:', username);
+    console.log('Upgraded to registered player:', username, 'with userId:', userId);
   }
 
   /**
@@ -149,7 +150,8 @@ class PlayerManager {
    */
   getPlayerId() {
     if (this.currentPlayer?.playerType === 'registered') {
-      return this.currentPlayer.nanoAddress; // Use Nano address as ID
+      // Return UUID if available, fallback to nanoAddress for legacy players
+      return this.currentPlayer.userId || this.currentPlayer.nanoAddress;
     }
     return this.currentPlayer?.guestId; // Use guest UUID
   }

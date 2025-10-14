@@ -497,7 +497,7 @@ export function hideBall() {
 }
 
 // Function to handle the animation logic, potentially called by visuals.js
-export function startBallAnimation(points, duration, onCompleteCallback = null, isHoledOut = false, holedOutPosition = null) { // Add callback, isHoledOut, and holedOutPosition parameters
+export function startBallAnimation(points, duration, onCompleteCallback = null, isHoledOut = false, holedOutPosition = null, trajectoryColor = 0xffff00) { // Add callback, isHoledOut, holedOutPosition, and color parameters
      if (!scene) return; // Guard against uninitialized scene
 
     // Store the callback and holed-out state
@@ -520,7 +520,7 @@ export function startBallAnimation(points, duration, onCompleteCallback = null, 
     if (points && points.length > 0) {
         //console.log("Received trajectory points for animation 2:", points);
         const geometry = new THREE.BufferGeometry().setFromPoints(points);
-        const material = new THREE.LineBasicMaterial({ color: 0xffff00, linewidth: 3 });
+        const material = new THREE.LineBasicMaterial({ color: trajectoryColor, linewidth: 3 });
         trajectoryLine = new THREE.Line(geometry, material);
         trajectoryLine.geometry.setDrawRange(0, 0);
         scene.add(trajectoryLine);

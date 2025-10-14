@@ -11,7 +11,7 @@ import { toast } from './ui/toast.js';
 import { modal } from './ui/modal.js';
 import * as closestToFlag from './modes/closestToFlag.js';
 import * as playHole from './modes/playHole.js';
-import * as logic from './logic.js';
+import * as logic from './gameLogic.js';
 
 // State
 let currentSessionId = null;
@@ -23,6 +23,7 @@ let players = [];
 let isReady = false;
 let gameMode = 'closest-to-flag'; // Default mode
 let targetDistance = 150; // For CTF mode
+let holeConfig = null; // Server-provided hole configuration
 let currentPlayerIndex = -1; // Index of the player whose turn it is (-1 = not started)
 let isWatchingOtherPlayerShot = false; // Track if we're animating someone else's shot
 let isGameFinished = false; // Track if the game has finished
@@ -245,6 +246,16 @@ function setupWebSocketHandlers() {
 
     wsManager.setOnGameStartCallback((data) => {
         console.log('Game started!', data);
+
+        // Store hole configuration from server (server sends meters, convert to yards for display)
+        if (data.holeConfig) {
+            holeConfig = data.holeConfig;
+            // Convert meters to yards: 1 meter = 1.09361 yards
+            targetDistance = Math.round(data.holeConfig.distanceMeters * 1.09361);
+            console.log('🏌️ Received hole config from server:', holeConfig);
+            console.log(`   Distance: ${data.holeConfig.distanceMeters}m = ${targetDistance} yards`);
+        }
+
         // Track which player's turn it is
         if (data.currentPlayerIndex !== undefined) {
             currentPlayerIndex = data.currentPlayerIndex;
@@ -468,6 +479,9 @@ function returnToMenu() {
     } else if (gameMode === 'play-hole') {
         playHole.terminateMode();
     }
+
+    // Clear player markers
+    visuals.clearAllMarkers();
 
     // Reset core game logic, UI, and visuals
     logic.resetSwing();
@@ -750,9 +764,14 @@ function updateScoreboard() {
             scoreText = '<em>waiting...</em>';
         }
 
+        // Add player color indicator
+        const colorDot = player.color
+            ? `<span style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: ${player.color}; margin-right: 6px; vertical-align: middle;"></span>`
+            : '';
+
         playerDiv.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span>${isCurrent ? '► ' : ''}${playerName}</span>
+                <span>${colorDot}${isCurrent ? '► ' : ''}${playerName}</span>
                 <span style="margin-left: 10px;">${scoreText}</span>
             </div>
         `;
@@ -780,14 +799,17 @@ async function startMultiplayerGame() {
     isGameFinished = false;
     playerScores = {};
 
+    // Clear any existing player markers
+    visuals.clearAllMarkers();
+
     // Show game view FIRST so canvas can get proper dimensions
     ui.showGameView();
 
     // Small delay to ensure DOM has updated and canvas has proper size
     await new Promise(resolve => setTimeout(resolve, 50));
 
-    // Initialize CTF mode (sets up visuals and game state)
-    await setGameMode(GAME_MODES.CLOSEST_TO_FLAG);
+    // Initialize CTF mode with server-provided target distance (or null for single-player)
+    await setGameMode(GAME_MODES.CLOSEST_TO_FLAG, null, targetDistance);
 
     // Show multiplayer scoreboard
     showScoreboard();
@@ -852,24 +874,34 @@ function handlePlayerShot(data) {
     }
 
     // Ignore shots from ourselves (we already animated it)
+    console.log('🔍 Shot replay check:', {
+        playerId,
+        localPlayerId,
+        match: playerId === localPlayerId,
+        strictMatch: playerId === localPlayerId,
+        typeOf_playerId: typeof playerId,
+        typeOf_localPlayerId: typeof localPlayerId
+    });
+
     if (playerId === localPlayerId) {
-        console.log('Received our own shot, ignoring animation');
+        console.log('✓ Received our own shot, ignoring animation');
         return;
     }
 
     // Find the player who took the shot
     const player = players.find(p => p.id === playerId);
     const playerName = player?.name || 'Player';
+    const playerColor = player?.color ? parseInt(player.color.replace('#', '0x')) : 0xffff00;
 
-    console.log(`Received shot from ${playerName}, animating...`);
+    console.log(`Received shot from ${playerName}, animating with color ${player?.color || 'yellow'}...`);
     shotTimer.setStatusMessage(`Watching ${playerName}'s shot...`);
 
     // Set flag to prevent onBallStopped from sending duplicate shot data
     isWatchingOtherPlayerShot = true;
 
-    // Animate the other player's shot
+    // Animate the other player's shot with their color
     if (shotData && shotData.trajectory) {
-        visuals.animateBallFlightWithLanding(shotData);
+        visuals.animateBallFlightWithLanding(shotData, playerColor);
 
         // After animation completes (handled by callback), wait a bit then update status
         // The turn:changed event will handle starting the next timer
@@ -921,6 +953,23 @@ export function onBallStopped(shotData) {
     // If we're watching someone else's shot, don't send data to server
     if (isWatchingOtherPlayerShot) {
         console.log('Finished watching other player\'s shot');
+
+        // Place marker for the other player
+        const otherPlayer = players.find(p => playerScores[p.id]?.hasShot && p.id !== localPlayerId);
+        if (otherPlayer && shotData) {
+            const score = playerScores[otherPlayer.id];
+            visuals.setPlayerMarker(
+                otherPlayer.id,
+                otherPlayer.name,
+                shotData.finalPosition,
+                score.distanceYards,
+                otherPlayer.color || '#FFFFFF'
+            );
+        }
+
+        // Reset ball to tee for next player
+        visuals.showBallAtAddress(); // This resets ball to tee position
+
         isWatchingOtherPlayerShot = false;
         shotTimer.setStatusMessage('Waiting for next turn...');
         return;
@@ -943,6 +992,21 @@ export function onBallStopped(shotData) {
         };
         console.log('Sending shot data with distance:', shotPayload.distanceFromHoleYards, 'yards');
         wsManager.sendShotData(shotPayload);
+
+        // Place marker for own shot
+        const localPlayer = players.find(p => p.id === localPlayerId);
+        if (localPlayer && shotData.distanceFromHoleYards) {
+            visuals.setPlayerMarker(
+                localPlayerId,
+                localPlayer.name,
+                shotData.finalPosition,
+                shotData.distanceFromHoleYards,
+                localPlayer.color || '#FFFFFF'
+            );
+        }
+
+        // Reset ball to tee for next player
+        visuals.showBallAtAddress();
     } else {
         console.warn('No shot data available to send to server');
     }

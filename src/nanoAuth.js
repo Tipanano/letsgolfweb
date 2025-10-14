@@ -208,7 +208,8 @@ async function handleLoginSuccess(data) {
         data.username,
         data.nano_address,
         data.session_token,
-        data.linked_addresses || [data.nano_address] // Pass linked addresses or fallback to primary
+        data.linked_addresses || [data.nano_address], // Pass linked addresses or fallback to primary
+        data.user_id // UUID from server
     );
 
     // Update UI

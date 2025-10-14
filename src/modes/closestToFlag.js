@@ -10,23 +10,32 @@ let currentModeActive = false;
 
 // --- Functions ---
 
-export function initializeMode() {
+export function initializeMode(providedTargetDistanceYards = null) {
     console.log("Initializing Closest to Flag mode...");
     currentModeActive = true;
     shotsTaken = 0;
     bestDistanceToHoleMeters = Infinity;
-    // Generate random target distance in yards, then convert to meters
-    const targetDistanceYards = Math.floor(Math.random() * (200 - 120 + 1)) + 120;
+
+    // Use provided target distance, or generate random if not provided
+    const targetDistanceYards = providedTargetDistanceYards ||
+                                 (Math.floor(Math.random() * (200 - 120 + 1)) + 120);
+
     targetDistanceMeters = yardsToMeters(targetDistanceYards);
-    console.log(`Target distance set to: ${targetDistanceYards} yards (${targetDistanceMeters.toFixed(1)} meters)`);
+
+    if (providedTargetDistanceYards) {
+        console.log(`Target distance set to: ${targetDistanceYards} yards (from server)`);
+    } else {
+        console.log(`Target distance randomly set to: ${targetDistanceYards} yards (${targetDistanceMeters.toFixed(1)} meters)`);
+    }
 
     // Update UI
     ui.resetClosestToFlagDisplay(); // Reset display first
     ui.updateTargetDistanceDisplay(targetDistanceYards); // Show the target distance in yards
 
     // Update visual overlay info with distance to flag and lie
+    // Note: distToFlag should be passed in meters for UI to convert to yards
     ui.updateVisualOverlayInfo('closest-to-flag', {
-        distToFlag: targetDistanceYards,
+        distToFlag: targetDistanceMeters,
         lie: 'Tee'
     });
 

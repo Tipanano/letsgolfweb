@@ -4,11 +4,13 @@ import * as RangeVisuals from './visuals/range.js';
 import * as TargetVisuals from './visuals/targetView.js'; // Includes green getters
 import * as HoleVisuals from './visuals/holeView.js'; // Import the new hole view module (includes getFlagPosition)
 import * as MeasurementView from './visuals/measurementView.js'; // Import the new measurement view module
+import * as PlayerMarkers from './visuals/playerMarkers.js'; // Import player marker system
 import { getCurrentShotType } from './gameLogic.js'; // Import shot type getter
 import { setShotDirectionAngle, getCurrentTargetLineAngle, getShotDirectionAngle } from './gameLogic/state.js'; // Import state setter for angle
 import { getCurrentGameMode } from './main.js'; // Import game mode getter
 import { YARDS_TO_METERS } from './utils/unitConversions.js'; // Import conversion constant
 import * as multiplayerManager from './multiplayerManager.js'; // Import multiplayer manager
+import * as ui from './ui.js'; // Import UI functions
 
 // Store references from core visuals if needed
 let coreScene;
@@ -45,6 +47,9 @@ export function initVisuals(canvasElement) {
     }
     coreScene = coreInitResult.scene; // Store scene reference only if valid
     coreBall = coreInitResult.ball;   // Store ball reference (might also need checking)
+
+    // Initialize player marker system
+    PlayerMarkers.initMarkers(coreScene);
 
     // TargetVisuals will now need the scene, not a 2D context
     TargetVisuals.setScene(coreScene, coreCanvasWidth, coreCanvasHeight);
@@ -269,7 +274,7 @@ function handleLandingAnimation(shotData) {
 
 // Modify animateBallFlight to call handleLandingAnimation after core animation completes
 // Need to adjust CoreVisuals.startBallAnimation to accept a callback
-export function animateBallFlightWithLanding(shotData) {
+export function animateBallFlightWithLanding(shotData, trajectoryColor = 0xffff00) {
     if (!shotData || !shotData.trajectory || shotData.trajectory.length === 0) {
         console.warn("animateBallFlightWithLanding called with invalid shotData or trajectory.");
         resetVisuals(); // Reset if shot data is bad
@@ -285,12 +290,23 @@ export function animateBallFlightWithLanding(shotData) {
         console.log("Ball flight animation complete. Handling landing.");
         handleLandingAnimation(shotData);
 
+        // Update overlay "To Flag" distance after animation in CTF mode
+        const currentMode = getCurrentGameMode();
+        if (currentMode === 'closest-to-flag' && shotData.distanceFromHoleMeters !== undefined) {
+            // Update the overlay to show distance from hole instead of target distance
+            console.log(`Updating overlay: distance from hole = ${shotData.distanceFromHoleMeters.toFixed(2)}m`);
+            ui.updateVisualOverlayInfo('closest-to-flag', {
+                distToFlag: shotData.distanceFromHoleMeters,
+                lie: 'Tee' // TODO: Get actual lie from shot data
+            });
+        }
+
         // Notify multiplayer manager that ball has stopped, pass shot data
         multiplayerManager.onBallStopped(shotData);
     };
 
     // Always use 3D animation now
-    CoreVisuals.startBallAnimation(points, duration, onAnimationComplete, shotData.isHoledOut, shotData.finalPosition);
+    CoreVisuals.startBallAnimation(points, duration, onAnimationComplete, shotData.isHoledOut, shotData.finalPosition, trajectoryColor);
 }
 
 
@@ -485,3 +501,9 @@ export function setCameraView(viewType) {
             break;
     }
 }
+
+// Export player marker functions
+export const setPlayerMarker = PlayerMarkers.setPlayerMarker;
+export const removePlayerMarker = PlayerMarkers.removePlayerMarker;
+export const clearAllMarkers = PlayerMarkers.clearAllMarkers;
+export const getMarkerPosition = PlayerMarkers.getMarkerPosition;

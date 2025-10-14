@@ -13,6 +13,7 @@ import { getRandomInRange } from './utils/gameUtils.js'; // Import getRandomInRa
 import { initMultiplayerUI } from './multiplayerTest.js'; // Import multiplayer test
 import { playerManager } from './playerManager.js'; // Import player manager
 import * as nanoAuth from './nanoAuth.js'; // Import Nano authentication
+import * as multiplayerManager from './multiplayerManager.js'; // Import multiplayer manager
 
 // --- Game Data ---
 const AVAILABLE_HOLE_FILES = [ // This would ideally be fetched or dynamically discovered
@@ -46,7 +47,7 @@ async function switchGameToHole(holeFileName) {
 
 
 // Function to change the game mode
-export async function setGameMode(newMode, initialHoleName = null) { // Made async, added initialHoleName
+export async function setGameMode(newMode, initialHoleName = null, targetDistance = null) { // Made async, added initialHoleName and targetDistance
     if (!Object.values(GAME_MODES).includes(newMode)) {
         console.error(`Attempted to switch to invalid game mode: ${newMode}`);
         return;
@@ -89,9 +90,9 @@ export async function setGameMode(newMode, initialHoleName = null) { // Made asy
         logic.resetSwing(); // Reset swing state for Range mode
         visuals.showBallAtAddress(); // Ensure ball is shown
     } else if (currentMode === GAME_MODES.CLOSEST_TO_FLAG) {
-        const targetDistance = closestToFlag.initializeMode();
-        console.log('CTF Mode: Target distance from initializeMode:', targetDistance);
-        visuals.switchToTargetView(targetDistance);
+        const actualTargetDistance = closestToFlag.initializeMode(targetDistance);
+        console.log('CTF Mode: Target distance from initializeMode:', actualTargetDistance);
+        visuals.switchToTargetView(actualTargetDistance);
         visuals.showBallAtAddress(); // Ensure ball is shown
     } else if (currentMode === GAME_MODES.PLAY_HOLE) {
         // If initialHoleName is provided (e.g. from switchGameToHole calling setGameMode), use it.
@@ -298,7 +299,13 @@ function handleShotCompletion(shotData) {
     // ui.updateDebugTimingInfo(logic.getDebugTimingData()); // Need to expose getDebugTimingData or pass data
 
     // 2. Trigger Visual Animation (using the version with landing callback)
-    visuals.animateBallFlightWithLanding(shotData);
+    // Get local player color for trajectory line
+    const localPlayerId = playerManager.getPlayerId();
+    const players = multiplayerManager.getPlayers();
+    const localPlayer = players.find(p => p.id === localPlayerId);
+    const playerColor = localPlayer?.color ? parseInt(localPlayer.color.replace('#', '0x')) : 0xffff00;
+
+    visuals.animateBallFlightWithLanding(shotData, playerColor);
 
     // 3. Update Game Mode Logic (if applicable)
     let modeHandledStatusUpdate = false;
