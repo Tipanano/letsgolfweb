@@ -906,3 +906,170 @@ body.mode-closest-to-flag #closest-to-flag-info {
 #close-hole-select-popup:hover {
     background-color: #5a6268;
 }
+
+/* Game Summary Modal */
+.game-summary-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+}
+
+.game-summary-modal {
+    background: white;
+    border-radius: 12px;
+    padding: 0;
+    max-width: 500px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.game-summary-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 20px;
+    border-radius: 12px 12px 0 0;
+    text-align: center;
+}
+
+.game-summary-header.winner {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.game-summary-header h2 {
+    margin: 0 0 10px 0;
+    font-size: 1.8em;
+}
+
+.winner-text {
+    margin: 0;
+    font-size: 1.1em;
+    opacity: 0.95;
+}
+
+.game-summary-results {
+    padding: 20px;
+}
+
+.game-summary-results h3 {
+    margin: 0 0 15px 0;
+    color: #333;
+    font-size: 1.2em;
+}
+
+.players-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.player-result {
+    display: grid;
+    grid-template-columns: 40px 1fr auto;
+    gap: 10px;
+    padding: 12px;
+    background: #f5f5f5;
+    border-radius: 6px;
+    align-items: center;
+}
+
+.player-result.winner {
+    background: linear-gradient(135deg, #fff9e6 0%, #ffe6b3 100%);
+    border: 2px solid #ffd700;
+    font-weight: bold;
+}
+
+.player-result.local-player {
+    border: 2px solid #4CAF50;
+}
+
+.player-result .rank {
+    font-size: 1.2em;
+    font-weight: bold;
+    color: #666;
+    text-align: center;
+}
+
+.player-result.winner .rank {
+    color: #d4af37;
+}
+
+.player-result .player-name {
+    font-size: 1em;
+}
+
+.player-result .distance {
+    font-size: 1em;
+    color: #666;
+    font-weight: 500;
+}
+
+.game-summary-payout {
+    padding: 15px 20px;
+    background: #e8f5e9;
+    border-top: 1px solid #c8e6c9;
+    border-bottom: 1px solid #c8e6c9;
+}
+
+.game-summary-payout h3 {
+    margin: 0 0 10px 0;
+    color: #2e7d32;
+    font-size: 1.1em;
+}
+
+.game-summary-payout p {
+    margin: 5px 0;
+    color: #1b5e20;
+}
+
+.payout-address {
+    font-size: 0.85em;
+    color: #555;
+    word-break: break-all;
+}
+
+.game-summary-actions {
+    padding: 20px;
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+
+.btn-play-again,
+.btn-return-menu {
+    padding: 12px 24px;
+    font-size: 1em;
+    font-weight: 600;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-play-again {
+    background: #4CAF50;
+    color: white;
+}
+
+.btn-play-again:hover {
+    background: #45a049;
+    transform: translateY(-1px);
+}
+
+.btn-return-menu {
+    background: #757575;
+    color: white;
+}
+
+.btn-return-menu:hover {
+    background: #616161;
+    transform: translateY(-1px);
+}

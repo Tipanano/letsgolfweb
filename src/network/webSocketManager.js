@@ -194,6 +194,14 @@ export function connect(sessionId, authToken) {
             customEventCallbacks['game:cancelled'](data);
         }
     });
+
+    // Listen for game:resetToLobby event (play again flow)
+    socket.on('game:resetToLobby', (data) => {
+        console.log('🔄 Game reset to lobby:', data);
+        if (customEventCallbacks['game:resetToLobby']) {
+            customEventCallbacks['game:resetToLobby'](data);
+        }
+    });
 }
 
 // Storage for custom event callbacks

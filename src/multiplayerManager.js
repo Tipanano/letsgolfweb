@@ -313,6 +313,16 @@ function setupWebSocketHandlers() {
         handleGameFinished(data);
     });
 
+    // Listen for game reset to lobby (after game finishes, for play again)
+    wsManager.setOnCustomEventCallback('game:resetToLobby', (data) => {
+        console.log('🔄 Game reset to lobby:', data);
+        // Update players list with new ready statuses
+        players = data.players || players;
+        // Show lobby
+        showLobby();
+        updateLobbyDisplay();
+    });
+
     // Listen for escrow created (wagering games)
     wsManager.setOnCustomEventCallback('escrow:created', (data) => {
         console.log('💰 Escrow created, showing payment UI:', data);
@@ -430,43 +440,35 @@ function handleGameFinished(data) {
 
     shotTimer.setStatusMessage(message);
 
-    // Build results summary
-    const playersList = (allPlayers || players).map(p => {
+    // Sort players by distance (closest first)
+    const sortedPlayers = (allPlayers || players).map(p => {
         const state = playerStates[p.id];
-        const distance = state?.distanceFromHole ? (state.distanceFromHole * 1.09361).toFixed(1) : 'N/A';
-        const isWinner = p.id === winner.id;
-        return `${isWinner ? '🏆 ' : ''}${p.name}: ${distance} yards${isWinner ? ' - WINNER!' : ''}`;
-    }).join('\n');
+        return {
+            ...p,
+            distanceYards: state?.distanceFromHole ? (state.distanceFromHole * 1.09361) : 999999,
+            isWinner: p.id === winner.id
+        };
+    }).sort((a, b) => a.distanceYards - b.distanceYards);
 
     // Check if payout data exists (wagering game)
     const payoutData = window.lastPayoutData;
-    let payoutInfo = '';
-    if (payoutData && isWageringGame) {
-        payoutInfo = `\n\n**💰 Payout:** ${payoutData.payoutAmount} NANO sent to winner`;
-        if (isLocalWinner) {
-            payoutInfo += `\n📍 Address: ${payoutData.payoutAddress.substring(0, 20)}...`;
-        }
-        // Clear the payout data
-        window.lastPayoutData = null;
+    if (payoutData) {
+        window.lastPayoutData = null; // Clear it
     }
 
-    const title = isLocalWinner ? '🎉 You Won!' : '🏁 Game Over';
-    const summaryMessage = `**${winner.name}** won with **${winnerDistance} yards** from the hole!${payoutInfo}\n\n**Results:**\n${playersList}`;
-
-    // Show modal with game summary
-    modal.confirm(summaryMessage, title, {
-        confirmText: 'Play Again',
-        cancelText: 'Return to Menu',
-        type: isLocalWinner ? 'success' : 'info'
-    }).then(playAgain => {
-        if (playAgain) {
-            // TODO: Implement play again functionality
-            console.log('Play again requested');
-            toast.info('Play again feature coming soon!');
-            returnToMenu();
-        } else {
-            returnToMenu();
-        }
+    // Show custom game summary modal
+    showGameSummaryModal({
+        isLocalWinner,
+        winner,
+        winnerDistance,
+        sortedPlayers,
+        payoutData,
+        isWageringGame,
+        onPlayAgain: () => {
+            console.log('Play again requested - marking ready');
+            wsManager.sendPlayerReady();
+        },
+        onReturnToMenu: returnToMenu
     });
 }
 
@@ -858,6 +860,12 @@ async function startMultiplayerGame() {
 }
 
 function handleTurnChange(data) {
+    // Don't process turn changes if game is finished
+    if (isGameFinished) {
+        console.log('Ignoring turn change - game is finished');
+        return;
+    }
+
     // Update the current turn index
     if (data.currentPlayerIndex !== undefined) {
         currentPlayerIndex = data.currentPlayerIndex;
@@ -1239,6 +1247,60 @@ export function isLocalPlayerTurn() {
     // Check if it's our turn based on currentPlayerIndex
     const localPlayerIdx = players.findIndex(p => p.id === localPlayerId);
     return localPlayerIdx === currentPlayerIndex;
+}
+
+function showGameSummaryModal({ isLocalWinner, winner, winnerDistance, sortedPlayers, payoutData, isWageringGame, onPlayAgain, onReturnToMenu }) {
+    // Create modal HTML
+    const modalHTML = `
+        <div class="game-summary-modal-overlay" id="game-summary-overlay">
+            <div class="game-summary-modal">
+                <div class="game-summary-header ${isLocalWinner ? 'winner' : ''}">
+                    <h2>${isLocalWinner ? '🎉 Victory!' : '🏁 Game Over'}</h2>
+                    <p class="winner-text">${winner.name} won with ${winnerDistance} yards!</p>
+                </div>
+
+                <div class="game-summary-results">
+                    <h3>Final Results</h3>
+                    <div class="players-list">
+                        ${sortedPlayers.map((p, index) => `
+                            <div class="player-result ${p.isWinner ? 'winner' : ''} ${p.id === localPlayerId ? 'local-player' : ''}">
+                                <span class="rank">${index + 1}</span>
+                                <span class="player-name">${p.isWinner ? '🏆 ' : ''}${p.name}${p.id === localPlayerId ? ' (You)' : ''}</span>
+                                <span class="distance">${p.distanceYards.toFixed(1)} yards</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+
+                ${payoutData && isWageringGame ? `
+                    <div class="game-summary-payout">
+                        <h3>💰 Payout</h3>
+                        <p><strong>${payoutData.payoutAmount} NANO</strong> sent to winner</p>
+                        ${isLocalWinner ? `<p class="payout-address">Address: ${payoutData.payoutAddress.substring(0, 30)}...</p>` : ''}
+                    </div>
+                ` : ''}
+
+                <div class="game-summary-actions">
+                    <button class="btn-play-again" id="btn-play-again">Play Again</button>
+                    <button class="btn-return-menu" id="btn-return-menu">Return to Menu</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Insert modal into document
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+    // Add event listeners
+    document.getElementById('btn-play-again').addEventListener('click', () => {
+        document.getElementById('game-summary-overlay').remove();
+        onPlayAgain();
+    });
+
+    document.getElementById('btn-return-menu').addEventListener('click', () => {
+        document.getElementById('game-summary-overlay').remove();
+        onReturnToMenu();
+    });
 }
 
 export function hasLocalPlayerShot() {
