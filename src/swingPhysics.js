@@ -22,7 +22,7 @@ const SWING_SPEED_REDUCTION_EFFECT_FACTOR = 0.3; // 1.0 = full effect, 0.5 = hal
 // Transition & Speed Efficiency
 export const IDEAL_TRANSITION_OFFSET_MS = -150; // Ideal 'j' press relative to ideal backswing end
 const TRANSITION_TIMING_SENSITIVITY = 350; // ms deviation window for transition affecting ACHS
-const MAX_TRANSITION_SPEED_LOSS = 0.3; // Max % ACHS loss from poor transition timing
+const MAX_TRANSITION_SPEED_LOSS = 0.4; // Max % ACHS loss from poor transition timing (40% penalty for very late/no hip initiation)
 
 // ACHS Penalty Scaling based on PCHS
 const PCHS_THRESHOLD_FOR_REDUCED_PENALTY = 75; // PCHS at or below which the minimum penalty scaling applies (mph)

@@ -324,8 +324,11 @@ export function updateTimingBars(elapsedTime, swingSpeed) {
 }
 
 // New function to update chip-specific timing bars (Rotation 'a' and Hit 'i')
-export function updateChipTimingBars(elapsedTime) {
-    const progressPercent = Math.min(100, (elapsedTime / CHIP_DOWNSWING_DURATION_MS) * 100);
+export function updateChipTimingBars(elapsedTime, backswingDuration) {
+    // Chip downswing duration should match backswing for ideal timing visualization
+    // Use backswing duration + buffer to ensure we show full progress
+    const effectiveChipDownswingDuration = Math.max(backswingDuration * 1.5, 1000); // At least 1000ms, or 1.5x backswing
+    const progressPercent = Math.min(100, (elapsedTime / effectiveChipDownswingDuration) * 100);
     // Update Rotation ('a' -> progressA) and Hit ('i' -> progressD) bars
     progressA.style.width = `${progressPercent}%`;
     progressD.style.width = `${progressPercent}%`;

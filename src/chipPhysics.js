@@ -14,49 +14,53 @@ const CHIP_POWER_FACTOR = 0.04;     // Ball speed per ms of backswing (needs tun
 const CHIP_BASE_LAUNCH_ANGLE = 25;  // Base launch angle before adjustments
 const CHIP_LOFT_LAUNCH_FACTOR = 0.6; // How much club loft influences launch angle
 // New Timing Parameters (relative to downswing start)
-const IDEAL_CHIP_ROTATION_OFFSET_MS = 50;  // Ideal 'a' press time after 'w' release
+const IDEAL_CHIP_ROTATION_OFFSET_MS = 100;  // Ideal 'a' press time after 'w' release (relaxed from 50ms)
 // REMOVED: const IDEAL_CHIP_HIT_OFFSET_MS = 150; // Ideal 'i' press time is now dynamic (matches backswing duration)
-const CHIP_TIMING_SENSITIVITY_MS = 75;   // Window (+/- ms) around ideal for timing effects (applies to both rotation and hit deviations)
+const CHIP_TIMING_SENSITIVITY_MS = 150;   // Window (+/- ms) around ideal for timing effects (relaxed from 75ms)
 const CHIP_TIMING_QUALITY_FACTOR = 0.25; // Max % reduction in speed/spin due to *hit* timing deviation (for near misses)
 // const CHIP_TIMING_SPIN_FACTOR = 15;    // Side spin RPM per ms of *hit* deviation (REMOVED/REPLACED by new factor)
-const CHIP_ROTATION_SIDESPIN_FACTOR = 2.0; // RPM of sidespin per ms of rotation deviation
-const MAX_CHIP_SIDESPIN_RPM = 750;       // Max sidespin RPM for a chip shot
+const CHIP_ROTATION_SIDESPIN_FACTOR = 1.5; // RPM of sidespin per ms of rotation deviation (reduced from 2.0)
+const MAX_CHIP_SIDESPIN_RPM = 600;       // Max sidespin RPM for a chip shot (reduced from 750)
 // Strike Quality Thresholds (ms deviation for hit timing)
-const CHIP_DUFF_THRESHOLD_MS = 150;  // Very early hit
-const CHIP_FAT_THRESHOLD_MS = 50;    // Early hit
-const CHIP_THIN_THRESHOLD_MS = 50;   // Late hit
-const CHIP_TOP_THRESHOLD_MS = 150;   // Very late hit
+// Asymmetric: More forgiving for EARLY (negative deviation), harsh for LATE (positive deviation)
+const CHIP_DUFF_THRESHOLD_MS = 300;  // Very early hit (relaxed - gets poor low shot)
+const CHIP_FAT_THRESHOLD_MS = 150;    // Early hit (relaxed - still playable)
+const CHIP_THIN_THRESHOLD_MS = 30;   // Late hit (TIGHTENED - less room for error)
+const CHIP_TOP_THRESHOLD_MS = 80;   // Very late hit (TIGHTENED - disaster zone)
 // Rotation timing thresholds (secondary check if hit is Center)
 const CHIP_ROTATION_DUFF_THRESHOLD_MS = 75; // *Late* rotation deviation threshold causing Duff strike (for naming)
 const CHIP_ROTATION_THIN_THRESHOLD_MS = 75; // *Early* rotation deviation threshold causing Thin strike (for naming)
 // --- Gradual Effect Parameters ---
 // Define points for piecewise linear interpolation based on hitDeviation (ms)
 // Speed Multiplier Points: [deviation, multiplier]
+// ASYMMETRIC: More forgiving for early (negative), harsh for late (positive)
 const SPEED_MULT_POINTS = [
-    [-150, 0.15], // Very Early (Duff)
-    [-100, 0.15], // Duff Threshold
-    [ -50, 0.60], // Fat Threshold
-    [   0, 1.00], // Center
-    [  50, 1.20], // Thin Threshold
-    [ 100, 1.50], // Top Threshold
-    [ 150, 1.50]  // Very Late (Top)
+    [-300, 0.35], // Very Early (Duff) - Still playable
+    [-150, 0.55], // Early Fat - Reduced distance but ok
+    [ -50, 0.80], // Slightly early - Minor penalty
+    [   0, 1.00], // Perfect timing
+    [  30, 2.20], // Thin - SCREAMER! Blade contact, no loft = rocket
+    [  80, 1.80], // Topped - Still rockets off, hard to control
+    [ 150, 0.50]  // Very Late - Weak contact, barely moves
 ];
 // Launch Adjustment Points: [deviation, adjustment_degrees]
+// ASYMMETRIC: Early = high but playable, late = low disaster
 const LAUNCH_ADJ_POINTS = [
-    [-200, 3.0],  // Very Early (Duff) - Max positive adjust
-    [-150, 3.0],  // Duff Threshold
-    [ -50, 2.0],  // Fat Threshold
-    [   0, 0.0],  // Center
-    [  50,-15.0], // Thin Threshold
-    [ 150,-40.0], // Top Threshold
-    [ 200,-50.0]  // Very Late (Top) - Max negative adjust
+    [-300, 5.0],  // Very Early (Duff) - High, poor flight
+    [-150, 3.0],  // Early Fat - Slightly high
+    [ -50, 1.0],  // Slightly early - Minimal adjustment
+    [   0, 0.0],  // Perfect
+    [  30, -4.0], // Thin - Very low flight, screams off
+    [  80,-15.0], // Topped - Ground ball that rolls
+    [ 150,-20.0]  // Very Late - Complete top, dribbles
 ];
 // Spin Multiplier Points: [abs_deviation, multiplier] (Use absolute deviation)
 const SPIN_MULT_POINTS = [
-    [  0, 1.00], // Center
-    [ 50, 0.70], // Fat/Thin Threshold
-    [100, 0.40], // Duff/Top Threshold
-    [150, 0.30]  // Very Early/Late
+    [  0, 1.00], // Perfect - Full spin
+    [ 30, 0.15], // Thin - Almost no backspin (equator contact)
+    [ 50, 0.10], // Slightly off - Minimal spin
+    [100, 0.50], // Moderately off - Reduced spin
+    [200, 0.25]  // Way off - Minimal spin
 ];
 const CHIP_BASE_BACKSPIN = 2500;
 const CHIP_BACKSPIN_LOFT_FACTOR = 50; // RPM per degree of loft
@@ -133,7 +137,10 @@ export function calculateChipImpact(backswingDuration, rotationOffset, hitOffset
     // Hit deviation is relative to the actual backswing duration
     const idealHitOffset = backswingDuration || 0; // Use actual backswing duration as the ideal hit time
     const hitDeviation = effectiveHitOffset - idealHitOffset;
-    console.log(`Deviations: RotDev=${rotationDeviation.toFixed(0)} (Ideal: ${IDEAL_CHIP_ROTATION_OFFSET_MS}), HitDev=${hitDeviation.toFixed(0)} (Ideal: ${idealHitOffset.toFixed(0)})`);
+    console.log(`CHIP TIMING DEBUG:`);
+    console.log(`  Backswing Duration: ${backswingDuration?.toFixed(0)}ms`);
+    console.log(`  Rotation Offset (actual): ${effectiveRotationOffset?.toFixed(0)}ms | Ideal: ${IDEAL_CHIP_ROTATION_OFFSET_MS}ms | Deviation: ${rotationDeviation.toFixed(0)}ms`);
+    console.log(`  Hit Offset (actual): ${effectiveHitOffset?.toFixed(0)}ms | Ideal: ${idealHitOffset.toFixed(0)}ms | Deviation: ${hitDeviation.toFixed(0)}ms`);
 
     // 1. Calculate Base Power/Speed from Backswing Duration
     const effectiveBackswing = clamp(backswingDuration || 0, 0, MAX_CHIP_BACKSWING_MS);
@@ -204,13 +211,25 @@ export function calculateChipImpact(backswingDuration, rotationOffset, hitOffset
     actualBallSpeed = Math.max(minSpeed, actualBallSpeed);
 
     // 5. Calculate Launch Angle
-    let launchAngle = CHIP_BASE_LAUNCH_ANGLE + (club.loft * CHIP_LOFT_LAUNCH_FACTOR);
+    // When you thin it, you lose most of the loft effect (blade contact)
+    // Calculate loft multiplier based on strike quality
+    let loftMultiplier = 1.0; // Perfect contact = full loft
+    if (hitDeviation > 0) {
+        // Late hits (thin/topped) - dramatically reduce loft application
+        // Thin (30ms) = ~20% loft, Topped (80ms) = ~5% loft
+        loftMultiplier = Math.max(0.05, 1.0 - (hitDeviation / 35)); // Drops fast
+    }
+
+    let launchAngle = CHIP_BASE_LAUNCH_ANGLE + (club.loft * CHIP_LOFT_LAUNCH_FACTOR * loftMultiplier);
+    console.log(`Launch Base: ${CHIP_BASE_LAUNCH_ANGLE} + Loft(${club.loft}°×${CHIP_LOFT_LAUNCH_FACTOR}×${loftMultiplier.toFixed(2)}) = ${launchAngle.toFixed(1)}°`);
+
     // Adjust launch based on ball position (Back = lower launch)
     launchAngle -= ballPositionFactor * BALLPOS_CHIP_LAUNCH_ADJUST;
+
     // Gradual Launch Adjustment (using hit deviation)
     const launchAdjustment = interpolateEffect(hitDeviation, LAUNCH_ADJ_POINTS);
     launchAngle += launchAdjustment;
-    console.log(`Gradual Launch: Adjustment=${launchAdjustment.toFixed(1)} deg (HitDev: ${hitDeviation.toFixed(0)})`);
+    console.log(`Final Launch Adjustment: ${launchAdjustment.toFixed(1)} deg (HitDev: ${hitDeviation.toFixed(0)}) → Total: ${launchAngle.toFixed(1)}°`);
     // Launch angle clamped later, after surface mods
 
     // 6. Calculate Back Spin (Initial)

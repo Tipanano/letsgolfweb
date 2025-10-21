@@ -65,6 +65,7 @@ h2 {
 
 /* --- Timing Bars --- */
 #timing-bars {
+    display: none; /* Hidden - replaced by swing arc visualizer */
     background-color: #fff;
     border: 1px solid #ddd;
     padding: 15px;
@@ -324,6 +325,21 @@ h2 {
     text-align: center;
     z-index: 6; /* Ensure it's above canvas but potentially below other popups */
     /* .overlay-text-item class will be applied to the span inside this div via HTML */
+}
+
+/* --- Swing Arc Visualizer Overlay --- */
+#swing-arc-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 240px; /* Even wider for bigger arc */
+    height: 100%;
+    pointer-events: none; /* Allow clicks to pass through to canvas */
+    z-index: 10; /* Position above other overlays */
+    background: rgba(0, 0, 0, 0.25); /* Slightly darker for better contrast */
+    backdrop-filter: blur(4px); /* More blur for depth */
+    padding: 20px;
+    box-sizing: border-box;
 }
 
 /* --- Ball Position Control (Simplified) --- */

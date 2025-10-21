@@ -12,6 +12,8 @@ import {
 } from '../ui.js';
 // Import calculation functions directly
 import { calculateFullSwingShot, calculateChipShot, calculatePuttShot } from './calculations.js';
+// Import swing arc visualizer
+import * as SwingArc from '../swingArcVisualizer.js';
 
 // --- Animation Loop Functions ---
 
@@ -28,6 +30,15 @@ function updateBackswingBarAnimation(timestamp) {
     // Use current swingSpeed for full, assume 1.0 for chip/putt? Or pass explicitly?
     const speedForBar = (shotType === 'full') ? speed : 1.0;
     updateBackswingBar(elapsedTime, speedForBar); // Call UI update function
+
+    // Update swing arc visualizer
+    const maxDuration = BACKSWING_BAR_MAX_DURATION_MS / speedForBar;
+    const progress = Math.min(1.0, elapsedTime / maxDuration);
+    const idealDuration = 1000 / speedForBar; // Ideal backswing duration
+    const isIdeal = elapsedTime <= idealDuration;
+    const isLate = elapsedTime > idealDuration;
+    SwingArc.updateBackswingArc(progress, isIdeal, isLate);
+
     setBackswingAnimationFrameId(requestAnimationFrame(updateBackswingBarAnimation));
 }
 
@@ -43,6 +54,10 @@ function updateFullDownswingBarsAnimation(timestamp) {
     const elapsedTime = timestamp - startTime;
     const speed = getSwingSpeed();
     const progressPercent = updateTimingBars(elapsedTime, speed); // Call UI update for full swing bars
+
+    // Update swing arc visualizer
+    const progress = progressPercent / 100;
+    SwingArc.updateDownswingArc(progress);
 
     if (progressPercent < 100) {
         setFullDownswingAnimationFrameId(requestAnimationFrame(updateFullDownswingBarsAnimation));
@@ -69,8 +84,13 @@ function updateChipDownswingBarsAnimation(timestamp) {
         return;
     }
     const elapsedTime = timestamp - startTime;
+    const backswingDuration = getBackswingDuration(); // Get the actual backswing duration
     // Call the new UI function for chip bars
-    const progressPercent = updateChipTimingBars(elapsedTime); // Pass only elapsed time
+    const progressPercent = updateChipTimingBars(elapsedTime, backswingDuration); // Pass elapsed time and backswing duration
+
+    // Update swing arc visualizer for chip downswing
+    const progress = progressPercent / 100;
+    SwingArc.updateDownswingArc(progress);
 
     if (progressPercent < 100) {
         setChipDownswingAnimationFrameId(requestAnimationFrame(updateChipDownswingBarsAnimation));
@@ -101,6 +121,10 @@ function updatePuttDownswingBarAnimation(timestamp) {
     // Call the UI update function which uses a fixed duration for visual speed
     const progressPercent = updatePuttTimingBar(elapsedTime); // Visually fills based on BACKSWING_BAR_MAX_DURATION_MS
 
+    // Update swing arc visualizer for putt downswing
+    const progress = progressPercent / 100;
+    SwingArc.updateDownswingArc(progress);
+
     // Continue the animation as long as the VISUAL bar isn't full
     if (progressPercent < 100) {
         setPuttDownswingAnimationFrameId(requestAnimationFrame(updatePuttDownswingBarAnimation));
@@ -126,6 +150,13 @@ function updatePuttDownswingBarAnimation(timestamp) {
 export function startBackswingAnimation() {
     const currentId = getBackswingAnimationFrameId();
     if (currentId) cancelAnimationFrame(currentId);
+
+    // Start swing arc visualizer
+    const speed = getSwingSpeed();
+    const shotType = getCurrentShotType();
+    const speedForArc = (shotType === 'full') ? speed : 1.0;
+    SwingArc.startBackswingArc(speedForArc, shotType);
+
     setBackswingAnimationFrameId(requestAnimationFrame(updateBackswingBarAnimation));
 }
 
@@ -138,6 +169,11 @@ export function stopBackswingAnimation() {
 export function startFullDownswingAnimation() {
     const currentId = getFullDownswingAnimationFrameId();
     if (currentId) cancelAnimationFrame(currentId);
+
+    // End backswing arc and start downswing arc
+    SwingArc.endBackswingArc();
+    SwingArc.startDownswingArc();
+
     setFullDownswingAnimationFrameId(requestAnimationFrame(updateFullDownswingBarsAnimation));
 }
 
@@ -150,6 +186,11 @@ export function stopFullDownswingAnimation() {
 export function startChipDownswingAnimation() {
     const currentId = getChipDownswingAnimationFrameId();
     if (currentId) cancelAnimationFrame(currentId);
+
+    // End backswing arc and start downswing arc
+    SwingArc.endBackswingArc();
+    SwingArc.startDownswingArc();
+
     setChipDownswingAnimationFrameId(requestAnimationFrame(updateChipDownswingBarsAnimation));
 }
 
@@ -164,6 +205,11 @@ export function startPuttDownswingAnimation() {
     if (duration && duration > 0) {
         const currentId = getPuttDownswingAnimationFrameId();
         if (currentId) cancelAnimationFrame(currentId);
+
+        // End backswing arc and start downswing arc
+        SwingArc.endBackswingArc();
+        SwingArc.startDownswingArc();
+
         setPuttDownswingAnimationFrameId(requestAnimationFrame(updatePuttDownswingBarAnimation));
     } else {
         console.warn("Animation: Invalid backswing duration, cannot start putt downswing animation.");
@@ -182,4 +228,7 @@ export function stopAllAnimations() {
     stopFullDownswingAnimation();
     stopChipDownswingAnimation();
     stopPuttDownswingAnimation();
+
+    // Reset swing arc visualizer
+    SwingArc.resetSwingArc();
 }

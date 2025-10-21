@@ -2,7 +2,7 @@
 
 import * as GameLogic from './gameLogic.js'; // Import game logic functions/getters
 // Import specific state functions needed for aiming
-import { getGameState, getCurrentShotType, getShotDirectionAngle, setShotDirectionAngle, setRelativeShotDirectionAngle, getCurrentTargetLineAngle } from './gameLogic/state.js'; // Added new state functions
+import { getGameState, getCurrentShotType, getShotDirectionAngle, setShotDirectionAngle, setRelativeShotDirectionAngle, getCurrentTargetLineAngle, getBackswingDuration } from './gameLogic/state.js'; // Added new state functions
 import * as Visuals from './visuals.js'; // Import high-level visuals functions
 import * as MeasurementView from './visuals/measurementView.js'; // Import MeasurementView
 // Import specific core camera functions
@@ -20,6 +20,8 @@ import { getCurrentBallPosition, getCurrentHoleLayout, getHoleJustCompleted } fr
 import { getFlagPosition as getHoleFlagPosition } from './visuals/holeView.js'; // Import flag position getter for hole mode
 import { getFlagPosition as getTargetFlagPosition } from './visuals/targetView.js'; // Import flag position getter for CTF mode
 import { isLocalPlayerTurn } from './multiplayerManager.js'; // Import turn check for multiplayer
+// Import swing arc visualizer
+import * as SwingArc from './swingArcVisualizer.js';
 // --- Constants for Aiming ---
 const AIM_INCREMENT_FULL = 0.5; // Degrees per key press
 const AIM_INCREMENT_CHIP = 0.2; // Degrees per key press
@@ -240,11 +242,17 @@ function handleFullSwingKeyDown(event, gameState) {
         if (backswingStartTime) {
             const hipPressTimeOffset = hipInitiationTimestamp - backswingStartTime;
             // swingSpeed is already defined at the top of handleFullSwingKeyDown
-            markHipInitiationOnBackswingBar(hipPressTimeOffset, swingSpeed); 
+            markHipInitiationOnBackswingBar(hipPressTimeOffset, swingSpeed);
+
+            // Mark hip initiation on arc visualizer
+            const BACKSWING_MAX_MS = 1500; // Match the constant from animations.js
+            const effectiveMaxDuration = BACKSWING_MAX_MS / swingSpeed;
+            const hipProgress = Math.min(1.0, hipPressTimeOffset / effectiveMaxDuration);
+            SwingArc.markHipInitiationOnArc(hipProgress);
         } else {
             console.warn("InputHandler: Could not mark hip initiation on bar, backswingStartTime not available.");
         }
-        
+
         updateStatus("Hips Initiated..."); // Update UI directly
 
         // If paused at top, pressing 'j' starts the downswing phase immediately
@@ -260,22 +268,44 @@ function handleFullSwingKeyDown(event, gameState) {
         const timeNow = performance.now();
         // Offset relative to backswing end (need backswing end time from GameLogic)
         const backswingEndTime = GameLogic.getBackswingEndTime();
+        const downswingStartTime = GameLogic.getDownswingPhaseStartTime();
         const offset = backswingEndTime ? timeNow - backswingEndTime : null;
 
         let keyRecorded = false;
         if (event.key === 'd' && !GameLogic.getArmsStartTime()) {
             GameLogic.recordDownswingKey('arms', timeNow); // New action function
-            if (offset !== null) showKeyPressMarker('d', offset, swingSpeed); // Update UI
+            if (offset !== null) {
+                showKeyPressMarker('d', offset, swingSpeed); // Update UI
+                // Mark on arc visualizer
+                const DOWNSWING_MAX_MS = 500; // Match the constant from animations.js
+                const effectiveDownswingDuration = DOWNSWING_MAX_MS / swingSpeed;
+                const downswingProgress = Math.min(1.0, offset / effectiveDownswingDuration);
+                SwingArc.markKeyPressOnArc('d', downswingProgress);
+            }
             keyRecorded = true;
             console.log(`InputHandler: Recorded 'd' (Arms) at offset: ${offset?.toFixed(0)} ms`);
         } else if (event.key === 'i' && !GameLogic.getWristsStartTime()) {
             GameLogic.recordDownswingKey('wrists', timeNow); // New action function
-            if (offset !== null) showKeyPressMarker('i', offset, swingSpeed); // Update UI
+            if (offset !== null) {
+                showKeyPressMarker('i', offset, swingSpeed); // Update UI
+                // Mark on arc visualizer
+                const DOWNSWING_MAX_MS = 500;
+                const effectiveDownswingDuration = DOWNSWING_MAX_MS / swingSpeed;
+                const downswingProgress = Math.min(1.0, offset / effectiveDownswingDuration);
+                SwingArc.markKeyPressOnArc('i', downswingProgress);
+            }
             keyRecorded = true;
             console.log(`InputHandler: Recorded 'i' (Wrists) at offset: ${offset?.toFixed(0)} ms`);
         } else if (event.key === 'a' && !GameLogic.getRotationStartTime() && !GameLogic.getRotationInitiationTime()) {
             GameLogic.recordDownswingKey('rotation', timeNow); // New action function
-            if (offset !== null) showKeyPressMarker('a', offset, swingSpeed); // Update UI
+            if (offset !== null) {
+                showKeyPressMarker('a', offset, swingSpeed); // Update UI
+                // Mark on arc visualizer
+                const DOWNSWING_MAX_MS = 500;
+                const effectiveDownswingDuration = DOWNSWING_MAX_MS / swingSpeed;
+                const downswingProgress = Math.min(1.0, offset / effectiveDownswingDuration);
+                SwingArc.markKeyPressOnArc('a', downswingProgress);
+            }
             keyRecorded = true;
             console.log(`InputHandler: Recorded 'a' (Rotation) post-backswing at offset: ${offset?.toFixed(0)} ms`);
         }
@@ -311,6 +341,11 @@ function handleChipKeyDown(event, gameState) {
         if (event.key === 'a' && !GameLogic.getChipRotationStartTime()) {
             GameLogic.recordChipKey('rotation', timeNow); // New action function
             showKeyPressMarker('a', offset, 1.0); // Update UI
+            // Mark on arc visualizer - use actual chip downswing duration
+            const backswingDuration = getBackswingDuration();
+            const chipDownswingDuration = Math.max(backswingDuration * 1.5, 1000);
+            const downswingProgress = Math.min(1.0, offset / chipDownswingDuration);
+            SwingArc.markKeyPressOnArc('a', downswingProgress);
             updateStatus('Chip: Rotation...'); // Update UI
             console.log(`InputHandler: Recorded Chip 'a' (Rotation) at offset ${offset.toFixed(0)} ms`);
             // updateDebugTimingInfo(...); // Chip debug needed
@@ -319,6 +354,11 @@ function handleChipKeyDown(event, gameState) {
         else if (event.key === 'i' && GameLogic.getChipRotationStartTime() && !GameLogic.getChipWristsStartTime()) {
             GameLogic.recordChipKey('hit', timeNow); // New action function
             showKeyPressMarker('i', offset, 1.0); // Update UI
+            // Mark on arc visualizer - use actual chip downswing duration
+            const backswingDuration = getBackswingDuration();
+            const chipDownswingDuration = Math.max(backswingDuration * 1.5, 1000);
+            const downswingProgress = Math.min(1.0, offset / chipDownswingDuration);
+            SwingArc.markKeyPressOnArc('i', downswingProgress);
             console.log(`InputHandler: Recorded Chip 'i' (Hit) at offset ${offset.toFixed(0)} ms`);
             // updateDebugTimingInfo(...);
             GameLogic.triggerChipCalc(); // Trigger calculation
@@ -345,6 +385,10 @@ function handlePuttKeyDown(event, gameState) {
 
         if (event.key === 'i' && !GameLogic.getPuttHitTime()) {
             GameLogic.recordPuttKey('hit', timeNow); // New action function
+            // Mark on arc visualizer - putts use fixed 1500ms duration (BACKSWING_BAR_MAX_DURATION_MS)
+            const PUTT_VISUAL_DURATION_MS = 1500;
+            const downswingProgress = Math.min(1.0, offset / PUTT_VISUAL_DURATION_MS);
+            SwingArc.markKeyPressOnArc('i', downswingProgress);
             console.log(`InputHandler: Recorded Putt 'i' (Hit) at offset ${offset.toFixed(0)} ms`);
             GameLogic.triggerPuttCalc(); // Trigger calculation
         }

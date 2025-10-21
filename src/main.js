@@ -14,6 +14,7 @@ import { initMultiplayerUI } from './multiplayerTest.js'; // Import multiplayer 
 import { playerManager } from './playerManager.js'; // Import player manager
 import * as nanoAuth from './nanoAuth.js'; // Import Nano authentication
 import * as multiplayerManager from './multiplayerManager.js'; // Import multiplayer manager
+import { initSwingArcVisualizer } from './swingArcVisualizer.js'; // Import swing arc visualizer
 
 // --- Game Data ---
 const AVAILABLE_HOLE_FILES = [ // This would ideally be fetched or dynamically discovered
@@ -182,6 +183,14 @@ logic.setShotType(initialShotType); // Set initial shot type in logic
 ui.setInitialSwingSpeedDisplay(initialSwingSpeed);
 ui.setupBackswingBar(); // Setup backswing marker
 ui.setupTimingBarWindows(initialSwingSpeed / 100); // Setup downswing windows based on initial speed
+
+// Initialize swing arc visualizer
+const swingArcInitialized = initSwingArcVisualizer();
+if (swingArcInitialized) {
+    console.log("Swing arc visualizer initialized.");
+} else {
+    console.warn("Swing arc visualizer failed to initialize.");
+}
 
 // Initialize game logic (which also calls ui.resetUI and sets initial wind/temp state)
 logic.initializeGameLogic();
