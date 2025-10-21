@@ -52,7 +52,7 @@ let staticCameraZoomLevelPutt = DEFAUTLT_STATIC_PUTT_ZOOM_LEVEL; // Putt view zo
 // Animation state
 let isBallAnimating = false;
 let ballAnimationStartTime = 0;
-let ballAnimationDuration = 1500; // Default duration, will be overwritten
+let ballAnimationDuration = 1500; // Total duration in milliseconds (from timestamps)
 let currentTrajectoryPoints = [];
 let currentAnimationCallback = null; // Add variable to store the callback
 let currentIsHoledOut = false; // Added for holed-out state
@@ -198,55 +198,57 @@ function animate(timestamp) {
     // --- Camera Update Logic ---
     updateCamera(timestamp); // Call camera update logic each frame
 
-    // --- Ball Flight Animation Logic ---
+    // --- Ball Flight Animation Logic (Time-Based) ---
     if (isBallAnimating) {
         const elapsedTime = timestamp - ballAnimationStartTime;
-        const progress = Math.max(0, Math.min(1, elapsedTime / ballAnimationDuration)); // Clamped progress
+        const currentTime = elapsedTime / 1000; // Convert to seconds to match trajectory timestamps
 
         if (currentTrajectoryPoints.length > 0) {
-            const pointIndex = Math.floor(progress * (currentTrajectoryPoints.length - 1)); // Current segment start index
-
-            // Ensure pointIndex is valid (this check might be redundant now but safe to keep)
-             if (pointIndex < 0 || pointIndex >= currentTrajectoryPoints.length) {
-                 // Log progress as well for debugging
-                 console.error(`Invalid pointIndex: ${pointIndex} (Progress: ${progress.toFixed(4)}) for trajectory length ${currentTrajectoryPoints.length}`);
-                 isBallAnimating = false; // Stop animation if index is bad
-                 return;
-             }
-
-            const nextPointIndex = Math.min(pointIndex + 1, currentTrajectoryPoints.length - 1);
-            const segmentProgress = (progress * (currentTrajectoryPoints.length - 1)) - pointIndex; // Progress within the current segment
+            // Find the two points that bracket the current time
+            let pointIndex = 0;
+            for (let i = 0; i < currentTrajectoryPoints.length - 1; i++) {
+                if (currentTrajectoryPoints[i].time <= currentTime && currentTrajectoryPoints[i + 1].time > currentTime) {
+                    pointIndex = i;
+                    break;
+                }
+                // If we've passed all timestamps, use the last segment
+                if (i === currentTrajectoryPoints.length - 2) {
+                    pointIndex = i;
+                }
+            }
 
             const currentPoint = currentTrajectoryPoints[pointIndex];
-            const nextPoint = currentTrajectoryPoints[nextPointIndex]; // Use the already declared nextPointIndex
+            const nextPoint = currentTrajectoryPoints[Math.min(pointIndex + 1, currentTrajectoryPoints.length - 1)];
 
-            if (currentPoint && nextPoint) {
-                // Interpolate ball position
+            if (currentPoint && nextPoint && currentPoint.time !== undefined && nextPoint.time !== undefined) {
+                // Calculate interpolation factor based on time
+                const timeDelta = nextPoint.time - currentPoint.time;
+                const segmentProgress = timeDelta > 0 ? (currentTime - currentPoint.time) / timeDelta : 1;
+
+                // Interpolate ball position based on time
                 const interpolatedPosition = new THREE.Vector3().lerpVectors(
                     currentPoint,
                     nextPoint,
-                    segmentProgress
+                    Math.max(0, Math.min(1, segmentProgress))
                 );
                 if (ball) ball.position.copy(interpolatedPosition);
 
             } else {
-                console.error(`Undefined vector encountered during animation: current=${currentPoint}, next=${nextPoint}, index=${pointIndex}, nextIndex=${nextPointIndex}`);
+                console.error(`Invalid trajectory point or missing timestamp: current=${currentPoint}, next=${nextPoint}`);
                 isBallAnimating = false; // Stop animation on error
             }
 
-            // Update trajectory line draw range
+            // Update trajectory line draw range based on current point index
             if (trajectoryLine) {
-                const drawCount = Math.ceil(progress * currentTrajectoryPoints.length);
-                 // Ensure drawCount is valid before setting
-                 if (drawCount >= 0 && drawCount <= currentTrajectoryPoints.length) {
+                const drawCount = Math.min(pointIndex + 2, currentTrajectoryPoints.length);
+                if (drawCount >= 0 && drawCount <= currentTrajectoryPoints.length) {
                     trajectoryLine.geometry.setDrawRange(0, drawCount);
-                 } else {
-                     console.error(`Invalid drawCount: ${drawCount} for trajectory length ${currentTrajectoryPoints.length}`);
-                 }
+                }
             }
         }
 
-        if (progress >= 1) {
+        // Check if animation is complete (current time >= total duration)
+        if (currentTime >= ballAnimationDuration / 1000) {
             isBallAnimating = false;
             console.log("Ball animation finished.");
 
@@ -541,6 +543,12 @@ export function startBallAnimation(points, duration, onCompleteCallback = null, 
 
     if (points && points.length > 0) {
         //console.log("Received trajectory points for animation 2:", points);
+
+        // Verify timestamps are present
+        const firstTime = points[0].time;
+        const lastTime = points[points.length - 1].time;
+        console.log(`Animation timestamps: First=${firstTime !== undefined ? firstTime.toFixed(2) : 'MISSING'}s, Last=${lastTime !== undefined ? lastTime.toFixed(2) : 'MISSING'}s, Points=${points.length}`);
+
         const geometry = new THREE.BufferGeometry().setFromPoints(points);
         const material = new THREE.LineBasicMaterial({ color: trajectoryColor, linewidth: 3 });
         trajectoryLine = new THREE.Line(geometry, material);
@@ -551,7 +559,7 @@ export function startBallAnimation(points, duration, onCompleteCallback = null, 
         ballAnimationDuration = duration;
         console.log(`Setting ball animation duration to: ${ballAnimationDuration.toFixed(0)} ms`);
 
-        currentTrajectoryPoints = points; // Store Vector3 points directly
+        currentTrajectoryPoints = points; // Store Vector3 points with timestamps
         isBallAnimating = true;
         ballAnimationStartTime = performance.now();
         console.log("Starting ball animation...");

@@ -16,7 +16,7 @@ import { calculateImpactPhysics } from '../swingPhysics.js';
 import { calculateChipImpact } from '../chipPhysics.js';
 import { calculatePuttImpact } from '../puttPhysics.js';
 // Import both simulation functions and HOLE_RADIUS
-import { simulateFlightStepByStep, simulateGroundRoll, HOLE_RADIUS_METERS } from './simulation.js';
+import { simulateFlightStepByStep, simulateBouncePhase, simulateGroundRoll, HOLE_RADIUS_METERS } from './simulation.js';
 import { getSurfaceProperties } from '../surfaces.js'; // Import surface properties getter
 // Removed Putt Trajectory import as roll simulation handles it
 import { clamp, getSurfaceTypeAtPoint } from '../utils/gameUtils.js'; // Import getSurfaceTypeAtPoint
@@ -154,7 +154,7 @@ export function calculateFullSwingShot() {
         }
     }
 
-    // --- Run Ground Simulation (if not holed out) ---
+    // --- Run Bounce/Ground Simulation (if not holed out) ---
     let landingSurfaceType = 'OUT_OF_BOUNDS'; // Default to OOB - declare outside block for scope
     if (!isHoledOut) {
         const currentHoleLayout = getCurrentHoleLayout(); // Get layout (might be null)
@@ -172,39 +172,88 @@ export function calculateFullSwingShot() {
         landingSurfaceType = landingSurfaceType.toUpperCase().replace(' ', '_');
         console.log(`Calc (Full): Determined landing surface: ${landingSurfaceType}`);
 
-        const rollStartPosition = new THREE.Vector3(landingPositionObj.x, landingPositionObj.y, landingPositionObj.z);
+        // --- Decide: Bounce Phase or Direct to Roll? ---
+        const landingSpeed = Math.sqrt(landingVelocity.x**2 + landingVelocity.y**2 + landingVelocity.z**2);
+        const landingAngleRadians = flightSimulationResult.landingAngleRadians || 0;
+        const landingAngleDegrees = landingAngleRadians * 180 / Math.PI;
 
-        // --- Calculate Initial Roll Speed Factor based on Landing Angle AND Surface Bounce ---
-        const landingVelHorizontalMag = Math.sqrt(landingVelocity.x**2 + landingVelocity.z**2);
-        let landingAngleRad = Math.PI / 2; // Default 90 deg
-        if (landingVelHorizontalMag > 0.01) {
-            landingAngleRad = Math.atan2(Math.abs(landingVelocity.y), landingVelHorizontalMag);
+        // Thresholds for skipping bounce phase (tunable)
+        const SKIP_BOUNCE_ANGLE_THRESHOLD = 20; // degrees - shallow landing goes straight to roll
+        const SKIP_BOUNCE_SPEED_THRESHOLD = 4.0; // m/s - slow landing goes straight to roll
+
+        const shouldSkipBounce = (landingAngleDegrees < SKIP_BOUNCE_ANGLE_THRESHOLD || landingSpeed < SKIP_BOUNCE_SPEED_THRESHOLD);
+
+        console.log(`Calc (Full): Landing conditions - Speed: ${landingSpeed.toFixed(2)} m/s, Angle: ${landingAngleDegrees.toFixed(1)}°`);
+
+        let rollStartPosition, rollStartVelocity, rollStartBackspinRPM, rollStartSidespinRPM;
+        let bounceTrajectory = [];
+        let bounceEndTime = flightSimulationResult.timeOfFlight; // Start with flight time
+
+        if (shouldSkipBounce) {
+            console.log(`Calc (Full): *** SKIPPING BOUNCE PHASE *** (angle < ${SKIP_BOUNCE_ANGLE_THRESHOLD}° or speed < ${SKIP_BOUNCE_SPEED_THRESHOLD} m/s) - Going straight to roll`);
+
+            // Use old logic: apply simple speed reduction factor
+            const landingVelHorizontalMag = Math.sqrt(landingVelocity.x**2 + landingVelocity.z**2);
+            const angleFactor = Math.cos(landingAngleRadians);
+            const surfaceProps = getSurfaceProperties(landingSurfaceType);
+            const surfaceBounceFactor = surfaceProps?.bounce ?? 0.4;
+            const finalRollSpeedFactor = angleFactor * surfaceBounceFactor;
+
+            rollStartPosition = new THREE.Vector3(landingPositionObj.x, landingPositionObj.y, landingPositionObj.z);
+            rollStartVelocity = new THREE.Vector3(
+                landingVelocity.x * finalRollSpeedFactor,
+                0,
+                landingVelocity.z * finalRollSpeedFactor
+            );
+            rollStartBackspinRPM = backSpin;
+            rollStartSidespinRPM = sideSpin;
+
+        } else {
+            console.log(`Calc (Full): *** RUNNING BOUNCE PHASE *** (angle >= ${SKIP_BOUNCE_ANGLE_THRESHOLD}° and speed >= ${SKIP_BOUNCE_SPEED_THRESHOLD} m/s)`);
+
+            // Get spin state from flight simulation
+            const landingSpinRadPerSec = flightSimulationResult.landingSpinRadPerSec || { x: 0, y: 0, z: 0 };
+
+            // Run bounce simulation (pass flight end time)
+            const bounceResult = simulateBouncePhase(
+                landingPositionObj,
+                landingVelocity,
+                landingAngleRadians,
+                landingSpinRadPerSec,
+                landingSurfaceType,
+                flightSimulationResult.timeOfFlight // Start bounce time from end of flight
+            );
+
+            // Use bounce results as starting point for roll
+            rollStartPosition = bounceResult.position;
+            rollStartVelocity = bounceResult.velocity;
+            // Convert spin back to RPM for ground roll
+            rollStartBackspinRPM = Math.abs(bounceResult.spin.x) * (60 / (2 * Math.PI));
+            rollStartSidespinRPM = bounceResult.spin.y * (60 / (2 * Math.PI));
+            bounceTrajectory = bounceResult.bouncePoints || [];
+            bounceEndTime = bounceResult.endTime; // Get end time from bounce phase
+
+            console.log(`Calc (Full): After ${bounceResult.bounceCount} bounces - Position: (${rollStartPosition.x.toFixed(2)}, ${rollStartPosition.y.toFixed(2)}, ${rollStartPosition.z.toFixed(2)})`);
+            console.log(`Calc (Full): Roll start velocity: (${rollStartVelocity.x.toFixed(2)}, ${rollStartVelocity.y.toFixed(2)}, ${rollStartVelocity.z.toFixed(2)}) m/s`);
+            console.log(`Calc (Full): Roll start spin: Backspin ${rollStartBackspinRPM.toFixed(0)} RPM, Sidespin ${rollStartSidespinRPM.toFixed(0)} RPM`);
         }
-        const angleFactor = Math.cos(landingAngleRad); // Factor from landing angle
 
-        // Get surface properties to find bounce
-        const surfaceProps = getSurfaceProperties(landingSurfaceType);
-        const surfaceBounceFactor = surfaceProps?.bounce ?? 0.4; // Get bounce or default to 0.4
-
-        // Combine factors: Higher bounce means more speed retained
-        const finalRollSpeedFactor = angleFactor * surfaceBounceFactor;
-        console.log(`Calc Roll Start (Full): Landing Angle=${(landingAngleRad * 180 / Math.PI).toFixed(1)}deg (Factor=${angleFactor.toFixed(2)}), Surface=${landingSurfaceType}, Bounce=${surfaceBounceFactor.toFixed(2)}, FinalFactor=${finalRollSpeedFactor.toFixed(2)}`);
-
-
-        // Apply the combined factor to horizontal landing velocity components
-        const rollStartVelocity = new THREE.Vector3(
-            landingVelocity.x * finalRollSpeedFactor,
-            0, // Y velocity is zero for roll start
-            landingVelocity.z * finalRollSpeedFactor
-        );
-
-        // Pass the backSpin and sideSpin values (from impactResult) to the ground roll simulation
-        const groundRollResult = simulateGroundRoll(rollStartPosition, rollStartVelocity, landingSurfaceType, backSpin, sideSpin);
+        // --- Run Ground Roll Simulation (pass bounce end time) ---
+        const groundRollResult = simulateGroundRoll(rollStartPosition, rollStartVelocity, landingSurfaceType, rollStartBackspinRPM, rollStartSidespinRPM, bounceEndTime);
         finalPosition = groundRollResult.finalPosition; // Vector3
         isHoledOut = groundRollResult.isHoledOut;
-        // Combine trajectories
-        const fullTrajectory = flightSimulationResult.trajectoryPoints.concat(groundRollResult.rollTrajectoryPoints || []);
-        flightSimulationResult.trajectoryPoints = fullTrajectory; // Overwrite the original trajectory with the combined one
+
+        // Combine trajectories: flight + bounce + roll
+        const fullTrajectory = flightSimulationResult.trajectoryPoints
+            .concat(bounceTrajectory)
+            .concat(groundRollResult.rollTrajectoryPoints || []);
+        flightSimulationResult.trajectoryPoints = fullTrajectory;
+
+        // Update total time for animation
+        const totalAnimationTime = groundRollResult.endTime || bounceEndTime;
+        console.log(`Calc (Full): Total animation time: ${totalAnimationTime.toFixed(2)}s (flight + bounce + roll)`);
+        flightSimulationResult.timeOfFlight = totalAnimationTime;
+
     } else {
          console.log("Calc (Full): Skipping ground roll due to slam dunk.");
          // Ensure trajectoryPoints exists even if roll is skipped
@@ -265,7 +314,7 @@ export function calculateFullSwingShot() {
         carryDistance: carryDistance,
         rolloutDistance: totalDistance - carryDistance, // Calculate rollout
         totalDistance: totalDistance,
-        timeOfFlight: visualTimeOfFlight,
+        timeOfFlight: flightSimulationResult.timeOfFlight, // Use actual total time (flight + bounce + roll)
         trajectory: flightSimulationResult.trajectoryPoints, // Now contains combined flight + roll
         sideDistance: sideDistance,
         finalPosition: { x: finalPosition.x, y: finalPosition.y, z: finalPosition.z }, // Convert final Vector3 back to object
@@ -424,7 +473,7 @@ export function calculateChipShot() {
         }
     }
 
-    // --- Run Ground Simulation (if not holed out) ---
+    // --- Run Bounce/Ground Simulation (if not holed out) ---
     let landingSurfaceType = 'OUT_OF_BOUNDS'; // Default to OOB - declare outside block for scope
     if (!isHoledOut) {
         const currentHoleLayout = getCurrentHoleLayout(); // Get layout (might be null)
@@ -442,38 +491,88 @@ export function calculateChipShot() {
         landingSurfaceType = landingSurfaceType.toUpperCase().replace(' ', '_');
         console.log(`Calc (Chip): Determined landing surface: ${landingSurfaceType}`);
 
-        const rollStartPosition = new THREE.Vector3(landingPositionObj.x, landingPositionObj.y, landingPositionObj.z);
+        // --- Decide: Bounce Phase or Direct to Roll? ---
+        const landingSpeed = Math.sqrt(landingVelocity.x**2 + landingVelocity.y**2 + landingVelocity.z**2);
+        const landingAngleRadians = flightSimulationResult.landingAngleRadians || 0;
+        const landingAngleDegrees = landingAngleRadians * 180 / Math.PI;
 
-        // --- Calculate Initial Roll Speed Factor based on Landing Angle AND Surface Bounce ---
-        const landingVelHorizontalMag = Math.sqrt(landingVelocity.x**2 + landingVelocity.z**2);
-        let landingAngleRad = Math.PI / 2;
-        if (landingVelHorizontalMag > 0.01) {
-            landingAngleRad = Math.atan2(Math.abs(landingVelocity.y), landingVelHorizontalMag);
+        // Thresholds for skipping bounce phase (tunable)
+        const SKIP_BOUNCE_ANGLE_THRESHOLD = 20; // degrees - shallow landing goes straight to roll
+        const SKIP_BOUNCE_SPEED_THRESHOLD = 4.0; // m/s - slow landing goes straight to roll
+
+        const shouldSkipBounce = (landingAngleDegrees < SKIP_BOUNCE_ANGLE_THRESHOLD || landingSpeed < SKIP_BOUNCE_SPEED_THRESHOLD);
+
+        console.log(`Calc (Chip): Landing conditions - Speed: ${landingSpeed.toFixed(2)} m/s, Angle: ${landingAngleDegrees.toFixed(1)}°`);
+
+        let rollStartPosition, rollStartVelocity, rollStartBackspinRPM, rollStartSidespinRPM;
+        let bounceTrajectory = [];
+        let bounceEndTime = flightSimulationResult.timeOfFlight; // Start with flight time
+
+        if (shouldSkipBounce) {
+            console.log(`Calc (Chip): *** SKIPPING BOUNCE PHASE *** (angle < ${SKIP_BOUNCE_ANGLE_THRESHOLD}° or speed < ${SKIP_BOUNCE_SPEED_THRESHOLD} m/s) - Going straight to roll`);
+
+            // Use old logic: apply simple speed reduction factor
+            const landingVelHorizontalMag = Math.sqrt(landingVelocity.x**2 + landingVelocity.z**2);
+            const angleFactor = Math.cos(landingAngleRadians);
+            const surfaceProps = getSurfaceProperties(landingSurfaceType);
+            const surfaceBounceFactor = surfaceProps?.bounce ?? 0.4;
+            const finalRollSpeedFactor = angleFactor * surfaceBounceFactor;
+
+            rollStartPosition = new THREE.Vector3(landingPositionObj.x, landingPositionObj.y, landingPositionObj.z);
+            rollStartVelocity = new THREE.Vector3(
+                landingVelocity.x * finalRollSpeedFactor,
+                0,
+                landingVelocity.z * finalRollSpeedFactor
+            );
+            rollStartBackspinRPM = backSpin;
+            rollStartSidespinRPM = sideSpin;
+
+        } else {
+            console.log(`Calc (Chip): *** RUNNING BOUNCE PHASE *** (angle >= ${SKIP_BOUNCE_ANGLE_THRESHOLD}° and speed >= ${SKIP_BOUNCE_SPEED_THRESHOLD} m/s)`);
+
+            // Get spin state from flight simulation
+            const landingSpinRadPerSec = flightSimulationResult.landingSpinRadPerSec || { x: 0, y: 0, z: 0 };
+
+            // Run bounce simulation (pass flight end time)
+            const bounceResult = simulateBouncePhase(
+                landingPositionObj,
+                landingVelocity,
+                landingAngleRadians,
+                landingSpinRadPerSec,
+                landingSurfaceType,
+                flightSimulationResult.timeOfFlight // Start bounce time from end of flight
+            );
+
+            // Use bounce results as starting point for roll
+            rollStartPosition = bounceResult.position;
+            rollStartVelocity = bounceResult.velocity;
+            // Convert spin back to RPM for ground roll
+            rollStartBackspinRPM = Math.abs(bounceResult.spin.x) * (60 / (2 * Math.PI));
+            rollStartSidespinRPM = bounceResult.spin.y * (60 / (2 * Math.PI));
+            bounceTrajectory = bounceResult.bouncePoints || [];
+            bounceEndTime = bounceResult.endTime; // Get end time from bounce phase
+
+            console.log(`Calc (Chip): After ${bounceResult.bounceCount} bounces - Position: (${rollStartPosition.x.toFixed(2)}, ${rollStartPosition.y.toFixed(2)}, ${rollStartPosition.z.toFixed(2)})`);
+            console.log(`Calc (Chip): Roll start velocity: (${rollStartVelocity.x.toFixed(2)}, ${rollStartVelocity.y.toFixed(2)}, ${rollStartVelocity.z.toFixed(2)}) m/s`);
+            console.log(`Calc (Chip): Roll start spin: Backspin ${rollStartBackspinRPM.toFixed(0)} RPM, Sidespin ${rollStartSidespinRPM.toFixed(0)} RPM`);
         }
-        const angleFactor = Math.cos(landingAngleRad); // Factor from landing angle
 
-        // Get surface properties to find bounce
-        const surfaceProps = getSurfaceProperties(landingSurfaceType);
-        const surfaceBounceFactor = surfaceProps?.bounce ?? 0.4; // Get bounce or default to 0.4
-
-        // Combine factors: Higher bounce means more speed retained
-        const finalRollSpeedFactor = angleFactor * surfaceBounceFactor;
-        console.log(`Calc Roll Start (Chip): Landing Angle=${(landingAngleRad * 180 / Math.PI).toFixed(1)}deg (Factor=${angleFactor.toFixed(2)}), Surface=${landingSurfaceType}, Bounce=${surfaceBounceFactor.toFixed(2)}, FinalFactor=${finalRollSpeedFactor.toFixed(2)}`);
-
-        // Apply the combined factor to horizontal landing velocity components
-        const rollStartVelocity = new THREE.Vector3(
-            landingVelocity.x * finalRollSpeedFactor,
-            0,
-            landingVelocity.z * finalRollSpeedFactor
-        );
-
-        // Pass the backSpin and sideSpin values (from impactResult) to the ground roll simulation
-        const groundRollResult = simulateGroundRoll(rollStartPosition, rollStartVelocity, landingSurfaceType, backSpin, sideSpin);
+        // --- Run Ground Roll Simulation (pass bounce end time) ---
+        const groundRollResult = simulateGroundRoll(rollStartPosition, rollStartVelocity, landingSurfaceType, rollStartBackspinRPM, rollStartSidespinRPM, bounceEndTime);
         finalPosition = groundRollResult.finalPosition;
         isHoledOut = groundRollResult.isHoledOut;
-        // Combine trajectories
-        const fullTrajectory = flightSimulationResult.trajectoryPoints.concat(groundRollResult.rollTrajectoryPoints || []);
-        flightSimulationResult.trajectoryPoints = fullTrajectory; // Overwrite the original trajectory
+
+        // Combine trajectories: flight + bounce + roll
+        const fullTrajectory = flightSimulationResult.trajectoryPoints
+            .concat(bounceTrajectory)
+            .concat(groundRollResult.rollTrajectoryPoints || []);
+        flightSimulationResult.trajectoryPoints = fullTrajectory;
+
+        // Update total time for animation
+        const totalAnimationTime = groundRollResult.endTime || bounceEndTime;
+        console.log(`Calc (Chip): Total animation time: ${totalAnimationTime.toFixed(2)}s (flight + bounce + roll)`);
+        flightSimulationResult.timeOfFlight = totalAnimationTime;
+
     } else {
          console.log("Calc (Chip): Skipping ground roll due to slam dunk.");
          // Ensure trajectoryPoints exists even if roll is skipped
@@ -524,7 +623,7 @@ export function calculateChipShot() {
         carryDistance: carryDistance,
         rolloutDistance: totalDistance - carryDistance, // Calculate rollout
         totalDistance: totalDistance,
-        timeOfFlight: visualTimeOfFlight,
+        timeOfFlight: flightSimulationResult.timeOfFlight, // Use actual total time (flight + bounce + roll)
         trajectory: flightSimulationResult.trajectoryPoints, // Now contains combined flight + roll
         sideDistance: sideDistance,
         finalPosition: { x: finalPosition.x, y: finalPosition.y, z: finalPosition.z },
@@ -605,9 +704,12 @@ export function calculatePuttShot() {
     // --- Run Ground Simulation ---
     // Assume putts always start on the green
     // Pass a low default backspin for putts (e.g., 100 RPM)
-    const groundRollResult = simulateGroundRoll(initialPosition, initialVelocity, 'green', 100);
+    // Putts start at time 0 (no flight phase)
+    const groundRollResult = simulateGroundRoll(initialPosition, initialVelocity, 'green', 100, 0, 0);
     finalPosition = groundRollResult.finalPosition; // Vector3
     isHoledOut = groundRollResult.isHoledOut;
+    const totalAnimationTime = groundRollResult.endTime || 0;
+    console.log(`Calc (Putt): Total animation time: ${totalAnimationTime.toFixed(2)}s`);
 
     // Calculate final distances
     const dxTotal = finalPosition.x - initialPosition.x;
@@ -660,7 +762,7 @@ export function calculatePuttShot() {
         carryDistance: 0, // No carry for putt
         rolloutDistance: totalDistance, // All putt distance is rollout
         totalDistance: totalDistance,
-        timeOfFlight: 0, // No flight time
+        timeOfFlight: totalAnimationTime, // Use actual roll time for putts
         // Use the actual roll trajectory points for the putt animation
         trajectory: groundRollResult.rollTrajectoryPoints ? groundRollResult.rollTrajectoryPoints.map(p => ({ x: p.x, y: p.y, z: p.z })) : [initialPositionObj, { x: finalPosition.x, y: finalPosition.y, z: finalPosition.z }],
         sideDistance: sideDistance,

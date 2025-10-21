@@ -17,7 +17,7 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club, 
     //currentWind.speed = 0 // Temporarily disable wind for testing
 
 
-    const trajectoryPoints = [initialPos];
+    const trajectoryPoints = [{ ...initialPos, time: 0 }]; // Add timestamp to initial point
     let position = { ...initialPos }; // Current position (copy)
     let velocity = { ...initialVel }; // Current velocity (copy)
     let lastVelocityBeforeLanding = { ...initialVel }; // Store velocity before impact
@@ -246,8 +246,8 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club, 
             peakHeight = position.y;
         }
 
-        // 7. Store Point
-        trajectoryPoints.push({ ...position });
+        // 7. Store Point with timestamp
+        trajectoryPoints.push({ ...position, time: time });
 
         // 8. Increment Time
         time += dt;
@@ -288,7 +288,225 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club, 
         timeOfFlight: time, // Actual simulated time
         landingAngleRadians: landingAngleRadians, // Add landing angle
         landingVelocity: finalVel, // Return the velocity vector just before landing
+        landingSpinRadPerSec: spinRadPerSec, // Return final spin state in rad/s
         trajectoryPoints: trajectoryPoints // Array of {x, y, z} objects
+    };
+}
+
+
+// --- Bounce Phase Simulation ---
+
+// Bounce physics constants (Tunable)
+const MIN_BOUNCE_HEIGHT = 0.02; // meters - Below this, transition to pure roll
+const MAX_BOUNCES = 8; // Safety limit
+const BOUNCE_TIME_STEP = 0.005; // seconds - Smaller step for accuracy during bounces
+const BASE_HORIZONTAL_SCRUB_FACTOR = 0.15; // Base horizontal velocity loss per bounce (0-1)
+const SPIN_ENHANCED_SCRUB_FACTOR = 0.25; // Additional scrub at max backspin (10000 RPM)
+const ANGLE_ENHANCED_SCRUB_FACTOR = 0.35; // Additional scrub for steep landing angles (at 90°)
+const SPIN_TO_VELOCITY_TRANSFER = 0.004; // How backspin converts to horizontal velocity change on bounce (increased from 0.0008)
+
+/**
+ * Simulates the bouncing phase when ball first contacts ground.
+ * Each bounce applies energy loss, spin effects, and brief flight physics between impacts.
+ *
+ * @param {object} landingPosition - {x, y, z} position where ball first hits ground
+ * @param {object} landingVelocity - {x, y, z} velocity at ground contact
+ * @param {number} landingAngleRadians - Angle of descent
+ * @param {object} spinRadPerSec - {x, y, z} current spin in rad/s
+ * @param {string} surfaceType - Surface type for bounce properties
+ * @returns {object} Final state after bounces: {position: THREE.Vector3, velocity: THREE.Vector3, spin: {x, y, z} rad/s, bouncePoints: []}
+ */
+export function simulateBouncePhase(landingPosition, landingVelocity, landingAngleRadians, spinRadPerSec, surfaceType, startTime = 0) {
+    console.log("\n========== BOUNCE PHASE START ==========");
+    console.log(`Landing Position: (${landingPosition.x.toFixed(2)}, ${landingPosition.y.toFixed(2)}, ${landingPosition.z.toFixed(2)})`);
+    console.log(`Landing Velocity: (${landingVelocity.x.toFixed(2)}, ${landingVelocity.y.toFixed(2)}, ${landingVelocity.z.toFixed(2)}) m/s`);
+    console.log(`Landing Angle: ${(landingAngleRadians * 180 / Math.PI).toFixed(1)}°`);
+    console.log(`Spin (rad/s): (${spinRadPerSec.x.toFixed(2)}, ${spinRadPerSec.y.toFixed(2)}, ${spinRadPerSec.z.toFixed(2)})`);
+    console.log(`Surface: ${surfaceType}`);
+    console.log(`Start time: ${startTime.toFixed(2)}s`);
+
+    // Store initial landing angle for scrub calculations
+    const initialLandingAngleRadians = landingAngleRadians;
+
+    const surfaceProps = getSurfaceProperties(surfaceType);
+    const coefficientOfRestitution = surfaceProps?.bounce || 0.4;
+
+    let position = new THREE.Vector3(landingPosition.x, landingPosition.y, landingPosition.z);
+    let velocity = new THREE.Vector3(landingVelocity.x, landingVelocity.y, landingVelocity.z);
+    let currentSpin = { ...spinRadPerSec };
+
+    const bouncePoints = []; // Track all positions during bounces
+    let bounceCount = 0;
+    let inAir = false;
+    let airTime = 0;
+
+    // Constants for mini-flight between bounces (simplified from main flight sim)
+    const gravity = 9.81;
+    const dt = BOUNCE_TIME_STEP;
+    let time = startTime; // Start from the end of flight time
+
+    while (bounceCount < MAX_BOUNCES) {
+        if (!inAir) {
+            // ===== IMPACT EVENT =====
+            bounceCount++;
+            const impactSpeed = Math.sqrt(velocity.x**2 + velocity.y**2 + velocity.z**2);
+            const horizontalSpeed = Math.sqrt(velocity.x**2 + velocity.z**2);
+            const backspinRPM = Math.abs(currentSpin.x) * (60 / (2 * Math.PI));
+
+            console.log(`\n--- Bounce #${bounceCount} ---`);
+            console.log(`Impact Position: (${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)})`);
+            console.log(`Impact Velocity: (${velocity.x.toFixed(2)}, ${velocity.y.toFixed(2)}, ${velocity.z.toFixed(2)}) m/s`);
+            console.log(`Impact Speed: ${impactSpeed.toFixed(2)} m/s, Horizontal: ${horizontalSpeed.toFixed(2)} m/s`);
+            console.log(`Backspin: ${backspinRPM.toFixed(0)} RPM`);
+
+            // 1. Apply coefficient of restitution to vertical velocity
+            const oldVerticalVel = velocity.y;
+            velocity.y = -velocity.y * coefficientOfRestitution;
+
+            console.log(`Vertical velocity: ${oldVerticalVel.toFixed(2)} → ${velocity.y.toFixed(2)} m/s (CoR: ${coefficientOfRestitution})`);
+
+            // 2. Horizontal velocity scrub from ground contact friction (scales with backspin AND landing angle)
+            // More backspin = more friction = more scrub
+            // Steeper landing angle (first bounce only) = more scrub
+            const spinScrubMultiplier = Math.min(backspinRPM / 10000, 1.0); // 0 to 1 based on spin (caps at 10k RPM)
+
+            // Angle scrub bonus: only applies significantly on first bounce
+            // 0° = 0 bonus, 45° = 0.5 bonus, 90° = 1.0 bonus
+            let angleScrubMultiplier = 0;
+            if (bounceCount === 1) { // First bounce uses initial landing angle
+                angleScrubMultiplier = Math.min(initialLandingAngleRadians / (Math.PI / 2), 1.0); // Normalize to 0-1 (0° to 90°)
+            }
+
+            const effectiveScrubFactor = BASE_HORIZONTAL_SCRUB_FACTOR
+                + (SPIN_ENHANCED_SCRUB_FACTOR * spinScrubMultiplier)
+                + (ANGLE_ENHANCED_SCRUB_FACTOR * angleScrubMultiplier);
+
+            const scrubAmount = horizontalSpeed * effectiveScrubFactor;
+            if (horizontalSpeed > 0.01) {
+                const horizontalDir = new THREE.Vector2(velocity.x, velocity.z).normalize();
+                velocity.x -= horizontalDir.x * scrubAmount;
+                velocity.z -= horizontalDir.y * scrubAmount;
+
+                let scrubLog = `Horizontal scrub: ${scrubAmount.toFixed(3)} m/s (${(effectiveScrubFactor * 100).toFixed(1)}% loss, `;
+                scrubLog += `base ${(BASE_HORIZONTAL_SCRUB_FACTOR*100).toFixed(0)}%`;
+                if (spinScrubMultiplier > 0) {
+                    scrubLog += ` + spin ${(spinScrubMultiplier * SPIN_ENHANCED_SCRUB_FACTOR * 100).toFixed(1)}%`;
+                }
+                if (angleScrubMultiplier > 0) {
+                    scrubLog += ` + angle ${(angleScrubMultiplier * ANGLE_ENHANCED_SCRUB_FACTOR * 100).toFixed(1)}%`;
+                }
+                scrubLog += `)`;
+                console.log(scrubLog);
+            }
+
+            // 3. Spin affects horizontal velocity on bounce (grip effect)
+            // Backspin creates backward force (reduces forward velocity or reverses it)
+            // Topspin creates forward force (increases forward velocity)
+            let spinEffect = 0;
+            if (Math.abs(backspinRPM) > 100 && horizontalSpeed > 0.01) {
+                spinEffect = currentSpin.x * SPIN_TO_VELOCITY_TRANSFER;
+                const horizontalDir = new THREE.Vector2(velocity.x, velocity.z).normalize();
+                // Negative backspin (which we use) should reduce forward velocity
+                velocity.x += horizontalDir.x * spinEffect;
+                velocity.z += horizontalDir.y * spinEffect;
+
+                const newHorizontalSpeed = Math.sqrt(velocity.x**2 + velocity.z**2);
+                console.log(`Spin effect on velocity: ${spinEffect.toFixed(3)} m/s (${backspinRPM.toFixed(0)} RPM), Horizontal speed: ${horizontalSpeed.toFixed(2)} → ${newHorizontalSpeed.toFixed(2)} m/s`);
+
+                // Check if ball reversed direction due to extreme backspin
+                const newHorizontalDir = new THREE.Vector2(velocity.x, velocity.z).normalize();
+                const directionDot = horizontalDir.dot(newHorizontalDir);
+                if (directionDot < 0) {
+                    console.log(`*** BALL REVERSED DIRECTION due to high backspin! ***`);
+                }
+            }
+
+            // 4. Ground contact modifies spin
+            // High friction surfaces "grab" the ball more, reducing spin faster
+            const spinReductionFactor = 0.7 + (surfaceProps?.friction || 0.1) * 0.05; // Softer surfaces reduce spin more
+            currentSpin.x *= spinReductionFactor;
+            currentSpin.y *= spinReductionFactor;
+            console.log(`Spin reduction: ${(spinReductionFactor * 100).toFixed(0)}%, New backspin: ${(Math.abs(currentSpin.x) * 60 / (2 * Math.PI)).toFixed(0)} RPM`);
+
+            // Calculate expected bounce height
+            const expectedHeight = (velocity.y ** 2) / (2 * gravity);
+            console.log(`Expected bounce height: ${(expectedHeight * 100).toFixed(1)} cm`);
+
+            // Check if bounce is too small to continue
+            if (expectedHeight < MIN_BOUNCE_HEIGHT || velocity.y < 0.3) {
+                console.log(`Bounce too small (${(expectedHeight * 100).toFixed(1)} cm < ${(MIN_BOUNCE_HEIGHT * 100).toFixed(1)} cm threshold). Transitioning to roll.`);
+                break;
+            }
+
+            // Set position exactly on ground and mark as airborne
+            position.y = BALL_RADIUS;
+            bouncePoints.push({ x: position.x, y: position.y, z: position.z, time: time });
+            inAir = true;
+            airTime = 0;
+
+        } else {
+            // ===== IN AIR BETWEEN BOUNCES =====
+            // Simple ballistic trajectory (could add drag/magnus but keep it simpler for bounces)
+            airTime += dt;
+
+            // Apply gravity
+            velocity.y -= gravity * dt;
+
+            // Update position
+            position.x += velocity.x * dt;
+            position.y += velocity.y * dt;
+            position.z += velocity.z * dt;
+
+            // Increment time
+            time += dt;
+
+            bouncePoints.push({ x: position.x, y: position.y, z: position.z, time: time });
+
+            // Check for ground contact
+            if (position.y <= BALL_RADIUS) {
+                position.y = BALL_RADIUS;
+                inAir = false;
+                console.log(`Airtime: ${(airTime * 1000).toFixed(0)} ms`);
+                // Continue to next impact
+            }
+
+            // Safety: max airtime per bounce
+            if (airTime > 2.0) {
+                console.warn("Bounce airtime exceeded 2s, forcing landing");
+                position.y = BALL_RADIUS;
+                inAir = false;
+            }
+        }
+
+        // Safety: check if ball is basically stopped
+        const currentSpeed = Math.sqrt(velocity.x**2 + velocity.y**2 + velocity.z**2);
+        if (currentSpeed < MIN_ROLL_SPEED && !inAir) {
+            console.log(`Ball speed too low (${currentSpeed.toFixed(3)} m/s). Ending bounce phase.`);
+            break;
+        }
+    }
+
+    if (bounceCount >= MAX_BOUNCES) {
+        console.warn(`Reached maximum bounces (${MAX_BOUNCES})`);
+    }
+
+    console.log(`\n========== BOUNCE PHASE END ==========`);
+    console.log(`Total bounces: ${bounceCount}`);
+    console.log(`Bounce duration: ${(time - startTime).toFixed(2)}s`);
+    console.log(`Final Position: (${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)})`);
+    console.log(`Final Velocity: (${velocity.x.toFixed(2)}, ${velocity.y.toFixed(2)}, ${velocity.z.toFixed(2)}) m/s`);
+    console.log(`Final Spin: ${(Math.abs(currentSpin.x) * 60 / (2 * Math.PI)).toFixed(0)} RPM backspin`);
+    console.log(`Bounce trajectory points: ${bouncePoints.length}`);
+    console.log(`End time: ${time.toFixed(2)}s`);
+    console.log("======================================\n");
+
+    return {
+        position: position,
+        velocity: velocity,
+        spin: currentSpin,
+        bouncePoints: bouncePoints,
+        bounceCount: bounceCount,
+        endTime: time // Return the end time for next phase
     };
 }
 
@@ -320,15 +538,21 @@ const MIN_SPIN_EFFECT_RPM = 200; // Spin below this RPM has no acceleration effe
  * @param {number} [initialSideSpinRPM=0] - Initial sidespin in RPM.
  * @returns {object} Result containing finalPosition (THREE.Vector3), isHoledOut (boolean), and rollTrajectoryPoints (array of THREE.Vector3).
  */
-export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType, initialBackspinRPM = 0, initialSideSpinRPM = 0) {
-    console.log(`Sim (Roll): Starting ground roll. Surface: ${surfaceType}, Backspin: ${initialBackspinRPM.toFixed(0)} RPM, Sidespin: ${initialSideSpinRPM.toFixed(0)} RPM`);
-    console.log(`Sim (Roll): Initial Pos: (${initialPosition.x.toFixed(2)}, ${initialPosition.y.toFixed(2)}, ${initialPosition.z.toFixed(2)})`);
-    console.log(`Sim (Roll): Initial Vel: (${initialVelocity.x.toFixed(2)}, ${initialVelocity.y.toFixed(2)}, ${initialVelocity.z.toFixed(2)})`);
+export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType, initialBackspinRPM = 0, initialSideSpinRPM = 0, startTime = 0) {
+    console.log("\n========== ROLL PHASE START ==========");
+    console.log(`Surface: ${surfaceType}`);
+    console.log(`Initial Position: (${initialPosition.x.toFixed(2)}, ${initialPosition.y.toFixed(2)}, ${initialPosition.z.toFixed(2)})`);
+    console.log(`Initial Velocity: (${initialVelocity.x.toFixed(2)}, ${initialVelocity.y.toFixed(2)}, ${initialVelocity.z.toFixed(2)}) m/s`);
+    console.log(`Initial Backspin: ${initialBackspinRPM.toFixed(0)} RPM, Sidespin: ${initialSideSpinRPM.toFixed(0)} RPM`);
+    console.log(`Start time: ${startTime.toFixed(2)}s`);
 
     let position = initialPosition.clone();
     let velocity = initialVelocity.clone();
     // Store initial horizontal velocity direction for backspin force
     const initialHorizontalVelocityDir = velocity.clone().setY(0).normalize();
+    const initialSpeed = Math.sqrt(velocity.x**2 + velocity.z**2);
+    console.log(`Initial horizontal speed: ${initialSpeed.toFixed(2)} m/s`);
+
     // Ensure ball starts exactly on the ground visually for roll simulation
     position.y = BALL_RADIUS;
     // We only care about horizontal velocity for rolling friction
@@ -342,31 +566,54 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
     const baseFrictionCoefficient = surfaceProps?.friction || 0.1; // Base friction from surface
     const gravity = 9.81;
 
-    // Adjust friction based on backspin
-    // Higher backspin increases friction, lower backspin/topspin decreases it.
-    const spinDeviation = initialBackspinRPM - NEUTRAL_BACKSPIN_RPM;
-    // *** Corrected formula: Use '+' so high spin increases friction factor ***
-    let effectiveFrictionCoefficient = baseFrictionCoefficient * (1 + (spinDeviation * SPIN_FRICTION_FACTOR));
-    // Clamp effective friction to prevent negative values or excessive reduction/increase
-    effectiveFrictionCoefficient = Math.max(0.01, effectiveFrictionCoefficient); // Ensure minimum friction
-    // Let's remove the upper clamp for now to see the full effect of high spin
-    // effectiveFrictionCoefficient = Math.min(baseFrictionCoefficient * 3.0, effectiveFrictionCoefficient); // Optional: Cap max friction increase
+    // COMMENTED OUT: Spin-modified friction (we handle spin effect via direct acceleration instead)
+    // // Adjust friction based on backspin
+    // // Higher backspin increases friction, lower backspin/topspin decreases it.
+    // const spinDeviation = initialBackspinRPM - NEUTRAL_BACKSPIN_RPM;
+    // // *** Corrected formula: Use '+' so high spin increases friction factor ***
+    // let effectiveFrictionCoefficient = baseFrictionCoefficient * (1 + (spinDeviation * SPIN_FRICTION_FACTOR));
+    // // Clamp effective friction to prevent negative values or excessive reduction/increase
+    // effectiveFrictionCoefficient = Math.max(0.01, effectiveFrictionCoefficient); // Ensure minimum friction
+    // // Let's remove the upper clamp for now to see the full effect of high spin
+    // // effectiveFrictionCoefficient = Math.min(baseFrictionCoefficient * 3.0, effectiveFrictionCoefficient); // Optional: Cap max friction increase
 
-    // Calculate base friction deceleration magnitude (we might remove the spin effect on friction later)
+    // Use base friction directly (no spin modification)
+    const effectiveFrictionCoefficient = baseFrictionCoefficient;
+
+    // Calculate base friction deceleration magnitude
     const frictionDecelerationMagnitude = effectiveFrictionCoefficient * gravity;
-    console.log(`Sim (Roll): Surface='${surfaceType}', BaseFriction=${baseFrictionCoefficient.toFixed(3)}, SpinDev=${spinDeviation.toFixed(0)}, EffectiveFriction=${effectiveFrictionCoefficient.toFixed(3)}, FrictionDecelMag=${frictionDecelerationMagnitude.toFixed(2)} m/s^2`);
 
-    let time = 0;
+    console.log("\n--- Roll Physics Setup ---");
+    console.log(`Base friction coefficient: ${baseFrictionCoefficient.toFixed(4)}`);
+    console.log(`Friction deceleration: ${frictionDecelerationMagnitude.toFixed(3)} m/s²`);
+    console.log(`Backspin accel factor: ${(currentBackspinRPM * BACKSPIN_ACCELERATION_FACTOR).toFixed(4)} m/s²`);
+    console.log(`Sidespin accel factor: ${(Math.abs(currentSideSpinRPM) * SIDESPIN_ACCELERATION_FACTOR).toFixed(4)} m/s²`);
+
+    let time = startTime; // Start from end of bounce time
     const dt = GROUND_FRICTION_TIME_STEP;
     let steps = 0;
     let isHoledOut = false; // Track if the ball falls in the hole
     const holePosition = getFlagPosition(); // Get hole position once at the start
     const rollTrajectoryPoints = []; // Initialize array to store roll points
 
+    // Track distance rolled
+    let totalDistanceRolled = 0;
+    let lastPosition = position.clone();
+
+    // Sample logging every 0.5 seconds
+    let nextLogTime = 0.5;
+
+    console.log("\n--- Roll Simulation ---");
+
     while (true) {
         const speed = velocity.length(); // Current speed (horizontal only as y=0)
 
-        //console.log('the speed is:', speed.toFixed(3), 'm/s');
+        // Periodic logging (adjust for startTime offset)
+        if (time >= (startTime + nextLogTime) && speed > MIN_ROLL_SPEED) {
+            const distRolled = totalDistanceRolled;
+            console.log(`[t=${time.toFixed(1)}s] Speed: ${speed.toFixed(2)} m/s, Distance rolled: ${distRolled.toFixed(1)}m, Backspin: ${currentBackspinRPM.toFixed(0)} RPM`);
+            nextLogTime += 0.5;
+        }
 
         // --- Hole Interaction Check ---
         // Only check if on the green and hole position is known
@@ -479,8 +726,13 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
         // Keep ball on the ground plane
         position.y = BALL_RADIUS;
 
-        // Store the current position for the roll trajectory
-        rollTrajectoryPoints.push(position.clone());
+        // Track distance rolled
+        const stepDistance = position.distanceTo(lastPosition);
+        totalDistanceRolled += stepDistance;
+        lastPosition = position.clone();
+
+        // Store the current position for the roll trajectory with timestamp
+        rollTrajectoryPoints.push({ x: position.x, y: position.y, z: position.z, time: time });
 
         time += dt;
         steps++;
@@ -562,11 +814,23 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
     console.log("-----------------------------");
 
 
-    console.log(`Sim (Roll): Finished. HoledOut=${isHoledOut}, Steps: ${steps}, Final Pos Adjusted: (${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)})`);
+    const rollDuration = time - startTime;
+
+    console.log("\n========== ROLL PHASE END ==========");
+    console.log(`Roll duration: ${rollDuration.toFixed(2)}s (${steps} steps)`);
+    console.log(`Total distance rolled: ${totalDistanceRolled.toFixed(2)}m`);
+    console.log(`Average roll speed: ${(totalDistanceRolled / rollDuration).toFixed(2)} m/s`);
+    console.log(`Initial speed: ${initialSpeed.toFixed(2)} m/s → Final speed: 0.00 m/s`);
+    console.log(`Final backspin: ${currentBackspinRPM.toFixed(0)} RPM (started at ${initialBackspinRPM.toFixed(0)} RPM)`);
+    console.log(`Holed out: ${isHoledOut}`);
+    console.log(`Final Position: (${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)})`);
+    console.log(`End time: ${time.toFixed(2)}s`);
+    console.log("======================================\n");
 
     return {
         finalPosition: position, // Position now includes the lie offset adjustment
         isHoledOut: isHoledOut,
-        rollTrajectoryPoints: rollTrajectoryPoints // Return the collected points (last point Y is now adjusted)
+        rollTrajectoryPoints: rollTrajectoryPoints, // Return the collected points (last point Y is now adjusted)
+        endTime: time // Return final time
     };
 }

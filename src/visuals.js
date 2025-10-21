@@ -192,8 +192,13 @@ export function animateBallFlight(shotData) {
         return;
     }
 
-    // Convert trajectory points from {x, y, z} objects to THREE.Vector3 instances
-    const points = shotData.trajectory.map(p => new THREE.Vector3(p.x, p.y, p.z));
+    // Convert trajectory points from {x, y, z, time} objects to THREE.Vector3 instances
+    // Preserve the time property for time-based animation
+    const points = shotData.trajectory.map(p => {
+        const vec = new THREE.Vector3(p.x, p.y, p.z);
+        vec.time = p.time; // Preserve timestamp
+        return vec;
+    });
 
     //console.log('the points for drawing the ball flight:', points);
 
@@ -287,7 +292,12 @@ export function animateBallFlightWithLanding(shotData, trajectoryColor = 0xffff0
         return;
     }
 
-    const points = shotData.trajectory.map(p => new THREE.Vector3(p.x, p.y, p.z));
+    // Convert trajectory points and preserve timestamps
+    const points = shotData.trajectory.map(p => {
+        const vec = new THREE.Vector3(p.x, p.y, p.z);
+        vec.time = p.time; // Preserve timestamp
+        return vec;
+    });
     //console.log('the points for drawing the ball flight:', points);
     const duration = (shotData.timeOfFlight && shotData.timeOfFlight > 0) ? shotData.timeOfFlight * 1000 : 1500;
 

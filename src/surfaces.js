@@ -4,8 +4,8 @@ export const SURFACES = {
   TEE: { // Added TEE surface
     name: 'Tee Box',
     color: '#6AC46A', // Slightly different green for tee
-    bounce: 0.4,
-    rollOut: 0.90,
+    bounce: 0.18, // Similar to fairway
+    rollOut: 0.50, // Similar to fairway
     flightModification: {
       spinReduction: 0.0,
       launchAngleChange: 0,
@@ -17,7 +17,7 @@ export const SURFACES = {
   GREEN: {
     name: 'Green',
     color: '#3A9A3A', // A nice green color
-    bounce: 0.3, // Low bounce
+    bounce: 0.30, // Firm surface, higher bounce than fairway (reduced slightly)
     rollOut: 0.95, // High roll out (less friction)
     flightModification: { // Minimal impact on flight from green
       spinReduction: 0.05,
@@ -31,8 +31,8 @@ export const SURFACES = {
   FAIRWAY: {
     name: 'Fairway',
     color: '#5DBB5D', // Slightly lighter green
-    bounce: 0.4, // Slightly more bounce than green
-    rollOut: 0.90, // Slightly less roll out than green
+    bounce: 0.18, // Moderate grass absorption
+    rollOut: 0.50, // Significantly more friction than green
     flightModification: {
       spinReduction: 0.0,
       launchAngleChange: 0,
@@ -45,8 +45,8 @@ export const SURFACES = {
   LIGHT_ROUGH: {
     name: 'Light Rough',
     color: '#228b22', // Paler green
-    bounce: 0.5, // More bounce
-    rollOut: 0.80, // More friction
+    bounce: 0.14, // Softer grass absorbs more energy
+    rollOut: 0.35, // Significant drag from grass
     flightModification: {
       spinReduction: [0.05, 0.1], // Range for spin reduction
       launchAngleChange: 0.5, // Slight increase in launch angle possible
@@ -59,8 +59,8 @@ export const SURFACES = {
   MEDIUM_ROUGH: {
     name: 'Medium Rough',
     color: '#228b22', // Even paler green
-    bounce: 0.55, // Similar bounce to light rough
-    rollOut: 0.70, // Significant friction
+    bounce: 0.11, // Significantly softer
+    rollOut: 0.25, // Heavy friction
     flightModification: {
       spinReduction: [0.1, 0.25], // Range for spin reduction
       launchAngleChange: 1.0, // Can affect launch angle more
@@ -73,8 +73,8 @@ export const SURFACES = {
   THICK_ROUGH: {
     name: 'Thick Rough',
     color: '#228b22', // Very pale green, almost greyish
-    bounce: 0.6, // High bounce, unpredictable
-    rollOut: 0.50, // Very high friction
+    bounce: 0.08, // Very soft, minimal bounce
+    rollOut: 0.15, // Ball barely rolls
     flightModification: {
       spinReduction: [0.20, 0.40], // Range for spin reduction
       launchAngleChange: 2.0, // Potential for significant launch angle change
@@ -87,8 +87,8 @@ export const SURFACES = {
   BUNKER: {
     name: 'Bunker',
     color: '#F4A460', // Sandy color
-    bounce: 0.2, // Very low bounce (absorbs energy)
-    rollOut: 0.60, // High friction, but different from rough
+    bounce: 0.06, // Sand absorbs almost all energy
+    rollOut: 0.10, // Sand kills roll very quickly
     flightModification: {
       spinReduction: [0.50, 0.75], // Range for spin reduction
       launchAngleChange: 1.5, // Tends to increase launch angle
@@ -139,7 +139,7 @@ export function getSurfaceByName(name) {
 }
 
 // --- New Function to get properties including calculated friction ---
-const FRICTION_SCALING_FACTOR = 10.0; // Tunable factor (Increased from 1.0)
+const FRICTION_SCALING_FACTOR = 2.0; // Tunable factor - converts rollOut to friction coefficient
 
 /**
  * Gets surface properties including a calculated friction coefficient.
