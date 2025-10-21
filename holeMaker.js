@@ -52,7 +52,7 @@ const holeMaker = {
         this.canvas = new fabric.Canvas('canvas', {
             width: containerWidth,
             height: CANVAS_HEIGHT * scale,
-            backgroundColor: '#1a4d2e',
+            backgroundColor: '#1a252f',
             selection: true
         });
 
@@ -212,6 +212,8 @@ const holeMaker = {
         }
         // Redraw all shapes
         this.shapes.forEach(shape => this.canvas.add(shape.polygon));
+        // Redraw all objects (trees/bushes)
+        this.objects.forEach(obj => this.canvas.add(obj.visual));
         this.canvas.renderAll();
     },
 
@@ -247,6 +249,11 @@ const holeMaker = {
     },
 
     selectSurface(type, event) {
+        // Cancel any active drawing when switching surface types
+        if (this.isDrawing) {
+            this.cancelDrawing();
+        }
+
         this.currentSurface = type;
 
         // Update UI
@@ -427,8 +434,9 @@ const holeMaker = {
         this.isDrawing = false;
         this.currentPoints = [];
 
-        // Update layers list
+        // Update layers list and recalculate hole length
         this.updateLayersList();
+        this.calculateHoleLength();
 
         this.canvas.renderAll();
     },
@@ -484,6 +492,14 @@ const holeMaker = {
                     // Apply snap to edges and boundary constraints
                     const snapped = self.snapToEdges(finalPointPosition.x, finalPointPosition.y);
                     polygon.points[index] = snapped;
+
+                    // Recalculate hole length if editing tee or green
+                    const shapeData = self.shapes.find(s => s.polygon === polygon);
+                    if (shapeData && (shapeData.type === 'tee' || shapeData.type === 'green')) {
+                        // Defer calculation until after drag completes
+                        setTimeout(() => self.calculateHoleLength(), 100);
+                    }
+
                     return true;
                 },
                 cornerSize: 12,
@@ -557,6 +573,11 @@ const holeMaker = {
     },
 
     toggleObjectPlacementMode() {
+        // Cancel any active drawing when entering object placement mode
+        if (this.isDrawing && !this.objectPlacementMode) {
+            this.cancelDrawing();
+        }
+
         this.objectPlacementMode = !this.objectPlacementMode;
         const btn = document.getElementById('objectModeText');
 
@@ -702,7 +723,11 @@ const holeMaker = {
         // Remove from shapes array
         this.shapes = this.shapes.filter(shape => shape.polygon !== active);
 
+        // Remove from objects array if it's an object
+        this.objects = this.objects.filter(obj => obj.visual !== active);
+
         this.updateLayersList();
+        this.calculateHoleLength();
         this.canvas.renderAll();
     },
 
