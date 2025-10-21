@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Golf Hole Maker</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.0/fabric.min.js"></script>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #2c3e50;
+            color: #ecf0f1;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: #3498db;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #95a5a6;
+            margin-bottom: 30px;
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 250px 1fr 300px;
+            grid-template-rows: auto;
+            gap: 20px;
+            align-items: start;
+        }
+
+        .panel {
+            background: #34495e;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        .panel h2 {
+            margin-top: 0;
+            color: #3498db;
+            font-size: 18px;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 8px;
+        }
+
+        #canvas-container {
+            background: #1a252f;
+            border-radius: 8px;
+            padding: 10px;
+            position: relative;
+            overflow: auto;
+            max-height: calc(100vh - 100px);
+        }
+
+        canvas {
+            border: 2px solid #3498db;
+            cursor: crosshair;
+            display: block;
+            width: 100%;
+            height: auto;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 10px;
+            margin: 8px 0;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+
+        .btn-primary {
+            background: #3498db;
+            color: white;
+        }
+
+        .btn-success {
+            background: #2ecc71;
+            color: white;
+        }
+
+        .btn-danger {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .btn-warning {
+            background: #f39c12;
+            color: white;
+        }
+
+        .surface-btn {
+            padding: 12px;
+            margin: 5px 0;
+            border: 2px solid transparent;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+
+        .surface-btn.active {
+            border-color: #3498db;
+            box-shadow: 0 0 10px rgba(52, 152, 219, 0.5);
+        }
+
+        .surface-btn:hover {
+            transform: scale(1.02);
+        }
+
+        .surface-tee { background: #ecf0f1; color: #2c3e50; }
+        .surface-fairway { background: #27ae60; color: white; }
+        .surface-green { background: #16a085; color: white; }
+        .surface-rough_light { background: #95a5a6; color: white; }
+        .surface-rough_medium { background: #7f8c8d; color: white; }
+        .surface-rough_heavy { background: #5a6978; color: white; }
+        .surface-bunker { background: #f1c40f; color: #2c3e50; }
+        .surface-water { background: #3498db; color: white; }
+
+        .input-group {
+            margin: 15px 0;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #95a5a6;
+            font-size: 13px;
+        }
+
+        .input-group input, .input-group select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #7f8c8d;
+            border-radius: 4px;
+            background: #2c3e50;
+            color: #ecf0f1;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+
+        .layers-list {
+            max-height: 300px;
+            overflow-y: auto;
+            margin: 10px 0;
+        }
+
+        .layer-item {
+            padding: 10px;
+            margin: 5px 0;
+            background: #2c3e50;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .layer-item:hover {
+            background: #1a252f;
+        }
+
+        .layer-item.active {
+            border: 2px solid #3498db;
+        }
+
+        .layer-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+
+        .stats {
+            font-size: 12px;
+            color: #95a5a6;
+            margin-top: 20px;
+        }
+
+        .stats div {
+            margin: 5px 0;
+        }
+
+        textarea {
+            width: 100%;
+            height: 200px;
+            background: #2c3e50;
+            color: #2ecc71;
+            border: 1px solid #7f8c8d;
+            border-radius: 4px;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            resize: vertical;
+            box-sizing: border-box;
+        }
+
+        .grid-info {
+            text-align: center;
+            color: #95a5a6;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+
+        .help-text {
+            font-size: 12px;
+            color: #95a5a6;
+            font-style: italic;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⛳ Golf Hole Maker</h1>
+        <div class="subtitle">Visual editor for creating golf hole layouts</div>
+
+        <div class="layout">
+            <!-- Left Panel: Tools -->
+            <div class="panel">
+                <h2>🛠️ Tools</h2>
+
+                <div class="input-group">
+                    <label>Hole Name</label>
+                    <input type="text" id="holeName" value="custom_hole_01" placeholder="e.g., mickelson_01">
+                </div>
+
+                <div class="input-group">
+                    <label>Par</label>
+                    <select id="holePar" onchange="holeMaker.onParChange()">
+                        <option value="3">Par 3 (max 300m)</option>
+                        <option value="4" selected>Par 4 (max 475m)</option>
+                        <option value="5">Par 5 (max 600m)</option>
+                    </select>
+                </div>
+
+                <div class="input-group">
+                    <label>Hole Length (auto-calculated)</label>
+                    <input type="text" id="holeLength" value="-" readonly style="background: #1a252f; cursor: not-allowed;">
+                    <div class="help-text">Distance from tee center to flag</div>
+                </div>
+
+                <button class="btn btn-primary" onclick="holeMaker.toggleGrid()">Toggle Grid</button>
+                <button class="btn btn-primary" onclick="holeMaker.toggleGuides()">Toggle Guides</button>
+                <button class="btn btn-primary" onclick="holeMaker.clearCanvas()">Clear All</button>
+
+                <div class="stats">
+                    <div id="canvasDimensions"><strong>Canvas:</strong> 200m wide × 475m long</div>
+                    <div><strong>Grid:</strong> 50m squares</div>
+                    <div id="teeZoneInfo"><strong>Tee Zone:</strong> Bottom 50m</div>
+                    <div><strong>Green Zone:</strong> Top 100m</div>
+                    <div id="mousePos">Mouse: -</div>
+                </div>
+            </div>
+
+            <!-- Center Panel: Canvas -->
+            <div style="min-height: 0;">
+                <div class="panel">
+                    <h2>🎨 Drawing Surface</h2>
+                    <div class="help-text">
+                        Click to add points • Right-click to close shape • Drag points to adjust • All units in meters
+                    </div>
+                </div>
+                <div id="canvas-container">
+                    <canvas id="canvas"></canvas>
+                    <div class="grid-info">1 grid square = 50 meters</div>
+                </div>
+            </div>
+
+            <!-- Right Panel: Surfaces & Export -->
+            <div class="panel">
+                <h2>🏞️ Surface Types</h2>
+
+                <button class="surface-btn surface-tee" data-surface="tee" onclick="holeMaker.selectSurface('tee', event)">
+                    Tee Box
+                </button>
+                <button class="surface-btn surface-fairway" data-surface="fairway" onclick="holeMaker.selectSurface('fairway', event)">
+                    Fairway
+                </button>
+                <button class="surface-btn surface-green" data-surface="green" onclick="holeMaker.selectSurface('green', event)">
+                    Green
+                </button>
+                <button class="surface-btn surface-rough_light" data-surface="rough_light" onclick="holeMaker.selectSurface('rough_light', event)">
+                    Rough (Light)
+                </button>
+                <button class="surface-btn surface-rough_medium" data-surface="rough_medium" onclick="holeMaker.selectSurface('rough_medium', event)">
+                    Rough (Medium)
+                </button>
+                <button class="surface-btn surface-rough_heavy" data-surface="rough_heavy" onclick="holeMaker.selectSurface('rough_heavy', event)">
+                    Rough (Heavy)
+                </button>
+                <button class="surface-btn surface-bunker" data-surface="bunker" onclick="holeMaker.selectSurface('bunker', event)">
+                    Bunker
+                </button>
+                <button class="surface-btn surface-water" data-surface="water" onclick="holeMaker.selectSurface('water', event)">
+                    Water
+                </button>
+
+                <div style="margin-top: 20px;">
+                    <h2>🌳 Objects</h2>
+                    <div class="input-group">
+                        <label>Type</label>
+                        <select id="objectType">
+                            <option value="tree">Tree</option>
+                            <option value="bush">Bush</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label>Size</label>
+                        <select id="objectSize">
+                            <option value="small">Small</option>
+                            <option value="medium" selected>Medium</option>
+                            <option value="large">Large</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary" onclick="holeMaker.toggleObjectPlacementMode()">
+                        <span id="objectModeText">Place Objects</span>
+                    </button>
+                </div>
+
+                <div style="margin-top: 20px;">
+                    <h2>📋 Layers</h2>
+                    <div class="layers-list" id="layersList"></div>
+                    <button class="btn btn-danger" onclick="holeMaker.deleteSelected()">Delete Selected</button>
+                </div>
+
+                <div style="margin-top: 20px;">
+                    <h2>👁️ Preview</h2>
+                    <button class="btn btn-primary" onclick="holeMaker.previewHole()">Preview Hole</button>
+                </div>
+
+                <div style="margin-top: 20px;">
+                    <h2>💾 Export</h2>
+                    <button class="btn btn-success" onclick="holeMaker.exportJSON()">Export JSON</button>
+                    <button class="btn btn-warning" onclick="holeMaker.importJSON()">Import JSON</button>
+                    <textarea id="jsonOutput" placeholder="JSON output will appear here..."></textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="holeMaker.js"></script>
+</body>
+</html>
