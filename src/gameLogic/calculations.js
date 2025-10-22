@@ -711,6 +711,11 @@ export function calculatePuttShot() {
     const totalAnimationTime = groundRollResult.endTime || 0;
     console.log(`Calc (Putt): Total animation time: ${totalAnimationTime.toFixed(2)}s`);
 
+    // Prepend initial position with time=0 to the roll trajectory (keeps timestamps)
+    const puttTrajectory = [
+        { x: initialPosition.x, y: initialPosition.y, z: initialPosition.z, time: 0 }
+    ].concat(groundRollResult.rollTrajectoryPoints || []);
+
     // Calculate final distances
     const dxTotal = finalPosition.x - initialPosition.x;
     const dzTotal = finalPosition.z - initialPosition.z;
@@ -763,8 +768,8 @@ export function calculatePuttShot() {
         rolloutDistance: totalDistance, // All putt distance is rollout
         totalDistance: totalDistance,
         timeOfFlight: totalAnimationTime, // Use actual roll time for putts
-        // Use the actual roll trajectory points for the putt animation
-        trajectory: groundRollResult.rollTrajectoryPoints ? groundRollResult.rollTrajectoryPoints.map(p => ({ x: p.x, y: p.y, z: p.z })) : [initialPositionObj, { x: finalPosition.x, y: finalPosition.y, z: finalPosition.z }],
+        // Use the putt trajectory with initial position and timestamps preserved
+        trajectory: puttTrajectory,
         sideDistance: sideDistance,
         finalPosition: { x: finalPosition.x, y: finalPosition.y, z: finalPosition.z },
         isHoledOut: isHoledOut,

@@ -2,6 +2,8 @@
 // Uses Fabric.js for canvas manipulation
 // All measurements in METERS (game will handle yards conversion for UI display)
 
+import { courseManager } from './src/courseManager.js';
+
 // Par-based canvas dimensions
 const PAR_CONFIGS = {
     3: { width: 100, minHeight: 125, maxHeight: 325 },  // Par 3: min 125m, max 325m
@@ -1878,10 +1880,134 @@ const holeMaker = {
         } catch (e) {
             alert('Invalid JSON: ' + e.message);
         }
+    },
+
+    // Cloud Save/Load Functions (using courseManager module)
+    async updateAuthStatus() {
+        const statusDiv = document.getElementById('authStatus');
+
+        if (courseManager.isAuthenticated()) {
+            statusDiv.textContent = `Signed in as: ${courseManager.getUsername()}`;
+            statusDiv.style.color = '#2ecc71';
+        } else {
+            statusDiv.textContent = 'Not signed in';
+            statusDiv.style.color = '#95a5a6';
+        }
+    },
+
+    async saveHoleToCloud() {
+        if (!courseManager.isAuthenticated()) {
+            alert('Please sign in first to save holes to the cloud.');
+            return;
+        }
+
+        if (!this.teeBox) {
+            alert('Cannot save: Hole must have a tee box');
+            return;
+        }
+
+        const green = this.shapes.find(s => s.type === 'green');
+        if (!green) {
+            alert('Cannot save: Hole must have a green');
+            return;
+        }
+
+        // Generate hole data
+        this.exportJSON();
+        const jsonText = document.getElementById('jsonOutput').value;
+        const holeData = JSON.parse(jsonText);
+
+        try {
+            const result = await courseManager.saveHole(holeData);
+            alert(`✅ Hole "${holeData.name}" saved successfully!`);
+        } catch (error) {
+            console.error('Error saving hole:', error);
+            alert(`❌ Error saving hole: ${error.message}`);
+        }
+    },
+
+    async showLoadHolesDialog() {
+        if (!courseManager.isAuthenticated()) {
+            alert('Please sign in first to load holes from the cloud.');
+            return;
+        }
+
+        const dialog = document.getElementById('loadHolesDialog');
+        const listDiv = document.getElementById('savedHolesList');
+
+        listDiv.innerHTML = '<div style="text-align: center; padding: 20px;">Loading...</div>';
+        dialog.style.display = 'block';
+
+        try {
+            const holes = await courseManager.listHoles();
+
+            if (holes.length === 0) {
+                listDiv.innerHTML = '<div style="text-align: center; padding: 20px; color: #95a5a6;">No saved holes yet</div>';
+                return;
+            }
+
+            listDiv.innerHTML = holes.map(hole => `
+                <div style="background: #34495e; padding: 12px; margin-bottom: 8px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">
+                    <div style="flex: 1;">
+                        <div style="font-weight: bold; margin-bottom: 4px;">${hole.name}</div>
+                        <div style="font-size: 11px; color: #95a5a6;">Par ${hole.par} • ${hole.lengthMeters}m</div>
+                        <div style="font-size: 10px; color: #7f8c8d;">Updated: ${new Date(hole.updatedAt).toLocaleDateString()}</div>
+                    </div>
+                    <div style="display: flex; gap: 5px;">
+                        <button onclick="holeMaker.loadHoleFromCloud('${hole.holeId}')" style="background: #3498db; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;">Load</button>
+                        <button onclick="holeMaker.deleteHoleFromCloud('${hole.holeId}')" style="background: #e74c3c; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;">Delete</button>
+                    </div>
+                </div>
+            `).join('');
+
+        } catch (error) {
+            console.error('Error loading holes:', error);
+            listDiv.innerHTML = `<div style="text-align: center; padding: 20px; color: #e74c3c;">Error: ${error.message}</div>`;
+        }
+    },
+
+    hideLoadHolesDialog() {
+        document.getElementById('loadHolesDialog').style.display = 'none';
+    },
+
+    async loadHoleFromCloud(holeId) {
+        try {
+            const hole = await courseManager.loadHole(holeId);
+
+            // Load the hole data into the editor
+            document.getElementById('jsonOutput').value = JSON.stringify(hole.holeData, null, 2);
+            this.importJSON();
+            this.hideLoadHolesDialog();
+
+            alert(`✅ Loaded "${hole.holeData.name}"`);
+
+        } catch (error) {
+            console.error('Error loading hole:', error);
+            alert(`❌ Error loading hole: ${error.message}`);
+        }
+    },
+
+    async deleteHoleFromCloud(holeId) {
+        if (!confirm('Are you sure you want to delete this hole? This cannot be undone.')) {
+            return;
+        }
+
+        try {
+            await courseManager.deleteHole(holeId);
+            alert('✅ Hole deleted successfully');
+            this.showLoadHolesDialog(); // Refresh the list
+        } catch (error) {
+            console.error('Error deleting hole:', error);
+            alert(`❌ Error deleting hole: ${error.message}`);
+        }
     }
 };
+
+// Make holeMaker accessible globally for inline event handlers
+window.holeMaker = holeMaker;
 
 // Initialize when page loads
 window.addEventListener('load', () => {
     holeMaker.init();
+    holeMaker.updateAuthStatus();
 });

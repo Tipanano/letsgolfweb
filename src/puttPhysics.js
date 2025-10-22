@@ -17,7 +17,8 @@ const PUTT_TIMING_SIDE_ANGLE_FACTOR = 0.03; // Degrees of horizontal angle chang
 // Strike Quality Thresholds (ms deviation for hit timing) - Simplified for Putt
 const PUTT_PUSH_THRESHOLD_MS = -50; // Early hit -> Push (Right) - relaxed
 const PUTT_PULL_THRESHOLD_MS = 50;  // Late hit -> Pull (Left) - relaxed
-const PUTT_MIN_SPEED = 1; // Minimum ball speed for a putt
+const PUTT_MIN_SPEED = 2.5; // Minimum ball speed for a putt (mph) - ensures short putts move noticeably
+const PUTT_POWER_CURVE = 1.5; // Exponent for power curve (1.5 = gentler than quadratic, still progressive)
 
 /**
  * Clamps a value between a minimum and maximum.
@@ -57,13 +58,14 @@ export function calculatePuttImpact(backswingDuration, hitOffset) {
     const effectiveBackswing = clamp(backswingDuration || 0, 0, MAX_PUTT_BACKSWING_MS);
     const backswingPercent = effectiveBackswing / MAX_PUTT_BACKSWING_MS; // 0-1
 
-    // Apply exponential curve: power = percent^2
-    // This makes: 50% backswing = 25% power, 70% = 49% power, 100% = 100% power
-    const powerPercent = Math.pow(backswingPercent, 2);
+    // Apply power curve: power = percent^1.5 (gentler than quadratic)
+    // This makes: 50% backswing = 35% power, 70% = 59% power, 100% = 100% power
+    // Less punishing for short putts, still progressive for long putts
+    const powerPercent = Math.pow(backswingPercent, PUTT_POWER_CURVE);
     const maxPuttSpeed = MAX_PUTT_BACKSWING_MS * PUTT_POWER_FACTOR; // Max speed at full backswing
     let actualBallSpeed = maxPuttSpeed * powerPercent;
 
-    // Apply minimum speed
+    // Apply minimum speed (ensures short putts move noticeably)
     actualBallSpeed = Math.max(PUTT_MIN_SPEED, actualBallSpeed);
 
     console.log(`Power Calculation: Backswing=${effectiveBackswing.toFixed(0)}ms (${(backswingPercent*100).toFixed(0)}%) → Power=${(powerPercent*100).toFixed(0)}% → Speed=${actualBallSpeed.toFixed(1)}mph`);

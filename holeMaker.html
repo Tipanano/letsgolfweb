@@ -372,7 +372,21 @@
                 </div>
 
                 <div style="margin-top: 20px;">
-                    <h2>💾 Export</h2>
+                    <h2>☁️ Save/Load</h2>
+                    <button class="btn btn-primary" onclick="holeMaker.saveHoleToCloud()">Save to Cloud</button>
+                    <button class="btn btn-secondary" onclick="holeMaker.showLoadHolesDialog()">Load from Cloud</button>
+                    <div id="loadHolesDialog" style="display: none; margin-top: 10px; max-height: 300px; overflow-y: auto; background: #2c3e50; padding: 10px; border-radius: 4px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <strong>Your Saved Holes:</strong>
+                            <button onclick="holeMaker.hideLoadHolesDialog()" style="background: #e74c3c; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">✕</button>
+                        </div>
+                        <div id="savedHolesList"></div>
+                    </div>
+                    <div id="authStatus" style="margin-top: 10px; font-size: 12px; color: #95a5a6;"></div>
+                </div>
+
+                <div style="margin-top: 20px;">
+                    <h2>💾 Export/Import</h2>
                     <button class="btn btn-success" onclick="holeMaker.exportJSON()">Export JSON</button>
                     <button class="btn btn-warning" onclick="holeMaker.importJSON()">Import JSON</button>
                     <textarea id="jsonOutput" placeholder="JSON output will appear here..."></textarea>
@@ -381,6 +395,6 @@
         </div>
     </div>
 
-    <script src="holeMaker.js"></script>
+    <script type="module" src="holeMaker.js"></script>
 </body>
 </html>

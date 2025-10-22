@@ -331,6 +331,20 @@ export function simulateBouncePhase(landingPosition, landingVelocity, landingAng
     const surfaceProps = getSurfaceProperties(surfaceType);
     const coefficientOfRestitution = surfaceProps?.bounce || 0.4;
 
+    // Check for special value -1.0 (water/penalty area): stop all physics immediately
+    if (coefficientOfRestitution < 0) {
+        console.log("⚠️ Ball landed in penalty area (water/OOB), stopping all physics immediately");
+        console.log("========== BOUNCE PHASE END (PENALTY) ==========\n");
+        return {
+            position: new THREE.Vector3(landingPosition.x, landingPosition.y, landingPosition.z),
+            velocity: new THREE.Vector3(0, 0, 0),
+            spin: spinRadPerSec,
+            bouncePoints: [{ x: landingPosition.x, y: landingPosition.y, z: landingPosition.z, time: startTime }],
+            bounceCount: 0,
+            endTime: startTime
+        };
+    }
+
     let position = new THREE.Vector3(landingPosition.x, landingPosition.y, landingPosition.z);
     let velocity = new THREE.Vector3(landingVelocity.x, landingVelocity.y, landingVelocity.z);
     let currentSpin = { ...spinRadPerSec };

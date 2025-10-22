@@ -18,7 +18,7 @@ export const SURFACES = {
     name: 'Green',
     color: '#3A9A3A', // A nice green color
     bounce: 0.30, // Firm surface, higher bounce than fairway (reduced slightly)
-    rollOut: 0.95, // High roll out (less friction)
+    rollOut: 0.90, // High roll out (less friction)
     flightModification: { // Minimal impact on flight from green
       spinReduction: 0.05,
       launchAngleChange: 0,
@@ -101,8 +101,8 @@ export const SURFACES = {
   WATER: {
     name: 'Water',
     color: '#4682B4', // Steel blue
-    bounce: 0.1, // Minimal bounce
-    rollOut: 0.1, // Ball stops almost immediately (or sinks)
+    bounce: -1.0, // Special value: stops all physics immediately (no bounce, no roll)
+    rollOut: 0.1, // Not used (ball stops on contact)
     flightModification: { // Extreme effects, ball likely lost
       spinReduction: 1.0,
       launchAngleChange: 0, // Not applicable if ball is submerged
@@ -115,7 +115,7 @@ export const SURFACES = {
   OUT_OF_BOUNDS: {
     name: 'Out of Bounds',
     color: '#808080', // Grey
-    bounce: 0.1,      // Very low bounce
+    bounce: -1.0,      // Very low bounce
     rollOut: 0.1,     // Very high friction (low roll out)
     flightModification: { // Significant penalty, but maybe not instant stop like water
       spinReduction: 0.9,

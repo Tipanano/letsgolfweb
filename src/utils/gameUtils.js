@@ -105,10 +105,20 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
     }
     // TODO: Add check for legacy circle green if needed
 
-    // 3. Fairway (Polygon)
-    if (holeLayout.fairway?.vertices) {
+    // 3. Fairways (Array of Polygons or single Polygon)
+    // Check for new format (array) first, then fall back to legacy single fairway
+    if (holeLayout.fairways && Array.isArray(holeLayout.fairways)) {
+        for (let i = 0; i < holeLayout.fairways.length; i++) {
+            const fairway = holeLayout.fairways[i];
+            if (fairway.vertices && isPointInPolygon(pointYards, fairway.vertices)) {
+                console.log(`LIE DETECTION: Found FAIRWAY (polygon #${i})`);
+                return 'FAIRWAY';
+            }
+        }
+    } else if (holeLayout.fairway?.vertices) {
+        // Legacy single fairway support
         if (isPointInPolygon(pointYards, holeLayout.fairway.vertices)) {
-            console.log(`LIE DETECTION: Found FAIRWAY`);
+            console.log(`LIE DETECTION: Found FAIRWAY (legacy single)`);
             return 'FAIRWAY';
         }
     }
@@ -163,21 +173,48 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
         }
     }
 
-    // 5. Rough (Polygon - assumes it covers area outside fairway/green but inside background)
-    // 6. Rough (Polygon - assumes it covers area outside fairway/green but inside background)
-    // Since this specific hole only defines one rough type (THICK_ROUGH in the generator),
-    // we check for that polygon. If other rough types were defined (e.g., lightRough),
-    // they would need to be checked here in the correct order (e.g., medium before light).
+    // 6. Rough Types (Check in order: Thick → Medium → Light for proper layering)
+    // Check thick rough first (most penalizing)
+    if (holeLayout.thickRough && Array.isArray(holeLayout.thickRough)) {
+        for (let i = 0; i < holeLayout.thickRough.length; i++) {
+            const rough = holeLayout.thickRough[i];
+            if (rough.vertices && isPointInPolygon(pointYards, rough.vertices)) {
+                console.log(`LIE DETECTION: Found THICK_ROUGH (polygon #${i})`);
+                return 'THICK_ROUGH';
+            }
+        }
+    }
+
+    // Check medium rough
+    if (holeLayout.mediumRough && Array.isArray(holeLayout.mediumRough)) {
+        for (let i = 0; i < holeLayout.mediumRough.length; i++) {
+            const rough = holeLayout.mediumRough[i];
+            if (rough.vertices && isPointInPolygon(pointYards, rough.vertices)) {
+                console.log(`LIE DETECTION: Found MEDIUM_ROUGH (polygon #${i})`);
+                return 'MEDIUM_ROUGH';
+            }
+        }
+    }
+
+    // Check light rough
+    if (holeLayout.lightRough && Array.isArray(holeLayout.lightRough)) {
+        for (let i = 0; i < holeLayout.lightRough.length; i++) {
+            const rough = holeLayout.lightRough[i];
+            if (rough.vertices && isPointInPolygon(pointYards, rough.vertices)) {
+                console.log(`LIE DETECTION: Found LIGHT_ROUGH (polygon #${i})`);
+                return 'LIGHT_ROUGH';
+            }
+        }
+    }
+
+    // Legacy single rough support (for old procedurally generated holes)
     if (holeLayout.rough?.vertices) {
          if (isPointInPolygon(pointYards, holeLayout.rough.vertices)) {
-             // Return the surface type defined in the hole layout for this rough polygon
-             // (Currently THICK_ROUGH based on holeGenerator.js)
              const roughSurfaceName = holeLayout.rough.surface?.name?.toUpperCase() || 'THICK_ROUGH';
-             console.log(`LIE DETECTION: Found ${roughSurfaceName} (rough polygon)`);
+             console.log(`LIE DETECTION: Found ${roughSurfaceName} (legacy rough polygon)`);
              return roughSurfaceName;
          }
     }
-    // Add checks for other rough types (e.g., holeLayout.lightRough) here if they exist in the layout data.
 
     // 7. Background / Fallback Rough / Out of Bounds
     // If it's not in any specific feature above, check if it's within the background bounds.
