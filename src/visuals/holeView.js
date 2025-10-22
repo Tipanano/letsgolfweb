@@ -53,7 +53,7 @@ export function drawHoleLayout(holeLayout) {
     currentGreenRadius = null;
     console.log("Drawing hole layout:", holeLayout);
 
-    const scale = YARDS_TO_METERS; // Use the conversion factor
+    const scale = 1.0; // All hole layouts are now in meters, no conversion needed
     const textureLoader = new TextureLoader(); // Create texture loader instance
 
     // --- Draw Background (Out of Bounds - Draw first) ---

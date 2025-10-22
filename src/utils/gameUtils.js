@@ -79,18 +79,17 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
         return 'OUT_OF_BOUNDS'; // Default if layout is missing
     }
 
-    const scale = YARDS_TO_METERS; // For converting polygon vertices if needed (though they should be in yards)
-    const pointYards = { x: pointMeters.x / scale, z: pointMeters.z / scale }; // Convert check point to yards
+    // All hole layouts are now in meters, no conversion needed
+    const point = pointMeters;
 
-    console.log(`LIE DETECTION: Point (meters): x=${pointMeters.x.toFixed(2)}, z=${pointMeters.z.toFixed(2)}`);
-    console.log(`LIE DETECTION: Point (yards): x=${pointYards.x.toFixed(2)}, z=${pointYards.z.toFixed(2)}`);
+    console.log(`LIE DETECTION: Point (meters): x=${point.x.toFixed(2)}, z=${point.z.toFixed(2)}`);
 
     // Check order: Tee > Green > Fairway > Bunkers > Water > Rough > Background
-    // Note: Assumes holeLayout vertices are in YARDS.
+    // Note: holeLayout vertices are now in METERS.
 
     // 1. Tee Box (Polygon) - Check first as it might overlap rough/background
     if (holeLayout.tee?.type === 'polygon' && holeLayout.tee.vertices) {
-        if (isPointInPolygon(pointYards, holeLayout.tee.vertices)) {
+        if (isPointInPolygon(point, holeLayout.tee.vertices)) {
             console.log(`LIE DETECTION: Found TEE`);
             return 'TEE';
         }
@@ -98,7 +97,7 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
 
     // 2. Green (Polygon)
     if (holeLayout.green?.type === 'polygon' && holeLayout.green.vertices) {
-        if (isPointInPolygon(pointYards, holeLayout.green.vertices)) {
+        if (isPointInPolygon(point, holeLayout.green.vertices)) {
             console.log(`LIE DETECTION: Found GREEN`);
             return 'GREEN';
         }
@@ -110,14 +109,14 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
     if (holeLayout.fairways && Array.isArray(holeLayout.fairways)) {
         for (let i = 0; i < holeLayout.fairways.length; i++) {
             const fairway = holeLayout.fairways[i];
-            if (fairway.vertices && isPointInPolygon(pointYards, fairway.vertices)) {
+            if (fairway.vertices && isPointInPolygon(point, fairway.vertices)) {
                 console.log(`LIE DETECTION: Found FAIRWAY (polygon #${i})`);
                 return 'FAIRWAY';
             }
         }
     } else if (holeLayout.fairway?.vertices) {
         // Legacy single fairway support
-        if (isPointInPolygon(pointYards, holeLayout.fairway.vertices)) {
+        if (isPointInPolygon(point, holeLayout.fairway.vertices)) {
             console.log(`LIE DETECTION: Found FAIRWAY (legacy single)`);
             return 'FAIRWAY';
         }
@@ -128,13 +127,13 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
         for (let i = 0; i < holeLayout.bunkers.length; i++) {
             const bunker = holeLayout.bunkers[i];
             if (bunker.type === 'polygon' && bunker.vertices) {
-                if (isPointInPolygon(pointYards, bunker.vertices)) {
+                if (isPointInPolygon(point, bunker.vertices)) {
                     console.log(`LIE DETECTION: Found BUNKER (polygon #${i})`);
                     return 'BUNKER';
                 }
             } else if (bunker.type === 'circle' && bunker.center && bunker.radius) {
-                const dx = pointYards.x - bunker.center.x;
-                const dz = pointYards.z - bunker.center.z;
+                const dx = point.x - bunker.center.x;
+                const dz = point.z - bunker.center.z;
                 if (dx * dx + dz * dz <= bunker.radius * bunker.radius) {
                     console.log(`LIE DETECTION: Found BUNKER (circle #${i})`);
                     return 'BUNKER';
@@ -148,21 +147,21 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
         for (let i = 0; i < holeLayout.waterHazards.length; i++) {
             const water = holeLayout.waterHazards[i];
             if (water.type === 'polygon' && water.vertices) {
-                if (isPointInPolygon(pointYards, water.vertices)) {
+                if (isPointInPolygon(point, water.vertices)) {
                     console.log(`LIE DETECTION: Found WATER (polygon #${i})`);
                     return 'WATER';
                 }
             } else if (water.type === 'circle' && water.center && water.radius) {
-                const dx = pointYards.x - water.center.x;
-                const dz = pointYards.z - water.center.z;
+                const dx = point.x - water.center.x;
+                const dz = point.z - water.center.z;
                 if (dx * dx + dz * dz <= water.radius * water.radius) {
                     console.log(`LIE DETECTION: Found WATER (circle #${i})`);
                     return 'WATER';
                 }
             } else if (water.type === 'ellipse' && water.center && water.radiusX && water.radiusZ) {
                 // Check if point is inside ellipse using the ellipse equation: (x/a)^2 + (z/b)^2 <= 1
-                const dx = pointYards.x - water.center.x;
-                const dz = pointYards.z - water.center.z;
+                const dx = point.x - water.center.x;
+                const dz = point.z - water.center.z;
                 const normalized = (dx * dx) / (water.radiusX * water.radiusX) +
                                   (dz * dz) / (water.radiusZ * water.radiusZ);
                 if (normalized <= 1) {
@@ -178,7 +177,7 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
     if (holeLayout.thickRough && Array.isArray(holeLayout.thickRough)) {
         for (let i = 0; i < holeLayout.thickRough.length; i++) {
             const rough = holeLayout.thickRough[i];
-            if (rough.vertices && isPointInPolygon(pointYards, rough.vertices)) {
+            if (rough.vertices && isPointInPolygon(point, rough.vertices)) {
                 console.log(`LIE DETECTION: Found THICK_ROUGH (polygon #${i})`);
                 return 'THICK_ROUGH';
             }
@@ -189,7 +188,7 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
     if (holeLayout.mediumRough && Array.isArray(holeLayout.mediumRough)) {
         for (let i = 0; i < holeLayout.mediumRough.length; i++) {
             const rough = holeLayout.mediumRough[i];
-            if (rough.vertices && isPointInPolygon(pointYards, rough.vertices)) {
+            if (rough.vertices && isPointInPolygon(point, rough.vertices)) {
                 console.log(`LIE DETECTION: Found MEDIUM_ROUGH (polygon #${i})`);
                 return 'MEDIUM_ROUGH';
             }
@@ -200,7 +199,7 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
     if (holeLayout.lightRough && Array.isArray(holeLayout.lightRough)) {
         for (let i = 0; i < holeLayout.lightRough.length; i++) {
             const rough = holeLayout.lightRough[i];
-            if (rough.vertices && isPointInPolygon(pointYards, rough.vertices)) {
+            if (rough.vertices && isPointInPolygon(point, rough.vertices)) {
                 console.log(`LIE DETECTION: Found LIGHT_ROUGH (polygon #${i})`);
                 return 'LIGHT_ROUGH';
             }
@@ -209,7 +208,7 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
 
     // Legacy single rough support (for old procedurally generated holes)
     if (holeLayout.rough?.vertices) {
-         if (isPointInPolygon(pointYards, holeLayout.rough.vertices)) {
+         if (isPointInPolygon(point, holeLayout.rough.vertices)) {
              const roughSurfaceName = holeLayout.rough.surface?.name?.toUpperCase() || 'THICK_ROUGH';
              console.log(`LIE DETECTION: Found ${roughSurfaceName} (legacy rough polygon)`);
              return roughSurfaceName;
@@ -219,7 +218,7 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
     // 7. Background / Fallback Rough / Out of Bounds
     // If it's not in any specific feature above, check if it's within the background bounds.
     if (holeLayout.background?.vertices) {
-        if (isPointInPolygon(pointYards, holeLayout.background.vertices)) {
+        if (isPointInPolygon(point, holeLayout.background.vertices)) {
             // It's within the background polygon but not any specific feature.
             // Treat this as the thickest rough by default if not caught by a specific rough polygon.
             // Or potentially a different 'Waste Area' surface if defined.

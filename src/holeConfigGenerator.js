@@ -144,17 +144,17 @@ export function ctfConfigToHoleLayout(holeConfig) {
     const layout = {};
 
     // Add water hazard if present
-    // Convert from meters to yards for layout compatibility
+    // Keep in meters - all hole layouts are now consistently in meters
     if (holeConfig.waterHazard) {
         const water = holeConfig.waterHazard;
         layout.waterHazards = [{
             type: water.type, // 'ellipse'
             center: {
-                x: water.center.x / 0.9144, // Convert meters to yards
-                z: water.center.z / 0.9144
+                x: water.center.x, // Keep in meters
+                z: water.center.z
             },
-            radiusX: water.radiusX / 0.9144, // Convert meters to yards
-            radiusZ: water.radiusZ / 0.9144, // Convert meters to yards
+            radiusX: water.radiusX, // Keep in meters
+            radiusZ: water.radiusZ, // Keep in meters
             surface: water.surface
         }];
     }

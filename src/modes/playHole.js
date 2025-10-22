@@ -229,8 +229,9 @@ export async function initializeMode(holeName) { // Made async, added holeName p
             let initialX = 0;
             let initialZ = 0;
             if (currentHoleLayout?.tee?.center) {
-                initialX = currentHoleLayout.tee.center.x * YARDS_TO_METERS;
-                initialZ = currentHoleLayout.tee.center.z * YARDS_TO_METERS;
+                // Hole layouts are now in meters, no conversion needed
+                initialX = currentHoleLayout.tee.center.x;
+                initialZ = currentHoleLayout.tee.center.z;
             }
             currentBallPosition = { x: initialX, y: BALL_RADIUS, z: initialZ };
             savePlayHoleState({
@@ -305,8 +306,9 @@ export async function initializeMode(holeName) { // Made async, added holeName p
         let initialX = 0;
         let initialZ = 0;
         if (currentHoleLayout?.tee?.center) {
-            initialX = currentHoleLayout.tee.center.x * YARDS_TO_METERS;
-            initialZ = currentHoleLayout.tee.center.z * YARDS_TO_METERS;
+            // Hole layouts are now in meters, no conversion needed
+            initialX = currentHoleLayout.tee.center.x;
+            initialZ = currentHoleLayout.tee.center.z;
         }
         currentBallPosition = { x: initialX, y: BALL_RADIUS, z: initialZ };
 
@@ -400,8 +402,9 @@ export function handleShotResult(shotData) {
         return;
     }
 
-    currentLie = shotData.surfaceName || 'unknown'; // Update lie based on shot result
-    
+    // Don't update lie immediately - wait for animation to complete to avoid spoilers!
+    const finalLie = shotData.surfaceName || 'unknown';
+
     if (shotData.isHoledOut) {
         holeJustCompleted = true; // Set flag that hole is done, awaiting 'n'
         console.log(`HOLE OUT! Strokes this hole: ${shotsTaken}. Total round score: ${score}`);
@@ -423,25 +426,43 @@ export function handleShotResult(shotData) {
         holeJustCompletedState: holeJustCompleted // Save this new flag
     });
 
-    // Update UI overlay based on the current state
-    // If holeJustCompleted, distToFlag should be from the hole, shotNum should be the completed shots.
-    // Otherwise, it's for the next shot from currentBallPosition.
-    const displayBallPos = getCurrentBallPosition(); // Uses holeJustCompleted logic
-    const displayLie = getCurrentLie();
-    const displayShotNum = getDisplayShotNumber();
-    const distToFlag = calculateDistanceToFlag(displayBallPos, currentHoleLayout.flagPosition);
-
+    // Hide distance/lie during animation to avoid spoilers
     ui.updateVisualOverlayInfo('play-hole', {
         holeNum: currentHoleIndex + 1,
         par: currentHoleLayout.par,
-        distToFlag: distToFlag,
-        shotNum: displayShotNum,
-        lie: displayLie,
+        distToFlag: '...', // Hide during animation
+        shotNum: shotsTaken,
+        lie: '...', // Hide during animation
         wind: 'Calm', // placeholder
         playerName: 'Player 1', // placeholder
-        totalScore: score, // Display total strokes for the round
+        totalScore: score,
         position: '1st' // placeholder
     });
+
+    // Update lie and UI after animation completes
+    // Note: Animation callbacks are handled in visuals.js
+    // We'll use a timeout based on animation duration as a fallback
+    const animationDuration = (shotData.timeOfFlight || 3) * 1000; // Convert seconds to ms
+    setTimeout(() => {
+        currentLie = finalLie; // Update lie after animation
+
+        const displayBallPos = getCurrentBallPosition();
+        const displayLie = getCurrentLie();
+        const displayShotNum = getDisplayShotNumber();
+        const distToFlag = calculateDistanceToFlag(displayBallPos, currentHoleLayout.flagPosition);
+
+        ui.updateVisualOverlayInfo('play-hole', {
+            holeNum: currentHoleIndex + 1,
+            par: currentHoleLayout.par,
+            distToFlag: distToFlag,
+            shotNum: displayShotNum,
+            lie: displayLie,
+            wind: 'Calm',
+            playerName: 'Player 1',
+            totalScore: score,
+            position: '1st'
+        });
+    }, animationDuration + 200); // Add 200ms buffer
 }
 
 

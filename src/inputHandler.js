@@ -132,10 +132,10 @@ export function handleKeyDown(event) {
                 console.warn("Aim Reset (H): Could not get ball/layout info.");
                 return; // Safety check
             }
-            const flagPosLayout = layout.flagPosition; // {x, z} in yards
+            const flagPosLayout = layout.flagPosition; // {x, z} in meters
 
-            // Convert flag position to meters
-            const flagPosMeters = { x: flagPosLayout.x * YARDS_TO_METERS, z: flagPosLayout.z * YARDS_TO_METERS };
+            // Flag position is already in meters, no conversion needed
+            const flagPosMeters = { x: flagPosLayout.x, z: flagPosLayout.z };
 
             // Calculate the direction vector (target - source) on the XZ plane
             const dx = flagPosMeters.x - ballPos.x;

@@ -320,7 +320,7 @@ export function calculateFullSwingShot() {
         sideDistance: sideDistance,
         finalPosition: { x: finalPosition.x, y: finalPosition.y, z: finalPosition.z }, // Convert final Vector3 back to object
         isHoledOut: isHoledOut,
-        surfaceName: landingSurfaceType // Add surface type for lie display
+        surfaceName: getSurfaceTypeAtPoint({ x: finalPosition.x, z: finalPosition.z }, currentHoleLayout) || landingSurfaceType // Use final position surface, not landing surface
     };
 
     // Update internal state
@@ -630,7 +630,7 @@ export function calculateChipShot() {
         sideDistance: sideDistance,
         finalPosition: { x: finalPosition.x, y: finalPosition.y, z: finalPosition.z },
         isHoledOut: isHoledOut,
-        surfaceName: landingSurfaceType // Add surface type for lie display
+        surfaceName: getSurfaceTypeAtPoint({ x: finalPosition.x, z: finalPosition.z }, currentHoleLayout) || landingSurfaceType // Use final position surface, not landing surface
     };
 
     // Update internal state

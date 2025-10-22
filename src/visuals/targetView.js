@@ -9,7 +9,7 @@ import { generateCTFHoleConfig, metersToYards } from '../holeConfigGenerator.js'
 let scene = null;
 let canvasWidth = 0;
 let canvasHeight = 0;
-let targetDistanceYards = 0; // In yards
+let targetDistanceMeters = 0; // In meters
 let currentHoleConfig = null; // Store current hole configuration
 let greenRadiusMeters = null; // Store green radius for camera
 
@@ -54,8 +54,8 @@ export function setScene(coreScene, width, height) {
     canvasHeight = height;
 }
 
-export function setTargetDistance(distanceYards) {
-    targetDistanceYards = distanceYards;
+export function setTargetDistance(distanceMeters) {
+    targetDistanceMeters = distanceMeters;
 }
 
 // Set hole configuration (from server in multiplayer, or generated locally)
@@ -74,9 +74,9 @@ function createTargetElements() {
         return;
     }
 
-    console.log("Creating new target elements for distance:", targetDistanceYards, "yards");
+    console.log("Creating new target elements for distance:", targetDistanceMeters, "meters");
     targetGroup = new THREE.Group();
-    const targetZ = targetDistanceYards * YARDS_TO_METERS; // Target distance in meters
+    const targetZ = targetDistanceMeters; // Target distance in meters
 
     // --- Ground (Rough) ---
     // Make it wide and long enough to cover the view, extending behind the tee box
@@ -386,11 +386,11 @@ export function getObstacles() {
 // Shows the target elements (creates if needed)
 export function drawTargetView() {
     if (!scene) return;
-    console.log("Drawing Target View (3D) for distance:", targetDistanceYards);
+    console.log("Drawing Target View (3D) for distance:", targetDistanceMeters);
 
     // Generate hole config if not already set (single-player mode)
     if (!currentHoleConfig) {
-        const distanceMeters = targetDistanceYards * 0.9144; // Convert yards to meters
+        const distanceMeters = targetDistanceMeters; // Already in meters
         currentHoleConfig = generateCTFHoleConfig(distanceMeters);
         console.log('CTF: Generated local hole config:', currentHoleConfig);
     }
@@ -400,11 +400,11 @@ export function drawTargetView() {
     } else {
         // Instead of moving the group, we might need to recreate or update individual element positions/sizes
         // if the target distance changes significantly, especially for ground/fairway length.
-        // For simplicity now, let's assume createTargetElements handles placing things correctly based on targetDistanceYards.
+        // For simplicity now, let's assume createTargetElements handles placing things correctly based on targetDistanceMeters.
         // We just need to ensure it's visible.
         targetGroup.visible = true;
-        // Update positions based on current targetDistanceYards
-        const targetZ = targetDistanceYards * YARDS_TO_METERS;
+        // Update positions based on current targetDistanceMeters
+        const targetZ = targetDistanceMeters;
         if (groundMesh) {
              // Adjust ground length and position if needed (more complex)
              // groundMesh.geometry = new THREE.PlaneGeometry(100, targetZ + 50); // Recreate geometry?
@@ -422,7 +422,7 @@ export function drawTargetView() {
          console.log(`Target elements updated for Z = ${targetZ.toFixed(1)}m`);
     }
     // TODO: Adjust camera for target view?
-    // CoreVisuals.setCameraForTargetView(targetDistanceYards * YARDS_TO_METERS);
+    // CoreVisuals.setCameraForTargetView(targetDistanceMeters);
 }
 
 // Hides the target elements

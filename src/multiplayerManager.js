@@ -247,13 +247,13 @@ function setupWebSocketHandlers() {
     wsManager.setOnGameStartCallback((data) => {
         console.log('Game started!', data);
 
-        // Store hole configuration from server (server sends meters, convert to yards for display)
+        // Store hole configuration from server (server sends meters, keep in meters internally)
         if (data.holeConfig) {
             holeConfig = data.holeConfig;
-            // Convert meters to yards: 1 meter = 1.09361 yards
-            targetDistance = Math.round(data.holeConfig.distanceMeters * 1.09361);
+            // Keep distance in meters internally (conversion to yards happens in UI only)
+            targetDistance = data.holeConfig.distanceMeters;
             console.log('🏌️ Received hole config from server:', holeConfig);
-            console.log(`   Distance: ${data.holeConfig.distanceMeters}m = ${targetDistance} yards`);
+            console.log(`   Distance: ${targetDistance}m`);
         }
 
         // Track which player's turn it is
@@ -431,7 +431,8 @@ function handleGameFinished(data) {
 
     // Use the server's winner determination instead of client-side
     const isLocalWinner = winner.id === localPlayerId;
-    const winnerDistance = (winner.distanceFromHole * 1.09361).toFixed(1); // Convert meters to yards
+    const winnerDistanceYards = (winner.distanceFromHole * 1.09361).toFixed(1); // Convert meters to yards for display
+    const winnerDistance = winnerDistanceYards; // Keep variable name for compatibility
 
     // Show status message
     const message = isLocalWinner
@@ -445,10 +446,10 @@ function handleGameFinished(data) {
         const state = playerStates[p.id];
         return {
             ...p,
-            distanceYards: state?.distanceFromHole ? (state.distanceFromHole * 1.09361) : 999999,
+            distanceYards: state?.distanceFromHole ? (state.distanceFromHole * 1.09361) : 999999, // Convert to yards for display
             isWinner: p.id === winner.id
         };
-    }).sort((a, b) => a.distanceYards - b.distanceYards);
+    }).sort((a, b) => a.distanceYards - b.distanceYards); // Sort by yards for leaderboard
 
     // Check if payout data exists (wagering game)
     const payoutData = window.lastPayoutData;

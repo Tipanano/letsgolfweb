@@ -11,42 +11,39 @@ let currentModeActive = false;
 
 // --- Functions ---
 
-export function initializeMode(providedTargetDistanceYards = null) {
+export function initializeMode(providedTargetDistanceMeters = null) {
     console.log("Initializing Closest to Flag mode...");
     currentModeActive = true;
     shotsTaken = 0;
     bestDistanceToHoleMeters = Infinity;
 
-    // Use provided target distance, or generate random if not provided
-    const targetDistanceYards = providedTargetDistanceYards ||
-                                 (Math.floor(Math.random() * (200 - 120 + 1)) + 120);
+    // Use provided target distance, or generate random if not provided (110-183 meters = ~120-200 yards)
+    targetDistanceMeters = providedTargetDistanceMeters ||
+                           (Math.floor(Math.random() * (183 - 110 + 1)) + 110);
 
-    targetDistanceMeters = yardsToMeters(targetDistanceYards);
-
-    if (providedTargetDistanceYards) {
-        console.log(`Target distance set to: ${targetDistanceYards} yards (from server)`);
+    if (providedTargetDistanceMeters) {
+        console.log(`Target distance set to: ${targetDistanceMeters.toFixed(1)} meters (from server)`);
     } else {
-        console.log(`Target distance randomly set to: ${targetDistanceYards} yards (${targetDistanceMeters.toFixed(1)} meters)`);
+        console.log(`Target distance randomly set to: ${targetDistanceMeters.toFixed(1)} meters (~${metersToYards(targetDistanceMeters).toFixed(0)} yards)`);
     }
 
-    // Update UI
+    // Update UI (UI will convert meters to yards for display)
     ui.resetClosestToFlagDisplay(); // Reset display first
-    ui.updateTargetDistanceDisplay(targetDistanceYards); // Show the target distance in yards
+    ui.updateTargetDistanceDisplay(targetDistanceMeters); // Pass meters, UI converts to yards
 
     // Update visual overlay info with distance to flag and lie
-    // Note: distToFlag should be passed in meters for UI to convert to yards
     ui.updateVisualOverlayInfo('closest-to-flag', {
         distToFlag: targetDistanceMeters,
         lie: 'Tee'
     });
 
     // Visuals switch is handled by main.js
-    // visuals.switchToTargetView(targetDistanceYards);
+    // visuals.switchToTargetView(targetDistanceMeters);
 
     // TODO: Reset player state if needed (e.g., allow swing)
     // logic.resetSwing(); // Might be called by main.js already
 
-    return targetDistanceYards; // Return the target distance for main.js to use
+    return targetDistanceMeters; // Return the target distance in meters for main.js to use
 }
 
 export function terminateMode() {

@@ -518,12 +518,29 @@ const holeMaker = {
     },
 
     onObjectMoved(e) {
-        const polygon = e.target;
-        console.log('onObjectMoved called, target:', polygon, 'type:', polygon?.type);
-        if (!polygon || polygon.type !== 'polygon') {
+        const target = e.target;
+        console.log('onObjectMoved called, target:', target, 'type:', target?.type);
+
+        // Handle tee box movement (it's a rect, not polygon)
+        if (target && target.type === 'rect' && this.teeBox && target === this.teeBox.visual) {
+            console.log('Tee box moved, updating stored position');
+            // Convert visual position back to meters
+            const metersX = target.left / this.scale;
+            const metersZ = CANVAS_HEIGHT - (target.top / this.scale);
+            this.teeBox.x = metersX;
+            this.teeBox.z = metersZ;
+            console.log(`Tee box position updated to: x=${metersX.toFixed(2)}m, z=${metersZ.toFixed(2)}m`);
+            this.calculateHoleLength();
+            return;
+        }
+
+        // Handle polygon movement
+        if (!target || target.type !== 'polygon') {
             this.updateVertexMarkers();
             return;
         }
+
+        const polygon = target;
 
         const SNAP_DISTANCE = 2.5 * this.scale;
         let snapped = false;
@@ -1875,6 +1892,10 @@ const holeMaker = {
 
                 this.updateFlagCount();
             }
+
+            // Update layers list to show all imported objects
+            this.updateLayersList();
+            this.calculateHoleLength();
 
             console.log('Imported hole layout');
         } catch (e) {

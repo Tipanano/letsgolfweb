@@ -116,8 +116,8 @@ export function clearTargetViewConfig() {
 }
 
 // Accept scene as optional parameter for initial call (though less likely needed here)
-export function switchToTargetView(targetDistance, initialScene = null) {
-    console.log(`🔵 switchToTargetView called: targetDistance=${targetDistance}, currentVisualMode=${currentVisualMode}`);
+export function switchToTargetView(targetDistanceMeters, initialScene = null) {
+    console.log(`🔵 switchToTargetView called: targetDistanceMeters=${targetDistanceMeters}, currentVisualMode=${currentVisualMode}`);
     const sceneToUse = initialScene || coreScene; // Use passed scene if available, else module scope
      if (!sceneToUse) {
         console.error("switchToTargetView: Scene is not available!");
@@ -127,12 +127,11 @@ export function switchToTargetView(targetDistance, initialScene = null) {
     // Corrected Check: If already in target mode (and not the initial call), update and return.
     if (currentVisualMode === VISUAL_MODES.TARGET && !initialScene && !MeasurementView.isViewActive()) {
          console.log("Already in Target View, updating distance...");
-         TargetVisuals.setTargetDistance(targetDistance);
+         TargetVisuals.setTargetDistance(targetDistanceMeters);
          TargetVisuals.drawTargetView(); // Redraw with new distance
          // IMPORTANT: Also update the camera with the new distance!
-         const targetZ = targetDistance * YARDS_TO_METERS;
-         console.log(`🎯 Early return path: targetDistance=${targetDistance}, targetZ=${targetZ}`);
-         CoreVisuals.setCameraForTargetView(targetZ);
+         console.log(`🎯 Early return path: targetDistanceMeters=${targetDistanceMeters}`);
+         CoreVisuals.setCameraForTargetView(targetDistanceMeters);
          return;
     }
 
@@ -140,14 +139,13 @@ export function switchToTargetView(targetDistance, initialScene = null) {
     unloadCurrentView(); // Unload previous view first (removes range elements etc.)
     console.log("Switching to Target View...");
     currentVisualMode = VISUAL_MODES.TARGET;
-    currentTargetDistanceYards = targetDistance; // Store for reverse camera
+    currentTargetDistanceYards = targetDistanceMeters; // Store for reverse camera (misnomer: actually stores meters now)
     RangeVisuals.removeRangeVisuals(sceneToUse); // Remove range specific elements
-    TargetVisuals.setTargetDistance(targetDistance);
+    TargetVisuals.setTargetDistance(targetDistanceMeters);
     TargetVisuals.drawTargetView(); // Create/show target elements
     // Set the camera specifically for the target view
-    const targetZ = targetDistance * YARDS_TO_METERS;
-    console.log(`🎯 switchToTargetView: targetDistance=${targetDistance}, targetZ=${targetZ}`);
-    CoreVisuals.setCameraForTargetView(targetZ); // Set the static target view
+    console.log(`🎯 switchToTargetView: targetDistanceMeters=${targetDistanceMeters}`);
+    CoreVisuals.setCameraForTargetView(targetDistanceMeters); // Set the static target view
     console.log(`🎯 After setCameraForTargetView, before applyStaticCameraView`);
     CoreVisuals.applyStaticCameraView('target'); // Ensure mode is static and view is applied
     console.log(`🎯 After applyStaticCameraView`);
@@ -439,8 +437,8 @@ export function activateReverseCamera() {
             targetPosition = greenCenter;
             console.log(`Using TARGET green center for reverse camera: X=${greenCenter.x.toFixed(1)}, Z=${greenCenter.z.toFixed(1)}`);
         } else {
-            // Fallback: use just the distance
-            const positionZ = currentTargetDistanceYards > 0 ? currentTargetDistanceYards * YARDS_TO_METERS : 300 * YARDS_TO_METERS;
+            // Fallback: use just the distance (currentTargetDistanceYards is actually in meters now)
+            const positionZ = currentTargetDistanceYards > 0 ? currentTargetDistanceYards : 274; // 274m = ~300 yards
             targetPosition = { x: 0, z: positionZ };
             console.log(`Green center unavailable, using distance: ${positionZ.toFixed(1)}m`);
         }
@@ -451,14 +449,14 @@ export function activateReverseCamera() {
             targetPosition = greenCenter;
             console.log(`Using HOLE green center for reverse camera: X=${greenCenter.x.toFixed(1)}, Z=${greenCenter.z.toFixed(1)}`);
         } else {
-            // Fallback to centerline
-            targetPosition = { x: 0, z: 300 * YARDS_TO_METERS };
+            // Fallback to centerline (274m = ~300 yards)
+            targetPosition = { x: 0, z: 274 };
             console.log("Green center unavailable in hole mode, using default.");
         }
     } else {
-        // Range mode - use centerline
-        targetPosition = { x: 0, z: 300 * YARDS_TO_METERS };
-        console.log("Using default 300 yards for reverse camera in Range mode.");
+        // Range mode - use centerline (274m = ~300 yards)
+        targetPosition = { x: 0, z: 274 };
+        console.log("Using default 274m (~300 yards) for reverse camera in Range mode.");
     }
 
     CoreVisuals.setCameraReverseAngle(targetPosition);
