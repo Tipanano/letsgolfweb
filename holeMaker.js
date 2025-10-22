@@ -1300,6 +1300,7 @@ const holeMaker = {
         const list = document.getElementById('layersList');
         list.innerHTML = '';
 
+        // Add shapes
         this.shapes.forEach((shape, index) => {
             const item = document.createElement('div');
             item.className = 'layer-item';
@@ -1317,6 +1318,81 @@ const holeMaker = {
 
             item.onclick = () => {
                 this.canvas.setActiveObject(shape.polygon);
+                this.canvas.renderAll();
+            };
+
+            list.appendChild(item);
+        });
+
+        // Add tee box
+        if (this.teeBox && this.teeBox.visual) {
+            const item = document.createElement('div');
+            item.className = 'layer-item';
+            if (this.canvas.getActiveObject() === this.teeBox.visual) {
+                item.classList.add('active');
+            }
+
+            item.innerHTML = `
+                <div style="display: flex; align-items: center;">
+                    <div class="layer-color" style="background: ${SURFACE_COLORS.tee}"></div>
+                    <span>TEE BOX</span>
+                </div>
+                <span style="font-size: 11px;">10×10m</span>
+            `;
+
+            item.onclick = () => {
+                this.canvas.setActiveObject(this.teeBox.visual);
+                this.canvas.renderAll();
+            };
+
+            list.appendChild(item);
+        }
+
+        // Add objects (trees/bushes)
+        this.objects.forEach((obj, index) => {
+            const item = document.createElement('div');
+            item.className = 'layer-item';
+            if (this.canvas.getActiveObject() === obj.visual) {
+                item.classList.add('active');
+            }
+
+            const icon = obj.type === 'tree' ? '🌳' : '🌿';
+            const color = obj.type === 'tree' ? '#2d5016' : '#3a6b1f';
+
+            item.innerHTML = `
+                <div style="display: flex; align-items: center;">
+                    <div class="layer-color" style="background: ${color}"></div>
+                    <span>${icon} ${obj.type.toUpperCase()} (${obj.size})</span>
+                </div>
+                <span style="font-size: 11px;">${obj.x.toFixed(1)}, ${obj.z.toFixed(1)}</span>
+            `;
+
+            item.onclick = () => {
+                this.canvas.setActiveObject(obj.visual);
+                this.canvas.renderAll();
+            };
+
+            list.appendChild(item);
+        });
+
+        // Add flags
+        this.flagPositions.forEach((flag, index) => {
+            const item = document.createElement('div');
+            item.className = 'layer-item';
+            if (this.canvas.getActiveObject() === flag.visual) {
+                item.classList.add('active');
+            }
+
+            item.innerHTML = `
+                <div style="display: flex; align-items: center;">
+                    <div class="layer-color" style="background: #e74c3c"></div>
+                    <span>🚩 FLAG #${flag.number}</span>
+                </div>
+                <span style="font-size: 11px;">${flag.x.toFixed(1)}, ${flag.z.toFixed(1)}</span>
+            `;
+
+            item.onclick = () => {
+                this.canvas.setActiveObject(flag.visual);
                 this.canvas.renderAll();
             };
 
@@ -1403,10 +1479,24 @@ const holeMaker = {
         this.updateFlagCount();
     },
 
-    convertPointsToMeters(points) {
+    convertPointsToMeters(points, polygon = null) {
+        // If polygon provided, convert points to absolute canvas coordinates first
+        // (this accounts for any transforms like left/top/angle/scale when polygon is moved)
+        let absolutePoints = points;
+        if (polygon) {
+            const transform = polygon.calcTransformMatrix();
+            absolutePoints = points.map(p => {
+                const localPoint = {
+                    x: p.x - polygon.pathOffset.x,
+                    y: p.y - polygon.pathOffset.y
+                };
+                return fabric.util.transformPoint(localPoint, transform);
+            });
+        }
+
         // Convert canvas coordinates to meters (round to 2 decimals)
         // Flip y-axis: canvas y=0 (top) should be z=CANVAS_HEIGHT (far), canvas y=CANVAS_HEIGHT (bottom) should be z=0 (tee)
-        return points.map(p => ({
+        return absolutePoints.map(p => ({
             x: parseFloat((p.x / this.scale).toFixed(2)),
             z: parseFloat((CANVAS_HEIGHT - (p.y / this.scale)).toFixed(2))
         }));
@@ -1428,17 +1518,17 @@ const holeMaker = {
             canvasHeight: CANVAS_HEIGHT,
             background: {
                 vertices: [
-                    { x: -CANVAS_WIDTH / 2, z: -30 },
-                    { x: CANVAS_WIDTH / 2, z: -30 },
-                    { x: CANVAS_WIDTH / 2, z: CANVAS_HEIGHT + 30 },
-                    { x: -CANVAS_WIDTH / 2, z: CANVAS_HEIGHT + 30 }
+                    { x: -30, z: -30 },
+                    { x: CANVAS_WIDTH + 30, z: -30 },
+                    { x: CANVAS_WIDTH + 30, z: CANVAS_HEIGHT + 30 },
+                    { x: -30, z: CANVAS_HEIGHT + 30 }
                 ],
                 surface: "OUT_OF_BOUNDS"
             }
         };
 
         // Group shapes by type
-        const fairway = this.shapes.find(s => s.type === 'fairway');
+        const fairways = this.shapes.filter(s => s.type === 'fairway');
         const green = this.shapes.find(s => s.type === 'green');
         const roughLight = this.shapes.filter(s => s.type === 'rough_light');
         const roughMedium = this.shapes.filter(s => s.type === 'rough_medium');
@@ -1459,18 +1549,17 @@ const holeMaker = {
             };
         }
 
-        // Add fairway
-        if (fairway) {
-            const metersPoints = this.convertPointsToMeters(fairway.polygon.points);
-            layout.fairway = {
-                controlPoints: metersPoints,
+        // Add fairways (support multiple)
+        if (fairways.length > 0) {
+            layout.fairways = fairways.map(fairway => ({
+                controlPoints: this.convertPointsToMeters(fairway.polygon.points, fairway.polygon),
                 surface: "FAIRWAY"
-            };
+            }));
         }
 
         // Add green
         if (green) {
-            const metersPoints = this.convertPointsToMeters(green.polygon.points);
+            const metersPoints = this.convertPointsToMeters(green.polygon.points, green.polygon);
             layout.green = {
                 controlPoints: metersPoints,
                 surface: "GREEN"
@@ -1480,7 +1569,7 @@ const holeMaker = {
         // Add light rough
         if (roughLight.length > 0) {
             layout.lightRough = roughLight.map(rough => ({
-                vertices: this.convertPointsToMeters(rough.polygon.points),
+                vertices: this.convertPointsToMeters(rough.polygon.points, rough.polygon),
                 surface: "LIGHT_ROUGH"
             }));
         }
@@ -1488,7 +1577,7 @@ const holeMaker = {
         // Add medium rough
         if (roughMedium.length > 0) {
             layout.mediumRough = roughMedium.map(rough => ({
-                vertices: this.convertPointsToMeters(rough.polygon.points),
+                vertices: this.convertPointsToMeters(rough.polygon.points, rough.polygon),
                 surface: "MEDIUM_ROUGH"
             }));
         }
@@ -1496,7 +1585,7 @@ const holeMaker = {
         // Add heavy/thick rough
         if (roughHeavy.length > 0) {
             layout.thickRough = roughHeavy.map(rough => ({
-                vertices: this.convertPointsToMeters(rough.polygon.points),
+                vertices: this.convertPointsToMeters(rough.polygon.points, rough.polygon),
                 surface: "THICK_ROUGH"
             }));
         }
@@ -1504,7 +1593,7 @@ const holeMaker = {
         // Add bunkers
         if (bunkers.length > 0) {
             layout.bunkers = bunkers.map(bunker => ({
-                controlPoints: this.convertPointsToMeters(bunker.polygon.points),
+                controlPoints: this.convertPointsToMeters(bunker.polygon.points, bunker.polygon),
                 surface: "BUNKER"
             }));
         }
@@ -1513,7 +1602,7 @@ const holeMaker = {
         if (water.length > 0) {
             layout.waterHazards = water.map(w => ({
                 surface: "WATER",
-                controlPoints: this.convertPointsToMeters(w.polygon.points)
+                controlPoints: this.convertPointsToMeters(w.polygon.points, w.polygon)
             }));
         }
 
@@ -1544,21 +1633,33 @@ const holeMaker = {
 
     previewHole() {
         // Validate that hole has required elements
-        const tee = this.shapes.find(s => s.type === 'tee');
-        const green = this.shapes.find(s => s.type === 'green');
-
-        if (!tee) {
-            alert('Cannot preview: Hole must have a tee box. Please create a tee box first.');
+        if (!this.teeBox) {
+            alert('Cannot preview: Hole must have a tee box. Please place a tee box first.');
             return;
         }
 
+        const green = this.shapes.find(s => s.type === 'green');
         if (!green) {
             alert('Cannot preview: Hole must have a green. Please create a green first.');
             return;
         }
 
-        // Coming soon message
-        alert('Preview feature coming soon! This will allow you to view the hole in 3D before playing it.');
+        if (this.flagPositions.length === 0) {
+            alert('Cannot preview: Hole must have at least one flag position. Please place a flag on the green.');
+            return;
+        }
+
+        // Export the current hole layout
+        this.exportJSON();
+
+        // Get the exported JSON
+        const jsonText = document.getElementById('jsonOutput').value;
+
+        // Store in localStorage for the game to pick up
+        localStorage.setItem('previewHoleData', jsonText);
+
+        // Open the game in a new tab so user can return to hole maker
+        window.open('index.html', '_blank');
     },
 
     importJSON() {
@@ -1599,13 +1700,19 @@ const holeMaker = {
 
             // Import tee box (new placement-based system)
             if (layout.tee && layout.tee.center) {
-                const centerX = layout.tee.center.x * this.scale;
-                const centerZ = (CANVAS_HEIGHT - layout.tee.center.z) * this.scale;
-                this.placeTeeBox(centerX, centerZ);
+                const canvasPos = metersToCanvas(layout.tee.center);
+                this.placeTeeBox(canvasPos.x, canvasPos.y);
             }
 
-            // Import fairway
-            if (layout.fairway && layout.fairway.controlPoints) {
+            // Import fairways (support multiple)
+            if (layout.fairways && Array.isArray(layout.fairways)) {
+                layout.fairways.forEach(fairway => {
+                    this.currentPoints = fairway.controlPoints.map(metersToCanvas);
+                    this.currentSurface = 'fairway';
+                    this.closePolygon();
+                });
+            } else if (layout.fairway && layout.fairway.controlPoints) {
+                // Legacy single fairway support
                 this.currentPoints = layout.fairway.controlPoints.map(metersToCanvas);
                 this.currentSurface = 'fairway';
                 this.closePolygon();

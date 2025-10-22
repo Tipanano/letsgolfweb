@@ -26,6 +26,157 @@ export async function initializeMode(holeName) { // Made async, added holeName p
     currentModeActive = true;
     holeJustCompleted = false; // Ensure this is reset when a hole is initialized
 
+    // Check for preview mode (hole maker preview)
+    const previewData = localStorage.getItem('previewHoleData');
+    if (previewData && !holeName) {
+        console.log('Preview mode detected, loading custom hole from hole maker...');
+        try {
+            // Import holeLoader to process the preview data
+            const { loadHoleLayout } = await import('../holeLoader.js');
+            const { SURFACES } = await import('../surfaces.js');
+
+            const previewLayout = JSON.parse(previewData);
+
+            // Process the layout (same logic as holeLoader but inline since we have the JSON already)
+            currentHoleLayout = JSON.parse(JSON.stringify(previewLayout)); // Deep copy
+
+            // Map surfaces and process shapes (simplified from holeLoader.js)
+            if (currentHoleLayout.background) {
+                currentHoleLayout.background.surface = SURFACES[currentHoleLayout.background.surface];
+                currentHoleLayout.background.type = 'polygon';
+            }
+
+            if (currentHoleLayout.tee?.center) {
+                const c = currentHoleLayout.tee.center;
+                const hw = currentHoleLayout.tee.width / 2;
+                const hd = currentHoleLayout.tee.depth / 2;
+                currentHoleLayout.tee.vertices = [
+                    { x: c.x - hw, z: c.z - hd }, { x: c.x + hw, z: c.z - hd },
+                    { x: c.x + hw, z: c.z + hd }, { x: c.x - hw, z: c.z + hd }
+                ];
+                currentHoleLayout.tee.surface = SURFACES[currentHoleLayout.tee.surface];
+                currentHoleLayout.tee.type = 'polygon';
+            }
+
+            // Process fairways (support multiple)
+            if (currentHoleLayout.fairways && Array.isArray(currentHoleLayout.fairways)) {
+                currentHoleLayout.fairways.forEach(fairway => {
+                    if (fairway.controlPoints) {
+                        fairway.vertices = fairway.controlPoints;
+                        delete fairway.controlPoints;
+                    }
+                    fairway.surface = SURFACES[fairway.surface];
+                    fairway.type = 'polygon';
+                });
+            } else if (currentHoleLayout.fairway?.controlPoints) {
+                // Legacy single fairway - convert to array
+                currentHoleLayout.fairway.vertices = currentHoleLayout.fairway.controlPoints;
+                delete currentHoleLayout.fairway.controlPoints;
+                currentHoleLayout.fairway.surface = SURFACES[currentHoleLayout.fairway.surface];
+                currentHoleLayout.fairway.type = 'polygon';
+                currentHoleLayout.fairways = [currentHoleLayout.fairway];
+                delete currentHoleLayout.fairway;
+            }
+
+            if (currentHoleLayout.green?.controlPoints) {
+                currentHoleLayout.green.vertices = currentHoleLayout.green.controlPoints;
+                delete currentHoleLayout.green.controlPoints;
+                currentHoleLayout.green.surface = SURFACES[currentHoleLayout.green.surface];
+                currentHoleLayout.green.type = 'polygon';
+            }
+
+            ['lightRough', 'mediumRough', 'thickRough'].forEach(roughType => {
+                if (currentHoleLayout[roughType]) {
+                    currentHoleLayout[roughType].forEach(rough => {
+                        rough.surface = SURFACES[rough.surface];
+                        rough.type = 'polygon';
+                    });
+                }
+            });
+
+            if (currentHoleLayout.bunkers) {
+                currentHoleLayout.bunkers.forEach(bunker => {
+                    if (bunker.controlPoints) {
+                        bunker.vertices = bunker.controlPoints;
+                        delete bunker.controlPoints;
+                    }
+                    bunker.surface = SURFACES[bunker.surface];
+                    bunker.type = 'polygon';
+                });
+            }
+
+            if (currentHoleLayout.waterHazards) {
+                currentHoleLayout.waterHazards.forEach(water => {
+                    if (water.controlPoints) {
+                        water.vertices = water.controlPoints;
+                        delete water.controlPoints;
+                    }
+                    water.surface = SURFACES[water.surface];
+                    water.type = 'polygon';
+                });
+            }
+
+            if (currentHoleLayout.flagPositions?.length > 0) {
+                currentHoleLayout.flagPosition = {
+                    x: currentHoleLayout.flagPositions[0].x,
+                    z: currentHoleLayout.flagPositions[0].z
+                };
+            }
+
+            // Set initial position
+            let initialX = 0, initialZ = 0;
+            if (currentHoleLayout.tee?.center) {
+                initialX = currentHoleLayout.tee.center.x * YARDS_TO_METERS;
+                initialZ = currentHoleLayout.tee.center.z * YARDS_TO_METERS;
+            }
+            currentBallPosition = { x: initialX, y: BALL_RADIUS, z: initialZ };
+            shotsTaken = 0;
+            score = 0;
+            currentLie = 'tee';
+            currentHoleIndex = 0;
+
+            localStorage.removeItem('previewHoleData');
+
+            // Use the exact same flow as normal hole loading (lines 292-334)
+            visuals.drawHole(currentHoleLayout);
+            visuals.resetVisuals(currentBallPosition, currentLie);
+
+            if (currentLie === 'green') {
+                setShotType('putt');
+            } else if (currentLie !== 'tee') {
+                const currentStateType = getCurrentShotType();
+                if (currentStateType === 'putt') {
+                    setShotType('full');
+                }
+            }
+
+            const initialDistToFlag = calculateDistanceToFlag(currentBallPosition, currentHoleLayout.flagPosition);
+
+            // Update UI overlay with hole info
+            ui.updateVisualOverlayInfo('play-hole', {
+                holeNum: 1,
+                par: currentHoleLayout.par || 4,
+                distToFlag: initialDistToFlag,
+                shotNum: shotsTaken + 1,
+                lie: currentLie,
+                wind: 'Calm',
+                playerName: 'Player 1',
+                totalScore: score,
+                position: '1st'
+            });
+
+            // Activate camera
+            visuals.activateHoleViewCamera();
+
+            console.log('Preview hole loaded and ready to play!');
+            return;
+        } catch (error) {
+            console.error('Error loading preview hole:', error);
+            alert('Failed to load preview hole: ' + error.message);
+            localStorage.removeItem('previewHoleData');
+        }
+    }
+
     const loadedState = loadPlayHoleState();
     const holeToLoad = holeName || "mickelson_01"; // Use provided holeName or default
 

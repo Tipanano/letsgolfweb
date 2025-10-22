@@ -554,3 +554,6 @@ export const setPlayerMarker = PlayerMarkers.setPlayerMarker;
 export const removePlayerMarker = PlayerMarkers.removePlayerMarker;
 export const clearAllMarkers = PlayerMarkers.clearAllMarkers;
 export const getMarkerPosition = PlayerMarkers.getMarkerPosition;
+
+// Export hole view functions
+export const drawHoleLayout = HoleVisuals.drawHoleLayout;

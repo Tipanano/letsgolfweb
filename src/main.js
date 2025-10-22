@@ -293,6 +293,14 @@ initMultiplayerUI();
 // Initialize Nano authentication
 nanoAuth.init();
 
+// Check for preview mode from hole maker
+const previewData = localStorage.getItem('previewHoleData');
+if (previewData) {
+    console.log('Preview mode detected - auto-starting Play Hole mode...');
+    ui.showGameView();
+    await setGameMode(GAME_MODES.PLAY_HOLE);
+}
+
 // Hook up "Sign in with Nano" button
 const registerBtn = document.getElementById('register-btn-placeholder');
 if (registerBtn) {
