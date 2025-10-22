@@ -4,6 +4,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.m
 import { getSurfaceProperties } from '../surfaces.js'; // Import getSurfaceProperties
 import { getFlagPosition } from '../visuals/holeView.js'; // To get hole coordinates
 import { BALL_RADIUS } from '../visuals/core.js'; // For ground check, hole interaction, and obstacle collision
+import { getSurfaceTypeAtPoint } from '../utils/gameUtils.js'; // For dynamic surface detection
 
 // --- Step-by-Step Flight Simulation ---
 // Takes initial position, velocity, spin vector (RPM), and the selected club object.
@@ -308,15 +309,18 @@ const SPIN_TO_VELOCITY_TRANSFER = 0.004; // How backspin converts to horizontal 
 /**
  * Simulates the bouncing phase when ball first contacts ground.
  * Each bounce applies energy loss, spin effects, and brief flight physics between impacts.
+ * Surface type is checked dynamically at each bounce point.
  *
  * @param {object} landingPosition - {x, y, z} position where ball first hits ground
  * @param {object} landingVelocity - {x, y, z} velocity at ground contact
  * @param {number} landingAngleRadians - Angle of descent
  * @param {object} spinRadPerSec - {x, y, z} current spin in rad/s
- * @param {string} surfaceType - Surface type for bounce properties
+ * @param {string} surfaceType - Initial surface type (used if holeLayout not provided)
+ * @param {number} startTime - Start time offset for animation
+ * @param {object} holeLayout - Hole layout data for dynamic surface detection (optional)
  * @returns {object} Final state after bounces: {position: THREE.Vector3, velocity: THREE.Vector3, spin: {x, y, z} rad/s, bouncePoints: []}
  */
-export function simulateBouncePhase(landingPosition, landingVelocity, landingAngleRadians, spinRadPerSec, surfaceType, startTime = 0) {
+export function simulateBouncePhase(landingPosition, landingVelocity, landingAngleRadians, spinRadPerSec, surfaceType, startTime = 0, holeLayout = null) {
     console.log("\n========== BOUNCE PHASE START ==========");
     console.log(`Landing Position: (${landingPosition.x.toFixed(2)}, ${landingPosition.y.toFixed(2)}, ${landingPosition.z.toFixed(2)})`);
     console.log(`Landing Velocity: (${landingVelocity.x.toFixed(2)}, ${landingVelocity.y.toFixed(2)}, ${landingVelocity.z.toFixed(2)}) m/s`);
@@ -328,11 +332,12 @@ export function simulateBouncePhase(landingPosition, landingVelocity, landingAng
     // Store initial landing angle for scrub calculations
     const initialLandingAngleRadians = landingAngleRadians;
 
-    const surfaceProps = getSurfaceProperties(surfaceType);
-    const coefficientOfRestitution = surfaceProps?.bounce || 0.4;
+    // Check initial landing surface for penalty area
+    const initialSurfaceProps = getSurfaceProperties(surfaceType);
+    const initialCoR = initialSurfaceProps?.bounce || 0.4;
 
     // Check for special value -1.0 (water/penalty area): stop all physics immediately
-    if (coefficientOfRestitution < 0) {
+    if (initialCoR < 0) {
         console.log("⚠️ Ball landed in penalty area (water/OOB), stopping all physics immediately");
         console.log("========== BOUNCE PHASE END (PENALTY) ==========\n");
         return {
@@ -363,11 +368,29 @@ export function simulateBouncePhase(landingPosition, landingVelocity, landingAng
         if (!inAir) {
             // ===== IMPACT EVENT =====
             bounceCount++;
+
+            // Check surface at bounce point (dynamic detection)
+            let currentSurfaceType = surfaceType; // Default to initial surface
+            if (holeLayout) {
+                const detectedSurface = getSurfaceTypeAtPoint({ x: position.x, z: position.z }, holeLayout);
+                if (detectedSurface) {
+                    currentSurfaceType = detectedSurface;
+                    if (bounceCount > 1 && detectedSurface !== surfaceType) {
+                        console.log(`🔄 Surface changed: ${surfaceType} → ${currentSurfaceType}`);
+                    }
+                }
+            }
+
+            // Get surface properties for this bounce
+            const surfaceProps = getSurfaceProperties(currentSurfaceType);
+            const coefficientOfRestitution = surfaceProps?.bounce || 0.4;
+
             const impactSpeed = Math.sqrt(velocity.x**2 + velocity.y**2 + velocity.z**2);
             const horizontalSpeed = Math.sqrt(velocity.x**2 + velocity.z**2);
             const backspinRPM = Math.abs(currentSpin.x) * (60 / (2 * Math.PI));
 
             console.log(`\n--- Bounce #${bounceCount} ---`);
+            console.log(`Surface: ${currentSurfaceType}`);
             console.log(`Impact Position: (${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)})`);
             console.log(`Impact Velocity: (${velocity.x.toFixed(2)}, ${velocity.y.toFixed(2)}, ${velocity.z.toFixed(2)}) m/s`);
             console.log(`Impact Speed: ${impactSpeed.toFixed(2)} m/s, Horizontal: ${horizontalSpeed.toFixed(2)} m/s`);
@@ -541,18 +564,22 @@ const SIDESPIN_ACCELERATION_FACTOR = 0.000004; // Acceleration per RPM (m/s^2 / 
 const BACKSPIN_DECAY_RATE_PER_SECOND = 1500; // RPM decay per second - Needs tuning!
 const SIDESPIN_DECAY_RATE_PER_SECOND = 2000; // RPM decay per second - Needs tuning!
 const MIN_SPIN_EFFECT_RPM = 200; // Spin below this RPM has no acceleration effect
+const SURFACE_CHECK_DISTANCE = 0.25; // meters - Check surface every 25cm
 
 /**
  * Simulates the ball rolling on the ground with friction and spin effects (backspin and sidespin).
+ * Surface type is checked dynamically every 25cm.
  *
  * @param {THREE.Vector3} initialPosition - Starting position of the ball (meters).
  * @param {THREE.Vector3} initialVelocity - Starting velocity of the ball (m/s).
- * @param {string} surfaceType - The type of surface the ball is on ('green', 'fairway', 'rough', etc.).
+ * @param {string} surfaceType - Initial surface type (used if holeLayout not provided).
  * @param {number} initialBackspinRPM - Initial backspin in RPM.
  * @param {number} [initialSideSpinRPM=0] - Initial sidespin in RPM.
+ * @param {number} startTime - Start time offset for animation
+ * @param {object} holeLayout - Hole layout data for dynamic surface detection (optional)
  * @returns {object} Result containing finalPosition (THREE.Vector3), isHoledOut (boolean), and rollTrajectoryPoints (array of THREE.Vector3).
  */
-export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType, initialBackspinRPM = 0, initialSideSpinRPM = 0, startTime = 0) {
+export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType, initialBackspinRPM = 0, initialSideSpinRPM = 0, startTime = 0, holeLayout = null) {
     console.log("\n========== ROLL PHASE START ==========");
     console.log(`Surface: ${surfaceType}`);
     console.log(`Initial Position: (${initialPosition.x.toFixed(2)}, ${initialPosition.y.toFixed(2)}, ${initialPosition.z.toFixed(2)})`);
@@ -613,6 +640,12 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
     // Track distance rolled
     let totalDistanceRolled = 0;
     let lastPosition = position.clone();
+    let distanceSinceLastSurfaceCheck = 0; // Track distance for surface checking
+
+    // Track current surface and friction
+    let currentSurfaceType = surfaceType;
+    let currentFrictionCoefficient = baseFrictionCoefficient;
+    let currentFrictionDecelerationMagnitude = frictionDecelerationMagnitude;
 
     // Sample logging every 0.5 seconds
     let nextLogTime = 0.5;
@@ -631,7 +664,7 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
 
         // --- Hole Interaction Check ---
         // Only check if on the green and hole position is known
-        if (surfaceType === 'green' && holePosition) {
+        if (currentSurfaceType === 'GREEN' && holePosition) {
             // Calculate 2D distance to hole center
             const dx = position.x - holePosition.x;
             const dz = position.z - holePosition.z;
@@ -666,14 +699,13 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
         if (Math.abs(currentBackspinRPM) < MIN_SPIN_EFFECT_RPM) currentBackspinRPM = 0;
         if (Math.abs(currentSideSpinRPM) < MIN_SPIN_EFFECT_RPM) currentSideSpinRPM = 0;
 
-
         // --- Calculate Acceleration Vectors ---
         const netAccelerationVec = new THREE.Vector3(0, 0, 0);
         const currentVelocityDir = velocity.clone().normalize();
 
         // 1. Friction Acceleration (Opposite current velocity)
         if (speed > 0.01) { // Only apply friction if moving
-             const frictionAccel = currentVelocityDir.clone().multiplyScalar(-frictionDecelerationMagnitude);
+             const frictionAccel = currentVelocityDir.clone().multiplyScalar(-currentFrictionDecelerationMagnitude);
              netAccelerationVec.add(frictionAccel);
         }
 
@@ -702,7 +734,7 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
         let shouldStop = false;
         if (speed > 0.01) {
             // Calculate deceleration from friction (always opposes current velocity)
-            const frictionDecelMagnitude = frictionDecelerationMagnitude; // Already calculated
+            const frictionDecelMagnitude = currentFrictionDecelerationMagnitude; // Use current surface friction
 
             // Calculate the component of backspin acceleration opposing the *current* velocity
             let opposingBackspinMagnitude = 0;
@@ -740,9 +772,28 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
         // Keep ball on the ground plane
         position.y = BALL_RADIUS;
 
-        // Track distance rolled
+        // Track distance traveled in this step
         const stepDistance = position.distanceTo(lastPosition);
         totalDistanceRolled += stepDistance;
+        distanceSinceLastSurfaceCheck += stepDistance;
+
+        // --- Check Surface Type Every 25cm ---
+        if (distanceSinceLastSurfaceCheck >= SURFACE_CHECK_DISTANCE && holeLayout) {
+            const detectedSurface = getSurfaceTypeAtPoint({ x: position.x, z: position.z }, holeLayout);
+            if (detectedSurface && detectedSurface !== currentSurfaceType) {
+                console.log(`🔄 Surface changed during roll: ${currentSurfaceType} → ${detectedSurface} at (${position.x.toFixed(2)}, ${position.z.toFixed(2)})`);
+                currentSurfaceType = detectedSurface;
+
+                // Update friction coefficients
+                const newSurfaceProps = getSurfaceProperties(currentSurfaceType);
+                currentFrictionCoefficient = newSurfaceProps?.friction || 0.1;
+                currentFrictionDecelerationMagnitude = currentFrictionCoefficient * gravity;
+
+                console.log(`New friction: ${currentFrictionCoefficient.toFixed(4)} (decel: ${currentFrictionDecelerationMagnitude.toFixed(3)} m/s²)`);
+            }
+            distanceSinceLastSurfaceCheck = 0; // Reset distance counter
+        }
+
         lastPosition = position.clone();
 
         // Store the current position for the roll trajectory with timestamp

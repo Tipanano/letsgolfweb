@@ -214,14 +214,15 @@ export function calculateFullSwingShot() {
             // Get spin state from flight simulation
             const landingSpinRadPerSec = flightSimulationResult.landingSpinRadPerSec || { x: 0, y: 0, z: 0 };
 
-            // Run bounce simulation (pass flight end time)
+            // Run bounce simulation (pass flight end time and holeLayout)
             const bounceResult = simulateBouncePhase(
                 landingPositionObj,
                 landingVelocity,
                 landingAngleRadians,
                 landingSpinRadPerSec,
                 landingSurfaceType,
-                flightSimulationResult.timeOfFlight // Start bounce time from end of flight
+                flightSimulationResult.timeOfFlight, // Start bounce time from end of flight
+                currentHoleLayout // Pass holeLayout for dynamic surface detection
             );
 
             // Use bounce results as starting point for roll
@@ -238,8 +239,8 @@ export function calculateFullSwingShot() {
             console.log(`Calc (Full): Roll start spin: Backspin ${rollStartBackspinRPM.toFixed(0)} RPM, Sidespin ${rollStartSidespinRPM.toFixed(0)} RPM`);
         }
 
-        // --- Run Ground Roll Simulation (pass bounce end time) ---
-        const groundRollResult = simulateGroundRoll(rollStartPosition, rollStartVelocity, landingSurfaceType, rollStartBackspinRPM, rollStartSidespinRPM, bounceEndTime);
+        // --- Run Ground Roll Simulation (pass bounce end time and holeLayout) ---
+        const groundRollResult = simulateGroundRoll(rollStartPosition, rollStartVelocity, landingSurfaceType, rollStartBackspinRPM, rollStartSidespinRPM, bounceEndTime, currentHoleLayout);
         finalPosition = groundRollResult.finalPosition; // Vector3
         isHoledOut = groundRollResult.isHoledOut;
 
@@ -533,14 +534,15 @@ export function calculateChipShot() {
             // Get spin state from flight simulation
             const landingSpinRadPerSec = flightSimulationResult.landingSpinRadPerSec || { x: 0, y: 0, z: 0 };
 
-            // Run bounce simulation (pass flight end time)
+            // Run bounce simulation (pass flight end time and holeLayout)
             const bounceResult = simulateBouncePhase(
                 landingPositionObj,
                 landingVelocity,
                 landingAngleRadians,
                 landingSpinRadPerSec,
                 landingSurfaceType,
-                flightSimulationResult.timeOfFlight // Start bounce time from end of flight
+                flightSimulationResult.timeOfFlight, // Start bounce time from end of flight
+                currentHoleLayout // Pass holeLayout for dynamic surface detection
             );
 
             // Use bounce results as starting point for roll
@@ -557,8 +559,8 @@ export function calculateChipShot() {
             console.log(`Calc (Chip): Roll start spin: Backspin ${rollStartBackspinRPM.toFixed(0)} RPM, Sidespin ${rollStartSidespinRPM.toFixed(0)} RPM`);
         }
 
-        // --- Run Ground Roll Simulation (pass bounce end time) ---
-        const groundRollResult = simulateGroundRoll(rollStartPosition, rollStartVelocity, landingSurfaceType, rollStartBackspinRPM, rollStartSidespinRPM, bounceEndTime);
+        // --- Run Ground Roll Simulation (pass bounce end time and holeLayout) ---
+        const groundRollResult = simulateGroundRoll(rollStartPosition, rollStartVelocity, landingSurfaceType, rollStartBackspinRPM, rollStartSidespinRPM, bounceEndTime, currentHoleLayout);
         finalPosition = groundRollResult.finalPosition;
         isHoledOut = groundRollResult.isHoledOut;
 
@@ -702,10 +704,19 @@ export function calculatePuttShot() {
     console.log(`Calc (Putt): Initial position: x=${initialPosition.x.toFixed(2)}, y=${initialPosition.y.toFixed(2)}, z=${initialPosition.z.toFixed(2)}`);
 
     // --- Run Ground Simulation ---
-    // Assume putts always start on the green
+    // Get current hole layout for surface detection
+    const currentHoleLayout = getCurrentHoleLayout();
+    // Detect initial surface (default to GREEN for putts)
+    let initialSurfaceType = 'GREEN';
+    if (currentHoleLayout) {
+        const detectedSurface = getSurfaceTypeAtPoint({ x: initialPosition.x, z: initialPosition.z }, currentHoleLayout);
+        if (detectedSurface) {
+            initialSurfaceType = detectedSurface;
+        }
+    }
     // Pass a low default backspin for putts (e.g., 100 RPM)
     // Putts start at time 0 (no flight phase)
-    const groundRollResult = simulateGroundRoll(initialPosition, initialVelocity, 'green', 100, 0, 0);
+    const groundRollResult = simulateGroundRoll(initialPosition, initialVelocity, initialSurfaceType, 100, 0, 0, currentHoleLayout);
     finalPosition = groundRollResult.finalPosition; // Vector3
     isHoledOut = groundRollResult.isHoledOut;
     const totalAnimationTime = groundRollResult.endTime || 0;
