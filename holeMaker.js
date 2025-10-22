@@ -555,14 +555,9 @@ const holeMaker = {
                         y: (mouseLocalPosition.y * polygonBaseSize.y) / size.y + polygon.pathOffset.y
                     };
 
-                    console.log('Before snap:', finalPointPosition);
                     // Apply snap to edges and boundary constraints
                     const snapped = self.snapToEdges(finalPointPosition.x, finalPointPosition.y);
-                    console.log('After snap:', snapped);
                     polygon.points[index] = snapped;
-
-                    polygon.dirty = true;
-                    self.canvas.requestRenderAll();
 
                     return true;
                 },
