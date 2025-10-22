@@ -247,10 +247,22 @@
                 <div class="input-group">
                     <label>Par</label>
                     <select id="holePar" onchange="holeMaker.onParChange()">
-                        <option value="3">Par 3 (max 300m)</option>
-                        <option value="4" selected>Par 4 (max 475m)</option>
-                        <option value="5">Par 5 (max 600m)</option>
+                        <option value="3">Par 3</option>
+                        <option value="4" selected>Par 4</option>
+                        <option value="5">Par 5</option>
                     </select>
+                </div>
+
+                <div class="input-group">
+                    <label>Canvas Width (meters)</label>
+                    <input type="number" id="canvasWidth" value="100" min="50" max="150" step="25" onchange="holeMaker.onCanvasSizeChange()">
+                    <div class="help-text">Min: 50m, Max: 150m</div>
+                </div>
+
+                <div class="input-group">
+                    <label>Canvas Height (meters)</label>
+                    <input type="number" id="canvasHeight" value="500" min="300" max="625" step="25" onchange="holeMaker.onCanvasSizeChange()">
+                    <div class="help-text" id="heightConstraints">Min: 300m, Max: 625m</div>
                 </div>
 
                 <div class="input-group">
@@ -261,6 +273,7 @@
 
                 <button class="btn btn-primary" onclick="holeMaker.toggleGrid()">Toggle Grid</button>
                 <button class="btn btn-primary" onclick="holeMaker.toggleGuides()">Toggle Guides</button>
+                <button class="btn btn-primary" onclick="holeMaker.toggleVertices()">Toggle All Vertices</button>
                 <button class="btn btn-primary" onclick="holeMaker.clearCanvas()">Clear All</button>
 
                 <div class="stats">
@@ -282,17 +295,27 @@
                 </div>
                 <div id="canvas-container">
                     <canvas id="canvas"></canvas>
-                    <div class="grid-info">1 grid square = 50 meters</div>
+                    <div class="grid-info">1 grid square = 25 meters</div>
                 </div>
             </div>
 
             <!-- Right Panel: Surfaces & Export -->
             <div class="panel">
+                <h2>📍 Tee Box</h2>
+                <button class="btn btn-success" onclick="holeMaker.toggleTeeBoxPlacement()">
+                    <span id="teeBoxModeText">Place Tee Box</span>
+                </button>
+                <div class="help-text">Click to place a 10m×10m tee box</div>
+
+                <h2>🚩 Flag Positions</h2>
+                <button class="btn btn-success" onclick="holeMaker.toggleFlagPlacement()">
+                    <span id="flagModeText">Place Flag Position</span>
+                </button>
+                <div class="help-text">Click on green to place flag (max 4)</div>
+                <div id="flagCount" class="help-text">Flags placed: 0/4</div>
+
                 <h2>🏞️ Surface Types</h2>
 
-                <button class="surface-btn surface-tee" data-surface="tee" onclick="holeMaker.selectSurface('tee', event)">
-                    Tee Box
-                </button>
                 <button class="surface-btn surface-fairway" data-surface="fairway" onclick="holeMaker.selectSurface('fairway', event)">
                     Fairway
                 </button>

@@ -4,18 +4,19 @@
 
 // Par-based canvas dimensions
 const PAR_CONFIGS = {
-    3: { width: 200, height: 300 },  // Par 3: max 300m
-    4: { width: 200, height: 475 },  // Par 4: max 475m
-    5: { width: 200, height: 600 }   // Par 5: max 600m
+    3: { width: 100, minHeight: 125, maxHeight: 325 },  // Par 3: min 125m, max 325m
+    4: { width: 100, minHeight: 300, maxHeight: 500 },  // Par 4: min 300m, max 500m
+    5: { width: 100, minHeight: 500, maxHeight: 625 }   // Par 5: min 500m, max 625m
 };
 
-let CANVAS_WIDTH = 200;
-let CANVAS_HEIGHT = 475; // Default to par 4
-const GRID_SIZE = 50; // meters per grid square
+let CANVAS_WIDTH = 100;
+let CANVAS_HEIGHT = 500; // Default to par 4
+const GRID_SIZE = 25; // meters per grid square
 
 // Suggested zones (visual guides) - dynamically calculated based on canvas height
 let TEE_ZONE_START = 425; // Bottom 50m for tee
-const GREEN_ZONE_END = 100; // Top 100m for green (y=0 to y=100)
+let GREEN_ZONE_START = 0; // Top of green zone (y coordinate)
+let GREEN_ZONE_END = 225; // Bottom of green zone (y coordinate)
 
 const SURFACE_COLORS = {
     tee: '#ecf0f1',
@@ -36,10 +37,16 @@ const holeMaker = {
     isDrawing: false,
     showGrid: true,
     showGuides: true,
+    showVertices: true,
     selectedShape: null,
     activePolygon: null,  // Our own selection tracking, bypassing Fabric
     objects: [], // Array to store trees/bushes
     objectPlacementMode: false,
+    teeBoxPlacementMode: false,
+    flagPlacementMode: false,
+    teeBox: null, // Store the tee box object
+    flagPositions: [], // Store flag positions (max 4)
+    vertexMarkers: [], // Store vertex marker circles
 
     init() {
         // Set initial dimensions based on par 4
@@ -72,15 +79,20 @@ const holeMaker = {
         this.canvas.on('mouse:dblclick', (e) => this.onDoubleClick(e));
         this.canvas.on('selection:created', (e) => this.onSelectionChange(e));
         this.canvas.on('selection:updated', (e) => this.onSelectionChange(e));
+        this.canvas.on('object:moving', (e) => this.updateVertexMarkers());
+        this.canvas.on('object:modified', (e) => {
+            // This fires when moving the whole shape or editing vertices is complete
+            this.onObjectMoved(e);
+        });
         this.canvas.on('selection:cleared', (e) => {
             this.selectedShape = null;
-            // If we have an activePolygon, re-select it immediately
-            if (this.activePolygon) {
-                setTimeout(() => {
-                    this.canvas.setActiveObject(this.activePolygon);
-                    this.canvas.requestRenderAll();
-                }, 0);
-            }
+            // Disabled re-selection to prevent interference with smooth dragging
+            // if (this.activePolygon && !this.canvas._currentTransform) {
+            //     setTimeout(() => {
+            //         this.canvas.setActiveObject(this.activePolygon);
+            //         this.canvas.requestRenderAll();
+            //     }, 0);
+            // }
         });
 
         // Right-click to close polygon
@@ -159,20 +171,20 @@ const holeMaker = {
         const teeLabel = new fabric.Text('TEE ZONE', {
             left: (CANVAS_WIDTH / 2) * scale,
             top: (TEE_ZONE_START + 20) * scale,
-            fontSize: 16 * scale,
-            fill: '#ecf0f1',
+            fontSize: 7 * scale,
+            fill: 'rgba(236, 240, 241, 0.5)',
             selectable: false,
             evented: false,
             originX: 'center'
         });
         this.canvas.add(teeLabel);
 
-        // Green zone (top 100m) - light teal overlay
+        // Green zone - light teal overlay
         const greenZone = new fabric.Rect({
             left: 0,
-            top: 0,
+            top: GREEN_ZONE_START * scale,
             width: CANVAS_WIDTH * scale,
-            height: GREEN_ZONE_END * scale,
+            height: (GREEN_ZONE_END - GREEN_ZONE_START) * scale,
             fill: 'rgba(22, 160, 133, 0.1)',
             selectable: false,
             evented: false
@@ -181,25 +193,25 @@ const holeMaker = {
 
         const greenLabel = new fabric.Text('GREEN ZONE', {
             left: (CANVAS_WIDTH / 2) * scale,
-            top: 50 * scale,
-            fontSize: 16 * scale,
-            fill: '#16a085',
+            top: (GREEN_ZONE_START + (GREEN_ZONE_END - GREEN_ZONE_START) / 2) * scale,
+            fontSize: 7 * scale,
+            fill: 'rgba(22, 160, 133, 0.5)',
             selectable: false,
             evented: false,
             originX: 'center'
         });
         this.canvas.add(greenLabel);
 
-        // Distance markers on the side
-        const maxDist = Math.ceil(CANVAS_HEIGHT / 100) * 100;
-        for (let dist = 0; dist <= maxDist; dist += 100) {
+        // Distance markers on the side (every 25m)
+        const maxDist = Math.ceil(CANVAS_HEIGHT / 25) * 25;
+        for (let dist = 0; dist <= maxDist; dist += 25) {
             if (dist > CANVAS_HEIGHT) break;
             const y = (CANVAS_HEIGHT - dist) * scale; // Flip Y (0 at top, bottom at height)
             const marker = new fabric.Text(`${dist}m`, {
-                left: 5 * scale,
-                top: y - (8 * scale),
-                fontSize: 12 * scale,
-                fill: '#95a5a6',
+                left: 3 * scale,
+                top: y - (5 * scale),
+                fontSize: 6 * scale,
+                fill: 'rgba(149, 165, 166, 0.6)',
                 selectable: false,
                 evented: false
             });
@@ -217,6 +229,73 @@ const holeMaker = {
         this.redrawAll();
     },
 
+    toggleVertices() {
+        this.showVertices = !this.showVertices;
+        this.updateVertexMarkers();
+    },
+
+    updateVertexMarkers() {
+        // Remove existing vertex markers
+        this.vertexMarkers.forEach(marker => this.canvas.remove(marker));
+        this.vertexMarkers = [];
+
+        if (!this.showVertices) {
+            this.canvas.requestRenderAll();
+            return;
+        }
+
+        // Add vertex markers for all polygons
+        this.shapes.forEach(shape => {
+            if (shape.polygon && shape.polygon.points) {
+                shape.polygon.points.forEach(point => {
+                    // Convert to absolute canvas coordinates
+                    const absPoint = fabric.util.transformPoint(
+                        { x: point.x - shape.polygon.pathOffset.x, y: point.y - shape.polygon.pathOffset.y },
+                        shape.polygon.calcTransformMatrix()
+                    );
+
+                    const marker = new fabric.Circle({
+                        left: absPoint.x,
+                        top: absPoint.y,
+                        radius: 3,
+                        fill: '#e74c3c',
+                        stroke: '#c0392b',
+                        strokeWidth: 1,
+                        originX: 'center',
+                        originY: 'center',
+                        selectable: false,
+                        evented: true,
+                        hoverCursor: 'pointer'
+                    });
+
+                    // Store reference to parent polygon
+                    marker.parentPolygon = shape.polygon;
+
+                    // Add click handler to select the parent polygon
+                    marker.on('mousedown', (options) => {
+                        // Stop event propagation to prevent Fabric's selection box
+                        if (options.e) {
+                            options.e.stopPropagation();
+                            options.e.preventDefault();
+                        }
+
+                        this.activePolygon = shape.polygon;
+                        this.canvas.setActiveObject(shape.polygon);
+                        this.canvas.requestRenderAll();
+
+                        // Return false to prevent further event handling
+                        return false;
+                    });
+
+                    this.vertexMarkers.push(marker);
+                    this.canvas.add(marker);
+                });
+            }
+        });
+
+        this.canvas.requestRenderAll();
+    },
+
     redrawAll() {
         this.canvas.clear();
         if (this.showGrid) {
@@ -232,11 +311,28 @@ const holeMaker = {
         this.canvas.renderAll();
     },
 
-    updateCanvasDimensions(par) {
+    updateCanvasDimensions(par, height = null, width = null) {
         const config = PAR_CONFIGS[par];
-        CANVAS_WIDTH = config.width;
-        CANVAS_HEIGHT = config.height;
+        CANVAS_WIDTH = width || config.width;
+        CANVAS_HEIGHT = height || config.maxHeight; // Use provided height or max
         TEE_ZONE_START = CANVAS_HEIGHT - 50; // Always bottom 50m
+
+        // Calculate green zone proportionally based on actual canvas height
+        // Green zone should be in the top portion, accounting for par requirements
+        const maxCanvasHeight = config.maxHeight;
+        if (par === 3) {
+            // Par 3: green at 100m-300m from tee
+            GREEN_ZONE_START = Math.max(0, CANVAS_HEIGHT - 300);
+            GREEN_ZONE_END = Math.max(GREEN_ZONE_START + 25, CANVAS_HEIGHT - 100);
+        } else if (par === 4) {
+            // Par 4: green at 250m-475m from tee
+            GREEN_ZONE_START = Math.max(0, CANVAS_HEIGHT - 475);
+            GREEN_ZONE_END = Math.max(GREEN_ZONE_START + 25, CANVAS_HEIGHT - 250);
+        } else { // par === 5
+            // Par 5: green at 375m-600m from tee
+            GREEN_ZONE_START = Math.max(0, CANVAS_HEIGHT - 600);
+            GREEN_ZONE_END = Math.max(GREEN_ZONE_START + 25, CANVAS_HEIGHT - 375);
+        }
 
         // Update UI
         document.getElementById('canvasDimensions').innerHTML =
@@ -247,15 +343,62 @@ const holeMaker = {
 
     onParChange() {
         const par = parseInt(document.getElementById('holePar').value);
+        const config = PAR_CONFIGS[par];
+
+        // Update height input constraints
+        const heightInput = document.getElementById('canvasHeight');
+        heightInput.min = config.minHeight;
+        heightInput.max = config.maxHeight;
+        heightInput.value = config.maxHeight; // Reset to max on par change
+
+        document.getElementById('heightConstraints').textContent =
+            `Min: ${config.minHeight}m, Max: ${config.maxHeight}m`;
 
         // Update dimensions
-        this.updateCanvasDimensions(par);
+        this.updateCanvasDimensions(par, config.maxHeight);
 
         // Recalculate scale
         const containerWidth = document.getElementById('canvas-container').clientWidth - 24;
         this.scale = containerWidth / CANVAS_WIDTH;
 
         // Resize canvas
+        this.canvas.setWidth(containerWidth);
+        this.canvas.setHeight(CANVAS_HEIGHT * this.scale);
+
+        // Redraw everything
+        this.redrawAll();
+    },
+
+    onCanvasSizeChange() {
+        const par = parseInt(document.getElementById('holePar').value);
+        const config = PAR_CONFIGS[par];
+
+        // Get and constrain width (50m - 150m)
+        let width = parseInt(document.getElementById('canvasWidth').value);
+        if (width < 50) {
+            width = 50;
+            document.getElementById('canvasWidth').value = width;
+        } else if (width > 150) {
+            width = 150;
+            document.getElementById('canvasWidth').value = width;
+        }
+
+        // Get and constrain height
+        let height = parseInt(document.getElementById('canvasHeight').value);
+        if (height < config.minHeight) {
+            height = config.minHeight;
+            document.getElementById('canvasHeight').value = height;
+        } else if (height > config.maxHeight) {
+            height = config.maxHeight;
+            document.getElementById('canvasHeight').value = height;
+        }
+
+        // Update dimensions with new width and height
+        this.updateCanvasDimensions(par, height, width);
+
+        // Recalculate scale
+        const containerWidth = document.getElementById('canvas-container').clientWidth - 24;
+        this.scale = containerWidth / CANVAS_WIDTH;
         this.canvas.setWidth(containerWidth);
         this.canvas.setHeight(CANVAS_HEIGHT * this.scale);
 
@@ -282,10 +425,14 @@ const holeMaker = {
             const btn = document.querySelector(`.surface-btn[data-surface="${type}"]`);
             if (btn) btn.classList.add('active');
         }
+
+        // Change cursor to indicate drawing mode
+        this.canvas.defaultCursor = 'crosshair';
+        this.canvas.hoverCursor = 'crosshair';
     },
 
     snapToEdges(x, y) {
-        const SNAP_DISTANCE = 5 * this.scale; // 5 meters snap threshold
+        const SNAP_DISTANCE = 2.5 * this.scale; // 2.5 meters snap threshold
         const canvasWidth = this.canvas.width;
         const canvasHeight = this.canvas.height;
 
@@ -303,34 +450,190 @@ const holeMaker = {
         if (Math.abs(snappedY - canvasHeight) < SNAP_DISTANCE) snappedY = canvasHeight;
 
         // Snap to vertices of other shapes (only if within threshold)
+        // DISABLED - causes performance issues during dragging
+        // let minDistance = SNAP_DISTANCE;
+        // let snapVertex = null;
+
+        // this.shapes.forEach(shape => {
+        //     if (shape.polygon && shape.polygon.points) {
+        //         shape.polygon.points.forEach(point => {
+        //             const dx = point.x - snappedX;
+        //             const dy = point.y - snappedY;
+        //             const distance = Math.sqrt(dx * dx + dy * dy);
+
+        //             if (distance < minDistance) {
+        //                 minDistance = distance;
+        //                 snapVertex = { x: point.x, y: point.y };
+        //             }
+        //         });
+        //     }
+        // });
+
+        // // Only apply vertex snap if we found one within threshold
+        // if (snapVertex && minDistance < SNAP_DISTANCE) {
+        //     snappedX = snapVertex.x;
+        //     snappedY = snapVertex.y;
+        // }
+
+        return { x: snappedX, y: snappedY };
+    },
+
+    snapToVertices(x, y) {
+        // First snap to edges
+        const edgeSnapped = this.snapToEdges(x, y);
+
+        // Then check for nearby vertices
+        const SNAP_DISTANCE = 2.5 * this.scale;
         let minDistance = SNAP_DISTANCE;
         let snapVertex = null;
 
         this.shapes.forEach(shape => {
             if (shape.polygon && shape.polygon.points) {
                 shape.polygon.points.forEach(point => {
-                    const dx = point.x - snappedX;
-                    const dy = point.y - snappedY;
+                    // Convert to absolute canvas coordinates
+                    const absPoint = fabric.util.transformPoint(
+                        { x: point.x - shape.polygon.pathOffset.x, y: point.y - shape.polygon.pathOffset.y },
+                        shape.polygon.calcTransformMatrix()
+                    );
+
+                    const dx = absPoint.x - edgeSnapped.x;
+                    const dy = absPoint.y - edgeSnapped.y;
                     const distance = Math.sqrt(dx * dx + dy * dy);
 
                     if (distance < minDistance) {
                         minDistance = distance;
-                        snapVertex = { x: point.x, y: point.y };
+                        snapVertex = { x: absPoint.x, y: absPoint.y };
                     }
                 });
             }
         });
 
-        // Only apply vertex snap if we found one within threshold
+        // Return vertex snap if found, otherwise edge snap
         if (snapVertex && minDistance < SNAP_DISTANCE) {
-            snappedX = snapVertex.x;
-            snappedY = snapVertex.y;
+            return snapVertex;
+        }
+        return edgeSnapped;
+    },
+
+    onObjectMoved(e) {
+        const polygon = e.target;
+        console.log('onObjectMoved called, target:', polygon, 'type:', polygon?.type);
+        if (!polygon || polygon.type !== 'polygon') {
+            this.updateVertexMarkers();
+            return;
         }
 
-        return { x: snappedX, y: snappedY };
+        const SNAP_DISTANCE = 2.5 * this.scale;
+        let snapped = false;
+        console.log('Checking snapping, SNAP_DISTANCE:', SNAP_DISTANCE, 'vertices:', polygon.points.length);
+
+        // Check each vertex for snapping
+        polygon.points.forEach((point, index) => {
+            // Convert to absolute canvas coordinates
+            const absPoint = fabric.util.transformPoint(
+                { x: point.x - polygon.pathOffset.x, y: point.y - polygon.pathOffset.y },
+                polygon.calcTransformMatrix()
+            );
+
+            // Check snap to edges
+            const canvasWidth = this.canvas.width;
+            const canvasHeight = this.canvas.height;
+            let snapX = absPoint.x;
+            let snapY = absPoint.y;
+
+            console.log(`Vertex ${index} at (${absPoint.x}, ${absPoint.y}), canvas: ${canvasWidth}x${canvasHeight}`);
+
+            if (Math.abs(snapX) < SNAP_DISTANCE) {
+                console.log('  Snapping to left edge');
+                snapX = 0;
+            }
+            if (Math.abs(snapX - canvasWidth) < SNAP_DISTANCE) {
+                console.log('  Snapping to right edge');
+                snapX = canvasWidth;
+            }
+            if (Math.abs(snapY) < SNAP_DISTANCE) {
+                console.log('  Snapping to top edge');
+                snapY = 0;
+            }
+            if (Math.abs(snapY - canvasHeight) < SNAP_DISTANCE) {
+                console.log('  Snapping to bottom edge');
+                snapY = canvasHeight;
+            }
+
+            // Check snap to other vertices
+            let minDistance = SNAP_DISTANCE;
+            let snapVertex = null;
+
+            this.shapes.forEach(shape => {
+                if (shape.polygon && shape.polygon !== polygon && shape.polygon.points) {
+                    shape.polygon.points.forEach(otherPoint => {
+                        const absOtherPoint = fabric.util.transformPoint(
+                            { x: otherPoint.x - shape.polygon.pathOffset.x, y: otherPoint.y - shape.polygon.pathOffset.y },
+                            shape.polygon.calcTransformMatrix()
+                        );
+
+                        const dx = absOtherPoint.x - snapX;
+                        const dy = absOtherPoint.y - snapY;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+
+                        if (distance < minDistance) {
+                            minDistance = distance;
+                            snapVertex = absOtherPoint;
+                        }
+                    });
+                }
+            });
+
+            // Apply snap if found
+            if (snapVertex && minDistance < SNAP_DISTANCE) {
+                console.log(`  Snapping to vertex at (${snapVertex.x}, ${snapVertex.y}), distance: ${minDistance}`);
+                snapX = snapVertex.x;
+                snapY = snapVertex.y;
+                snapped = true;
+            } else if (snapX !== absPoint.x || snapY !== absPoint.y) {
+                console.log(`  Edge snap applied`);
+                snapped = true;
+            }
+
+            // Convert back to local coordinates if snapped
+            if (snapped) {
+                const invertedTransform = fabric.util.invertTransform(polygon.calcTransformMatrix());
+                const localSnapPoint = fabric.util.transformPoint({ x: snapX, y: snapY }, invertedTransform);
+                polygon.points[index] = {
+                    x: localSnapPoint.x + polygon.pathOffset.x,
+                    y: localSnapPoint.y + polygon.pathOffset.y
+                };
+            }
+        });
+
+        if (snapped) {
+            console.log('Snapping applied, updating polygon');
+            polygon._calcDimensions();
+            polygon.setCoords();
+            polygon.dirty = true;
+            this.canvas.requestRenderAll();
+        } else {
+            console.log('No snapping occurred');
+        }
+
+        this.updateVertexMarkers();
     },
 
     onMouseDown(e) {
+        // Handle tee box placement mode
+        if (this.teeBoxPlacementMode) {
+            const pointer = this.canvas.getPointer(e.e);
+            this.placeTeeBox(pointer.x, pointer.y);
+            return;
+        }
+
+        // Handle flag placement mode
+        if (this.flagPlacementMode) {
+            const pointer = this.canvas.getPointer(e.e);
+            this.placeFlag(pointer.x, pointer.y);
+            return;
+        }
+
         // Handle object placement mode
         if (this.objectPlacementMode) {
             const pointer = this.canvas.getPointer(e.e);
@@ -364,8 +667,8 @@ const holeMaker = {
 
         const pointer = this.canvas.getPointer(e.e);
 
-        // Constrain to canvas bounds and snap to edges
-        const snappedPoint = this.snapToEdges(pointer.x, pointer.y);
+        // Constrain to canvas bounds, snap to edges, and snap to vertices
+        const snappedPoint = this.snapToVertices(pointer.x, pointer.y);
         this.currentPoints.push(snappedPoint);
 
         // Draw point marker
@@ -500,9 +803,14 @@ const holeMaker = {
             btn.classList.remove('active');
         });
 
+        // Reset cursor to default
+        this.canvas.defaultCursor = 'default';
+        this.canvas.hoverCursor = 'move';
+
         // Update layers list and recalculate hole length
         this.updateLayersList();
         this.calculateHoleLength();
+        this.updateVertexMarkers();
 
         this.canvas.renderAll();
     },
@@ -521,6 +829,16 @@ const holeMaker = {
         // Reset drawing state
         this.isDrawing = false;
         this.currentPoints = [];
+        this.currentSurface = null;
+
+        // Deselect surface buttons
+        document.querySelectorAll('.surface-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+
+        // Reset cursor to default
+        this.canvas.defaultCursor = 'default';
+        this.canvas.hoverCursor = 'move';
 
         // Redraw grid and guides
         this.redrawAll();
@@ -555,19 +873,100 @@ const holeMaker = {
                         y: (mouseLocalPosition.y * polygonBaseSize.y) / size.y + polygon.pathOffset.y
                     };
 
-                    console.log('Before snap:', finalPointPosition);
-                    // Apply snap to edges and boundary constraints
-                    const snapped = self.snapToEdges(finalPointPosition.x, finalPointPosition.y);
-                    console.log('After snap:', snapped);
-                    polygon.points[index] = snapped;
+                    // Convert to absolute canvas coordinates for snapping
+                    const absPoint = fabric.util.transformPoint(
+                        { x: finalPointPosition.x - polygon.pathOffset.x, y: finalPointPosition.y - polygon.pathOffset.y },
+                        polygon.calcTransformMatrix()
+                    );
 
-                    polygon.dirty = true;
-                    self.canvas.requestRenderAll();
+                    // Apply snap to edges and boundary constraints in absolute coordinates
+                    const snappedAbs = self.snapToEdges(absPoint.x, absPoint.y);
+
+                    // Convert back to local polygon coordinates
+                    const invertedTransform = fabric.util.invertTransform(polygon.calcTransformMatrix());
+                    const snappedLocal = fabric.util.transformPoint(snappedAbs, invertedTransform);
+                    polygon.points[index] = {
+                        x: snappedLocal.x + polygon.pathOffset.x,
+                        y: snappedLocal.y + polygon.pathOffset.y
+                    };
 
                     return true;
                 },
                 mouseUpHandler: (eventData, transform) => {
                     const polygon = transform.target;
+
+                    // Snap to nearby vertices after drag completes
+                    // We need to compare in absolute canvas coordinates, not local polygon coordinates
+                    const SNAP_DISTANCE = 2.5 * self.scale;
+                    const point = polygon.points[index];
+
+                    // Convert current point to absolute canvas coordinates
+                    const absPoint = fabric.util.transformPoint(
+                        { x: point.x - polygon.pathOffset.x, y: point.y - polygon.pathOffset.y },
+                        polygon.calcTransformMatrix()
+                    );
+
+                    let minDistance = SNAP_DISTANCE;
+                    let snapToAbsPoint = null;
+
+                    self.shapes.forEach(shape => {
+                        if (shape.polygon && shape.polygon !== polygon && shape.polygon.points) {
+                            shape.polygon.points.forEach(otherPoint => {
+                                // Convert other point to absolute canvas coordinates
+                                const absOtherPoint = fabric.util.transformPoint(
+                                    { x: otherPoint.x - shape.polygon.pathOffset.x, y: otherPoint.y - shape.polygon.pathOffset.y },
+                                    shape.polygon.calcTransformMatrix()
+                                );
+
+                                const dx = absOtherPoint.x - absPoint.x;
+                                const dy = absOtherPoint.y - absPoint.y;
+                                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                                if (distance < minDistance) {
+                                    minDistance = distance;
+                                    snapToAbsPoint = absOtherPoint; // Store the absolute point
+                                }
+                            });
+                        }
+                    });
+
+                    // Apply snap if found nearby vertex
+                    // Convert absolute snap point back to current polygon's local coordinates
+                    if (snapToAbsPoint && minDistance < SNAP_DISTANCE) {
+                        const invertedTransform = fabric.util.invertTransform(polygon.calcTransformMatrix());
+                        const localSnapPoint = fabric.util.transformPoint(snapToAbsPoint, invertedTransform);
+                        polygon.points[index] = {
+                            x: localSnapPoint.x + polygon.pathOffset.x,
+                            y: localSnapPoint.y + polygon.pathOffset.y
+                        };
+                    }
+
+                    // Remove duplicate points (same coordinates)
+                    const EPSILON = 0.001; // Small tolerance for floating point comparison
+                    const uniquePoints = [];
+                    polygon.points.forEach((point, i) => {
+                        const isDuplicate = uniquePoints.some(uniquePoint =>
+                            Math.abs(uniquePoint.x - point.x) < EPSILON &&
+                            Math.abs(uniquePoint.y - point.y) < EPSILON
+                        );
+                        if (!isDuplicate) {
+                            uniquePoints.push(point);
+                        }
+                    });
+
+                    // Only update if we removed duplicates and still have at least 3 points
+                    if (uniquePoints.length !== polygon.points.length && uniquePoints.length >= 3) {
+                        polygon.points = uniquePoints;
+
+                        // Update stored points in shapes array
+                        const shapeData = self.shapes.find(s => s.polygon === polygon);
+                        if (shapeData) {
+                            shapeData.points = JSON.parse(JSON.stringify(uniquePoints));
+                        }
+
+                        // Regenerate controls with new point count
+                        self.enablePolygonEditing(polygon);
+                    }
 
                     // Force polygon to recalculate its path offset and dimensions
                     polygon._calcDimensions();
@@ -580,6 +979,9 @@ const holeMaker = {
                     if (shapeData && (shapeData.type === 'tee' || shapeData.type === 'green')) {
                         self.calculateHoleLength();
                     }
+
+                    // Update vertex markers if visible
+                    self.updateVertexMarkers();
 
                     return true;
                 },
@@ -625,6 +1027,7 @@ const holeMaker = {
 
         // Re-enable editing to update controls
         this.enablePolygonEditing(polygon);
+        this.updateVertexMarkers();
         this.canvas.requestRenderAll();
     },
 
@@ -650,10 +1053,186 @@ const holeMaker = {
         return Math.sqrt(distX * distX + distY * distY);
     },
 
+    toggleTeeBoxPlacement() {
+        // Cancel any active drawing
+        if (this.isDrawing && !this.teeBoxPlacementMode) {
+            this.cancelDrawing();
+        }
+
+        // Turn off object placement mode if active
+        if (this.objectPlacementMode) {
+            this.toggleObjectPlacementMode();
+        }
+
+        this.teeBoxPlacementMode = !this.teeBoxPlacementMode;
+        const btn = document.getElementById('teeBoxModeText');
+
+        if (this.teeBoxPlacementMode) {
+            btn.textContent = 'Cancel';
+            btn.parentElement.style.background = '#e74c3c';
+            this.canvas.defaultCursor = 'crosshair';
+        } else {
+            btn.textContent = 'Place Tee Box';
+            btn.parentElement.style.background = '';
+            this.canvas.defaultCursor = 'default';
+        }
+    },
+
+    placeTeeBox(x, y) {
+        // Remove existing tee box if any
+        if (this.teeBox && this.teeBox.visual) {
+            this.canvas.remove(this.teeBox.visual);
+        }
+
+        // Convert from scaled pixels to meters (flip y-axis)
+        const metersX = x / this.scale;
+        const metersZ = CANVAS_HEIGHT - (y / this.scale);
+
+        // Create 10m x 10m tee box (rectangle)
+        const teeBoxSize = 10;
+        const rect = new fabric.Rect({
+            left: x,
+            top: y,
+            width: teeBoxSize * this.scale,
+            height: teeBoxSize * this.scale,
+            fill: SURFACE_COLORS.tee,
+            stroke: '#bdc3c7',
+            strokeWidth: 2,
+            opacity: 0.8,
+            originX: 'center',
+            originY: 'center',
+            selectable: true,
+            hasControls: true,
+            hasBorders: true,
+            borderColor: '#3498db',
+            lockRotation: true
+        });
+
+        this.teeBox = {
+            x: metersX,
+            z: metersZ,
+            width: teeBoxSize,
+            height: teeBoxSize,
+            visual: rect
+        };
+
+        this.canvas.add(rect);
+
+        // Turn off placement mode after placing
+        this.teeBoxPlacementMode = false;
+        document.getElementById('teeBoxModeText').textContent = 'Place Tee Box';
+        document.getElementById('teeBoxModeText').parentElement.style.background = '';
+        this.canvas.defaultCursor = 'default';
+
+        this.calculateHoleLength();
+    },
+
+    toggleFlagPlacement() {
+        // Cancel any active drawing
+        if (this.isDrawing && !this.flagPlacementMode) {
+            this.cancelDrawing();
+        }
+
+        // Turn off other placement modes
+        if (this.teeBoxPlacementMode) {
+            this.toggleTeeBoxPlacement();
+        }
+        if (this.objectPlacementMode) {
+            this.toggleObjectPlacementMode();
+        }
+
+        this.flagPlacementMode = !this.flagPlacementMode;
+        const btn = document.getElementById('flagModeText');
+
+        if (this.flagPlacementMode) {
+            btn.textContent = 'Cancel';
+            btn.parentElement.style.background = '#e74c3c';
+            this.canvas.defaultCursor = 'crosshair';
+        } else {
+            btn.textContent = 'Place Flag Position';
+            btn.parentElement.style.background = '';
+            this.canvas.defaultCursor = 'default';
+        }
+    },
+
+    placeFlag(x, y) {
+        // Check max limit
+        if (this.flagPositions.length >= 4) {
+            alert('Maximum 4 flag positions allowed');
+            this.flagPlacementMode = false;
+            document.getElementById('flagModeText').textContent = 'Place Flag Position';
+            document.getElementById('flagModeText').parentElement.style.background = '';
+            this.canvas.defaultCursor = 'default';
+            return;
+        }
+
+        // Convert from scaled pixels to meters (flip y-axis)
+        const metersX = x / this.scale;
+        const metersZ = CANVAS_HEIGHT - (y / this.scale);
+
+        // Create flag marker (small red circle with number)
+        const flagNumber = this.flagPositions.length + 1;
+
+        const circle = new fabric.Circle({
+            left: x,
+            top: y,
+            radius: 4,
+            fill: '#e74c3c',
+            stroke: '#c0392b',
+            strokeWidth: 2,
+            originX: 'center',
+            originY: 'center',
+            selectable: true,
+            hasControls: false,
+            hasBorders: true,
+            borderColor: '#3498db'
+        });
+
+        const text = new fabric.Text(flagNumber.toString(), {
+            left: x,
+            top: y,
+            fontSize: 10,
+            fill: '#fff',
+            originX: 'center',
+            originY: 'center',
+            selectable: false,
+            evented: false
+        });
+
+        const group = new fabric.Group([circle, text], {
+            left: x,
+            top: y,
+            selectable: true,
+            hasControls: false,
+            hasBorders: true
+        });
+
+        this.flagPositions.push({
+            number: flagNumber,
+            x: metersX,
+            z: metersZ,
+            visual: group
+        });
+
+        this.canvas.add(group);
+        this.updateFlagCount();
+
+        // Don't auto-exit flag placement mode so user can place multiple
+    },
+
+    updateFlagCount() {
+        document.getElementById('flagCount').textContent = `Flags placed: ${this.flagPositions.length}/4`;
+    },
+
     toggleObjectPlacementMode() {
         // Cancel any active drawing when entering object placement mode
         if (this.isDrawing && !this.objectPlacementMode) {
             this.cancelDrawing();
+        }
+
+        // Turn off tee box placement mode if active
+        if (this.teeBoxPlacementMode) {
+            this.toggleTeeBoxPlacement();
         }
 
         this.objectPlacementMode = !this.objectPlacementMode;
@@ -674,9 +1253,9 @@ const holeMaker = {
         const type = document.getElementById('objectType').value;
         const size = document.getElementById('objectSize').value;
 
-        // Convert from scaled pixels to meters
+        // Convert from scaled pixels to meters (flip y-axis)
         const metersX = x / this.scale;
-        const metersZ = y / this.scale;
+        const metersZ = CANVAS_HEIGHT - (y / this.scale);
 
         // Create visual marker
         const color = type === 'tree' ? '#2d5016' : '#3a6b1f';
@@ -749,36 +1328,32 @@ const holeMaker = {
     },
 
     calculateHoleLength() {
-        const tee = this.shapes.find(s => s.type === 'tee');
         const green = this.shapes.find(s => s.type === 'green');
 
-        if (!tee || !green) {
+        if (!this.teeBox || !green) {
             document.getElementById('holeLength').value = '-';
             return;
         }
 
-        // Calculate tee center (convert from scaled pixels to meters)
-        const teePoints = tee.polygon.points;
-        const teeMinX = Math.min(...teePoints.map(p => p.x)) / this.scale;
-        const teeMaxX = Math.max(...teePoints.map(p => p.x)) / this.scale;
-        const teeMinY = Math.min(...teePoints.map(p => p.y)) / this.scale;
-        const teeMaxY = Math.max(...teePoints.map(p => p.y)) / this.scale;
-        const teeCenterX = (teeMinX + teeMaxX) / 2;
-        const teeCenterY = (teeMinY + teeMaxY) / 2;
+        // Tee center is already stored in meters (with flipped z-axis) in this.teeBox
+        const teeCenterX = this.teeBox.x;
+        const teeCenterZ = this.teeBox.z;
 
         // Calculate green center (flag position)
+        // Green points are in canvas coordinates, need to flip y-axis when converting to meters
         const greenPoints = green.polygon.points;
         const greenMinX = Math.min(...greenPoints.map(p => p.x)) / this.scale;
         const greenMaxX = Math.max(...greenPoints.map(p => p.x)) / this.scale;
         const greenMinY = Math.min(...greenPoints.map(p => p.y)) / this.scale;
         const greenMaxY = Math.max(...greenPoints.map(p => p.y)) / this.scale;
         const greenCenterX = (greenMinX + greenMaxX) / 2;
-        const greenCenterY = (greenMinY + greenMaxY) / 2;
+        const greenCenterY_canvas = (greenMinY + greenMaxY) / 2;
+        const greenCenterZ = CANVAS_HEIGHT - greenCenterY_canvas; // Flip y-axis to get z in meters
 
         // Calculate distance in meters
         const dx = greenCenterX - teeCenterX;
-        const dy = greenCenterY - teeCenterY;
-        const distance = Math.sqrt(dx * dx + dy * dy);
+        const dz = greenCenterZ - teeCenterZ;
+        const distance = Math.sqrt(dx * dx + dz * dz);
 
         document.getElementById('holeLength').value = `${distance.toFixed(1)}m`;
     },
@@ -804,8 +1379,13 @@ const holeMaker = {
         // Remove from objects array if it's an object
         this.objects = this.objects.filter(obj => obj.visual !== active);
 
+        // Remove from flagPositions array if it's a flag
+        this.flagPositions = this.flagPositions.filter(flag => flag.visual !== active);
+        this.updateFlagCount();
+
         this.updateLayersList();
         this.calculateHoleLength();
+        this.updateVertexMarkers(); // Update vertex markers after deletion
         this.canvas.renderAll();
     },
 
@@ -813,18 +1393,22 @@ const holeMaker = {
         if (!confirm('Clear all shapes?')) return;
 
         this.shapes = [];
+        this.objects = [];
+        this.flagPositions = [];
+        this.teeBox = null;
         this.isDrawing = false;
         this.currentPoints = [];
         this.redrawAll();
         this.updateLayersList(); // Updates calculated length
+        this.updateFlagCount();
     },
 
     convertPointsToMeters(points) {
         // Convert canvas coordinates to meters (round to 2 decimals)
-        // Divide by scale to get actual meters
+        // Flip y-axis: canvas y=0 (top) should be z=CANVAS_HEIGHT (far), canvas y=CANVAS_HEIGHT (bottom) should be z=0 (tee)
         return points.map(p => ({
             x: parseFloat((p.x / this.scale).toFixed(2)),
-            z: parseFloat((p.y / this.scale).toFixed(2))
+            z: parseFloat((CANVAS_HEIGHT - (p.y / this.scale)).toFixed(2))
         }));
     },
 
@@ -840,42 +1424,37 @@ const holeMaker = {
             name: holeName,
             par: par,
             lengthMeters: lengthMeters,
+            canvasWidth: CANVAS_WIDTH,
+            canvasHeight: CANVAS_HEIGHT,
             background: {
                 vertices: [
-                    { x: -100, z: -30 },
-                    { x: 100, z: -30 },
-                    { x: 100, z: 400 },
-                    { x: -100, z: 400 }
+                    { x: -CANVAS_WIDTH / 2, z: -30 },
+                    { x: CANVAS_WIDTH / 2, z: -30 },
+                    { x: CANVAS_WIDTH / 2, z: CANVAS_HEIGHT + 30 },
+                    { x: -CANVAS_WIDTH / 2, z: CANVAS_HEIGHT + 30 }
                 ],
                 surface: "OUT_OF_BOUNDS"
             }
         };
 
         // Group shapes by type
-        const tee = this.shapes.find(s => s.type === 'tee');
         const fairway = this.shapes.find(s => s.type === 'fairway');
         const green = this.shapes.find(s => s.type === 'green');
-        const rough = this.shapes.find(s => s.type === 'rough');
+        const roughLight = this.shapes.filter(s => s.type === 'rough_light');
+        const roughMedium = this.shapes.filter(s => s.type === 'rough_medium');
+        const roughHeavy = this.shapes.filter(s => s.type === 'rough_heavy');
         const bunkers = this.shapes.filter(s => s.type === 'bunker');
         const water = this.shapes.filter(s => s.type === 'water');
 
-        // Add tee (calculate center and dimensions)
-        if (tee) {
-            const points = tee.polygon.points;
-            const minX = Math.min(...points.map(p => p.x));
-            const maxX = Math.max(...points.map(p => p.x));
-            const minY = Math.min(...points.map(p => p.y));
-            const maxY = Math.max(...points.map(p => p.y));
-
-            const centerX = parseFloat(((minX + maxX) / 2).toFixed(2));
-            const centerZ = parseFloat(((minY + maxY) / 2).toFixed(2));
-            const width = parseFloat((maxX - minX).toFixed(2));
-            const depth = parseFloat((maxY - minY).toFixed(2));
-
+        // Add tee box (new placement-based system)
+        if (this.teeBox) {
             layout.tee = {
-                center: { x: centerX, z: centerZ },
-                width: width,
-                depth: depth,
+                center: {
+                    x: parseFloat(this.teeBox.x.toFixed(2)),
+                    z: parseFloat(this.teeBox.z.toFixed(2))
+                },
+                width: parseFloat(this.teeBox.width.toFixed(2)),
+                depth: parseFloat(this.teeBox.height.toFixed(2)),
                 surface: "TEE"
             };
         }
@@ -898,13 +1477,28 @@ const holeMaker = {
             };
         }
 
-        // Add rough
-        if (rough) {
-            const metersPoints = this.convertPointsToMeters(rough.polygon.points);
-            layout.rough = {
-                vertices: metersPoints,
+        // Add light rough
+        if (roughLight.length > 0) {
+            layout.lightRough = roughLight.map(rough => ({
+                vertices: this.convertPointsToMeters(rough.polygon.points),
+                surface: "LIGHT_ROUGH"
+            }));
+        }
+
+        // Add medium rough
+        if (roughMedium.length > 0) {
+            layout.mediumRough = roughMedium.map(rough => ({
+                vertices: this.convertPointsToMeters(rough.polygon.points),
+                surface: "MEDIUM_ROUGH"
+            }));
+        }
+
+        // Add heavy/thick rough
+        if (roughHeavy.length > 0) {
+            layout.thickRough = roughHeavy.map(rough => ({
+                vertices: this.convertPointsToMeters(rough.polygon.points),
                 surface: "THICK_ROUGH"
-            };
+            }));
         }
 
         // Add bunkers
@@ -930,6 +1524,15 @@ const holeMaker = {
                 size: obj.size,
                 x: obj.x,
                 z: obj.z
+            }));
+        }
+
+        // Add flag positions
+        if (this.flagPositions.length > 0) {
+            layout.flagPositions = this.flagPositions.map(flag => ({
+                number: flag.number,
+                x: parseFloat(flag.x.toFixed(2)),
+                z: parseFloat(flag.z.toFixed(2))
             }));
         }
 
@@ -973,29 +1576,32 @@ const holeMaker = {
 
             // Set hole info
             if (layout.name) document.getElementById('holeName').value = layout.name;
-            if (layout.par) document.getElementById('holePar').value = layout.par;
+            if (layout.par) {
+                document.getElementById('holePar').value = layout.par;
+                this.onParChange(); // Update par-based dimensions
+            }
+
+            // Restore canvas dimensions if available
+            if (layout.canvasWidth && layout.canvasHeight) {
+                document.getElementById('canvasWidth').value = layout.canvasWidth;
+                document.getElementById('canvasHeight').value = layout.canvasHeight;
+                this.onCanvasSizeChange(); // Update canvas size
+            }
+
             if (layout.lengthMeters) document.getElementById('holeLength').value = layout.lengthMeters;
 
             // Helper to convert meters (from JSON) to canvas coordinates
+            // Flip y-axis: z=0 (tee) should be canvas y=CANVAS_HEIGHT (bottom), z=CANVAS_HEIGHT (far) should be canvas y=0 (top)
             const metersToCanvas = (point) => ({
-                x: point.x,
-                y: point.z
+                x: point.x * this.scale,
+                y: (CANVAS_HEIGHT - point.z) * this.scale
             });
 
-            // Import tee
+            // Import tee box (new placement-based system)
             if (layout.tee && layout.tee.center) {
-                const c = metersToCanvas({ x: layout.tee.center.x, z: layout.tee.center.z });
-                const hw = layout.tee.width / 2;
-                const hd = layout.tee.depth / 2;
-
-                this.currentPoints = [
-                    { x: c.x - hw, y: c.y - hd },
-                    { x: c.x + hw, y: c.y - hd },
-                    { x: c.x + hw, y: c.y + hd },
-                    { x: c.x - hw, y: c.y + hd }
-                ];
-                this.currentSurface = 'tee';
-                this.closePolygon();
+                const centerX = layout.tee.center.x * this.scale;
+                const centerZ = (CANVAS_HEIGHT - layout.tee.center.z) * this.scale;
+                this.placeTeeBox(centerX, centerZ);
             }
 
             // Import fairway
@@ -1012,10 +1618,41 @@ const holeMaker = {
                 this.closePolygon();
             }
 
-            // Import rough
-            if (layout.rough && layout.rough.vertices) {
+            // Import light rough
+            if (layout.lightRough) {
+                layout.lightRough.forEach(rough => {
+                    if (rough.vertices) {
+                        this.currentPoints = rough.vertices.map(metersToCanvas);
+                        this.currentSurface = 'rough_light';
+                        this.closePolygon();
+                    }
+                });
+            }
+
+            // Import medium rough
+            if (layout.mediumRough) {
+                layout.mediumRough.forEach(rough => {
+                    if (rough.vertices) {
+                        this.currentPoints = rough.vertices.map(metersToCanvas);
+                        this.currentSurface = 'rough_medium';
+                        this.closePolygon();
+                    }
+                });
+            }
+
+            // Import thick rough (legacy 'rough' key for backwards compatibility)
+            if (layout.thickRough) {
+                layout.thickRough.forEach(rough => {
+                    if (rough.vertices) {
+                        this.currentPoints = rough.vertices.map(metersToCanvas);
+                        this.currentSurface = 'rough_heavy';
+                        this.closePolygon();
+                    }
+                });
+            } else if (layout.rough && layout.rough.vertices) {
+                // Legacy support for old 'rough' format
                 this.currentPoints = layout.rough.vertices.map(metersToCanvas);
-                this.currentSurface = 'rough';
+                this.currentSurface = 'rough_heavy';
                 this.closePolygon();
             }
 
@@ -1039,6 +1676,95 @@ const holeMaker = {
                         this.closePolygon();
                     }
                 });
+            }
+
+            // Import objects (trees/bushes)
+            if (layout.obstacles) {
+                layout.obstacles.forEach(obj => {
+                    const x = obj.x * this.scale;
+                    const z = (CANVAS_HEIGHT - obj.z) * this.scale;
+
+                    const color = obj.type === 'tree' ? '#2d5016' : '#3a6b1f';
+                    const radius = obj.size === 'small' ? 3 : obj.size === 'medium' ? 5 : 7;
+
+                    const circle = new fabric.Circle({
+                        left: x,
+                        top: z,
+                        radius: radius * this.scale,
+                        fill: color,
+                        stroke: '#000',
+                        strokeWidth: 1,
+                        originX: 'center',
+                        originY: 'center',
+                        selectable: true,
+                        hasControls: false,
+                        hasBorders: true,
+                        borderColor: '#3498db'
+                    });
+
+                    this.objects.push({
+                        type: obj.type,
+                        size: obj.size,
+                        x: obj.x,
+                        z: obj.z,
+                        visual: circle
+                    });
+
+                    this.canvas.add(circle);
+                });
+            }
+
+            // Import flag positions
+            if (layout.flagPositions) {
+                layout.flagPositions.forEach(flag => {
+                    const x = flag.x * this.scale;
+                    const z = (CANVAS_HEIGHT - flag.z) * this.scale;
+
+                    const circle = new fabric.Circle({
+                        left: x,
+                        top: z,
+                        radius: 4,
+                        fill: '#e74c3c',
+                        stroke: '#c0392b',
+                        strokeWidth: 2,
+                        originX: 'center',
+                        originY: 'center',
+                        selectable: true,
+                        hasControls: false,
+                        hasBorders: true,
+                        borderColor: '#3498db'
+                    });
+
+                    const text = new fabric.Text(flag.number.toString(), {
+                        left: x,
+                        top: z,
+                        fontSize: 10,
+                        fill: '#fff',
+                        originX: 'center',
+                        originY: 'center',
+                        selectable: false,
+                        evented: false
+                    });
+
+                    const group = new fabric.Group([circle, text], {
+                        left: x,
+                        top: z,
+                        selectable: true,
+                        hasControls: false,
+                        hasBorders: true
+                    });
+
+                    this.flagPositions.push({
+                        number: flag.number,
+                        x: flag.x,
+                        z: flag.z,
+                        visual: group
+                    });
+
+                    this.canvas.add(group);
+                });
+
+                this.updateFlagCount();
             }
 
             console.log('Imported hole layout');
