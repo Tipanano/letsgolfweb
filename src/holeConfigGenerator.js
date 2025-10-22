@@ -142,20 +142,76 @@ export function ctfConfigToHoleLayout(holeConfig) {
     if (!holeConfig) return null;
 
     const layout = {};
+    const distance = holeConfig.distanceMeters || 200;
+    const greenOffset = holeConfig.greenOffsetMeters || 0;
+    const greenWidth = holeConfig.greenWidthMeters || 18;
+    const greenDepth = holeConfig.greenDepthMeters || 14;
+
+    // Get fairway adjustments from water hazard (if present)
+    const waterHazard = holeConfig.waterHazard;
+    const fairwayAdjustments = waterHazard?.fairwayAdjustments;
+
+    const fairwayWidth = 25; // Base width in meters (matches visual)
+    const fairwayExtension = fairwayAdjustments?.extension ?? 10;
+    const fairwayApproachDistance = fairwayAdjustments?.approachDistance ?? 40;
+    const leftWidthMultiplier = fairwayAdjustments?.leftWidthMultiplier ?? 1.0;
+    const rightWidthMultiplier = fairwayAdjustments?.rightWidthMultiplier ?? 1.0;
+
+    const fairwayStartZ = distance - fairwayApproachDistance;
+    const fairwayEndZ = distance + fairwayExtension;
+
+    // Add large background area (thick rough) so balls don't go OOB
+    const margin = 100; // 100m margin on each side
+    layout.background = {
+        vertices: [
+            { x: -margin, z: -50 },
+            { x: margin, z: -50 },
+            { x: margin, z: distance + 50 },
+            { x: -margin, z: distance + 50 }
+        ],
+        surface: 'THICK_ROUGH'
+    };
+
+    // Add fairway (simplified rectangle, with width adjustments if water present)
+    // Note: Visual fairway is organic/angled, but for lie detection a simple rectangle is sufficient
+    const leftWidth = (fairwayWidth / 2) * leftWidthMultiplier;
+    const rightWidth = (fairwayWidth / 2) * rightWidthMultiplier;
+
+    layout.fairways = [{
+        vertices: [
+            { x: -leftWidth, z: fairwayStartZ },
+            { x: rightWidth, z: fairwayStartZ },
+            { x: rightWidth, z: fairwayEndZ },
+            { x: -leftWidth, z: fairwayEndZ }
+        ],
+        surface: 'FAIRWAY'
+    }];
+
+    // Add green (rectangular, positioned based on greenOffset)
+    const greenCenterX = greenOffset;
+    const greenCenterZ = distance;
+    layout.green = {
+        type: 'polygon',
+        vertices: [
+            { x: greenCenterX - greenWidth / 2, z: greenCenterZ - greenDepth / 2 },
+            { x: greenCenterX + greenWidth / 2, z: greenCenterZ - greenDepth / 2 },
+            { x: greenCenterX + greenWidth / 2, z: greenCenterZ + greenDepth / 2 },
+            { x: greenCenterX - greenWidth / 2, z: greenCenterZ + greenDepth / 2 }
+        ],
+        surface: 'GREEN'
+    };
 
     // Add water hazard if present
-    // Keep in meters - all hole layouts are now consistently in meters
-    if (holeConfig.waterHazard) {
-        const water = holeConfig.waterHazard;
+    if (waterHazard) {
         layout.waterHazards = [{
-            type: water.type, // 'ellipse'
+            type: waterHazard.type, // 'ellipse'
             center: {
-                x: water.center.x, // Keep in meters
-                z: water.center.z
+                x: waterHazard.center.x, // Keep in meters
+                z: waterHazard.center.z
             },
-            radiusX: water.radiusX, // Keep in meters
-            radiusZ: water.radiusZ, // Keep in meters
-            surface: water.surface
+            radiusX: waterHazard.radiusX, // Keep in meters
+            radiusZ: waterHazard.radiusZ, // Keep in meters
+            surface: waterHazard.surface
         }];
     }
 

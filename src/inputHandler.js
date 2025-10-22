@@ -206,9 +206,19 @@ function handleResetKey() {
             console.log("InputHandler: Preparing next shot for playHole mode (not after hole-out).");
             prepareNextShot();
         }
+    } else if (currentMode === 'closest-to-flag') {
+        GameLogic.resetSwing(); // Reset ball position and game state
+        // Re-initialize CTF mode (same as initial setup in main.js)
+        import('./modes/closestToFlag.js').then(ctfMode => {
+            const targetDistanceMeters = ctfMode.getTargetDistanceMeters(); // Get current target in meters
+            ctfMode.prepareForNextShot(); // Update UI overlay
+            Visuals.switchToTargetView(targetDistanceMeters);
+            Visuals.showBallAtAddress();
+        });
+        console.log("InputHandler: Performing reset for CTF mode.");
     } else {
         GameLogic.resetSwing(); // Full reset for other modes (e.g., range)
-        console.log("InputHandler: Performing full reset for non-play-hole mode.");
+        console.log("InputHandler: Performing full reset for other mode.");
     }
 }
 

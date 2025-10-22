@@ -398,28 +398,10 @@ export function drawTargetView() {
     if (!targetGroup) {
         createTargetElements();
     } else {
-        // Instead of moving the group, we might need to recreate or update individual element positions/sizes
-        // if the target distance changes significantly, especially for ground/fairway length.
-        // For simplicity now, let's assume createTargetElements handles placing things correctly based on targetDistanceMeters.
-        // We just need to ensure it's visible.
+        // Target elements already exist for this hole - just ensure visible
+        // Positions were set correctly when created based on currentHoleConfig, don't reposition
         targetGroup.visible = true;
-        // Update positions based on current targetDistanceMeters
-        const targetZ = targetDistanceMeters;
-        if (groundMesh) {
-             // Adjust ground length and position if needed (more complex)
-             // groundMesh.geometry = new THREE.PlaneGeometry(100, targetZ + 50); // Recreate geometry?
-             groundMesh.position.z = (targetZ + 50) / 2; // Recenter
-        }
-         if (fairwayMesh) {
-             // Adjust fairway length and position
-             // fairwayMesh.geometry = new THREE.PlaneGeometry(25, targetZ); // Recreate geometry?
-             fairwayMesh.position.z = targetZ / 2; // Recenter
-         }
-         if (greenMesh) greenMesh.position.z = targetZ;
-         if (flagstickMesh) flagstickMesh.position.z = targetZ;
-         if (flagMesh) flagMesh.position.z = targetZ;
-
-         console.log(`Target elements updated for Z = ${targetZ.toFixed(1)}m`);
+        console.log(`Target elements already exist for distance ${targetDistanceMeters.toFixed(1)}m`);
     }
     // TODO: Adjust camera for target view?
     // CoreVisuals.setCameraForTargetView(targetDistanceMeters);
@@ -577,6 +559,11 @@ export function clearHoleConfig() {
 // Duplicate setScene removed. The correct one is defined near the top.
 
 // --- Getters for External Use (e.g., Camera Control) ---
+
+// Returns the current CTF hole configuration
+export function getHoleConfig() {
+    return currentHoleConfig;
+}
 
 // Returns the center position of the green mesh
 export function getGreenCenter() {

@@ -10,6 +10,8 @@ import {
     // getCurrentHoleLayout is NOT in state.js
 } from './state.js'; // Removed PUTT_DISTANCE_FACTOR, IDEAL_BACKSWING_DURATION_MS is fine as is.
 import { getCurrentHoleLayout } from '../modes/playHole.js'; // <-- Import from correct module
+import { getHoleConfig as getCTFHoleConfig } from '../visuals/targetView.js'; // Import CTF hole config getter
+import { ctfConfigToHoleLayout } from '../holeConfigGenerator.js'; // Import CTF config converter
 import { stopFullDownswingAnimation, stopChipDownswingAnimation /* Putt stopped in actions */ } from './animations.js';
 import { updateStatus, getBallPositionIndex, getBallPositionLevels, displayIdealJPressWindowOnBackswing, displayDownswingFeedbackWindows } from '../ui.js'; // Added displayDownswingFeedbackWindows
 import { calculateImpactPhysics } from '../swingPhysics.js';
@@ -73,7 +75,16 @@ export function calculateFullSwingShot() {
     let initialPositionObj;
     let currentSurface = 'fairway'; // Default surface
     const currentMode = getCurrentGameMode();
-    const currentHoleLayout = getCurrentHoleLayout(); // Get layout
+    let currentHoleLayout = getCurrentHoleLayout(); // Get layout (let for CTF override)
+
+    // If in CTF mode and no hole layout, get it from CTF config
+    if (currentMode === 'closest-to-flag' && !currentHoleLayout) {
+        const ctfConfig = getCTFHoleConfig();
+        if (ctfConfig) {
+            currentHoleLayout = ctfConfigToHoleLayout(ctfConfig);
+            console.log('Calc (Full): Using CTF hole layout');
+        }
+    }
 
     if (currentMode === 'play-hole' && currentHoleLayout) {
         initialPositionObj = getPlayHoleBallPosition();
@@ -157,16 +168,14 @@ export function calculateFullSwingShot() {
     // --- Run Bounce/Ground Simulation (if not holed out) ---
     let landingSurfaceType = 'OUT_OF_BOUNDS'; // Default to OOB - declare outside block for scope
     if (!isHoledOut) {
-        const currentHoleLayout = getCurrentHoleLayout(); // Get layout (might be null)
-
-        if (currentMode === 'play-hole' && currentHoleLayout) {
+        if ((currentMode === 'play-hole' || currentMode === 'closest-to-flag') && currentHoleLayout) {
             // Use the utility function to determine surface type at landing position (meters)
             landingSurfaceType = getSurfaceTypeAtPoint(landingPositionObj, currentHoleLayout);
-        } else if (currentMode !== 'play-hole') {
-            landingSurfaceType = 'FAIRWAY'; // Range mode etc. defaults to Fairway landing
+        } else if (currentMode === 'range') {
+            landingSurfaceType = 'FAIRWAY'; // Range mode defaults to Fairway landing
         } else {
              console.warn("Calc (Full): Could not get hole layout for surface detection. Defaulting landing surface to FAIRWAY.");
-             landingSurfaceType = 'FAIRWAY'; // Fallback if layout missing in play-hole mode
+             landingSurfaceType = 'FAIRWAY'; // Fallback if layout missing
         }
         // Ensure surfaceType is uppercase for getSurfaceProperties lookup
         landingSurfaceType = landingSurfaceType.toUpperCase().replace(' ', '_');
@@ -392,7 +401,16 @@ export function calculateChipShot() {
     let initialPositionObj;
     let currentSurface = 'fairway'; // Default surface
     const currentMode = getCurrentGameMode();
-    const currentHoleLayout = getCurrentHoleLayout(); // Get layout
+    let currentHoleLayout = getCurrentHoleLayout(); // Get layout (let for CTF override)
+
+    // If in CTF mode and no hole layout, get it from CTF config
+    if (currentMode === 'closest-to-flag' && !currentHoleLayout) {
+        const ctfConfig = getCTFHoleConfig();
+        if (ctfConfig) {
+            currentHoleLayout = ctfConfigToHoleLayout(ctfConfig);
+            console.log('Calc (Chip): Using CTF hole layout');
+        }
+    }
 
     if (currentMode === 'play-hole' && currentHoleLayout) {
         initialPositionObj = getPlayHoleBallPosition();
@@ -477,16 +495,14 @@ export function calculateChipShot() {
     // --- Run Bounce/Ground Simulation (if not holed out) ---
     let landingSurfaceType = 'OUT_OF_BOUNDS'; // Default to OOB - declare outside block for scope
     if (!isHoledOut) {
-        const currentHoleLayout = getCurrentHoleLayout(); // Get layout (might be null)
-
-        if (currentMode === 'play-hole' && currentHoleLayout) {
+        if ((currentMode === 'play-hole' || currentMode === 'closest-to-flag') && currentHoleLayout) {
              // Use the utility function to determine surface type at landing position (meters)
              landingSurfaceType = getSurfaceTypeAtPoint(landingPositionObj, currentHoleLayout);
-        } else if (currentMode !== 'play-hole') {
-            landingSurfaceType = 'FAIRWAY'; // Range mode etc. defaults to Fairway landing
+        } else if (currentMode === 'range') {
+            landingSurfaceType = 'FAIRWAY'; // Range mode defaults to Fairway landing
         } else {
              console.warn("Calc (Chip): Could not get hole layout for surface detection. Defaulting landing surface to FAIRWAY.");
-             landingSurfaceType = 'FAIRWAY'; // Fallback if layout missing in play-hole mode
+             landingSurfaceType = 'FAIRWAY'; // Fallback if layout missing
         }
          // Ensure surfaceType is uppercase for getSurfaceProperties lookup
         landingSurfaceType = landingSurfaceType.toUpperCase().replace(' ', '_');

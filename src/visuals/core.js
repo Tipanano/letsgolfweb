@@ -5,8 +5,8 @@ import { getShotDirectionAngle, getCurrentTargetLineAngle, getSelectedClub } fro
 import * as MeasurementView from './measurementView.js';
 // Import position getters needed for re-applying hole view camera
 import { getCurrentBallPosition as getPlayHoleBallPosition } from '../modes/playHole.js';
-import { getFlagPosition, getCurrentHoleObjects } from './holeView.js'; // Import getCurrentHoleObjects
-import { getTargetObjects } from './targetView.js'; // Import target view objects for CTF mode
+import { getFlagPosition as getHoleFlagPosition, getCurrentHoleObjects } from './holeView.js'; // Import getCurrentHoleObjects
+import { getTargetObjects, getFlagPosition as getTargetFlagPosition } from './targetView.js'; // Import target view objects and flag position for CTF mode
 import { createTeeMesh } from './objects.js'; // Import the tee creator
 import { getSurfaceProperties } from '../surfaces.js'; // Import surface properties getter
 
@@ -334,6 +334,15 @@ function updateCamera(timestamp) {
     }
     // Ensure projection matrix is updated if camera properties change
     // camera.updateProjectionMatrix(); // Usually only needed if FOV, aspect, near/far change
+}
+
+// Helper to get flag position based on current mode
+function getFlagPosition() {
+    if (currentStaticView === 'target') {
+        return getTargetFlagPosition(); // CTF mode
+    } else {
+        return getHoleFlagPosition(); // Play-hole mode
+    }
 }
 
 // --- Function to Apply Aim Angle (Called by Input Handler) ---

@@ -27,9 +27,9 @@ export function initializeMode(providedTargetDistanceMeters = null) {
         console.log(`Target distance randomly set to: ${targetDistanceMeters.toFixed(1)} meters (~${metersToYards(targetDistanceMeters).toFixed(0)} yards)`);
     }
 
-    // Update UI (UI will convert meters to yards for display)
+    // Update UI (convert meters to yards for display)
     ui.resetClosestToFlagDisplay(); // Reset display first
-    ui.updateTargetDistanceDisplay(targetDistanceMeters); // Pass meters, UI converts to yards
+    ui.updateTargetDistanceDisplay(metersToYards(targetDistanceMeters)); // Convert to yards for display
 
     // Update visual overlay info with distance to flag and lie
     ui.updateVisualOverlayInfo('closest-to-flag', {
@@ -50,6 +50,18 @@ export function terminateMode() {
     console.log("Terminating Closest to Flag mode.");
     currentModeActive = false;
     // TODO: Clean up UI elements specific to this mode?
+}
+
+export function prepareForNextShot() {
+    console.log("CTF: Preparing for next shot...");
+
+    // Reset UI overlay with initial values (distance to target and tee lie)
+    ui.updateVisualOverlayInfo('closest-to-flag', {
+        distToFlag: targetDistanceMeters,
+        lie: 'Tee'
+    });
+
+    console.log("CTF: UI overlay reset for next shot.");
 }
 
 export function handleShotResult(shotData) {
@@ -97,6 +109,10 @@ export function handleShotResult(shotData) {
 export function getTargetDistance() {
     // Return in yards for compatibility with existing code
     return metersToYards(targetDistanceMeters);
+}
+
+export function getTargetDistanceMeters() {
+    return targetDistanceMeters;
 }
 
 // Add other necessary functions, e.g., getting current score/best distance
