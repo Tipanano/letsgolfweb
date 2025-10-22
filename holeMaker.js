@@ -30,13 +30,14 @@ const SURFACE_COLORS = {
 
 const holeMaker = {
     canvas: null,
-    currentSurface: 'fairway',
+    currentSurface: null,  // No surface selected by default
     shapes: [],
     currentPoints: [],
     isDrawing: false,
     showGrid: true,
     showGuides: true,
     selectedShape: null,
+    activePolygon: null,  // Our own selection tracking, bypassing Fabric
     objects: [], // Array to store trees/bushes
     objectPlacementMode: false,
 
@@ -53,7 +54,8 @@ const holeMaker = {
             width: containerWidth,
             height: CANVAS_HEIGHT * scale,
             backgroundColor: '#1a252f',
-            selection: true
+            selection: true,
+            preserveObjectStacking: true
         });
 
         // Store scale for coordinate conversion
@@ -67,9 +69,19 @@ const holeMaker = {
         this.canvas.on('mouse:down', (e) => this.onMouseDown(e));
         this.canvas.on('mouse:move', (e) => this.onMouseMove(e));
         this.canvas.on('mouse:up', (e) => this.onMouseUp(e));
+        this.canvas.on('mouse:dblclick', (e) => this.onDoubleClick(e));
         this.canvas.on('selection:created', (e) => this.onSelectionChange(e));
         this.canvas.on('selection:updated', (e) => this.onSelectionChange(e));
-        this.canvas.on('selection:cleared', () => this.selectedShape = null);
+        this.canvas.on('selection:cleared', (e) => {
+            this.selectedShape = null;
+            // If we have an activePolygon, re-select it immediately
+            if (this.activePolygon) {
+                setTimeout(() => {
+                    this.canvas.setActiveObject(this.activePolygon);
+                    this.canvas.requestRenderAll();
+                }, 0);
+            }
+        });
 
         // Right-click to close polygon
         this.canvas.upperCanvasEl.addEventListener('contextmenu', (e) => {
@@ -79,15 +91,18 @@ const holeMaker = {
             }
         });
 
-        // ESC key to cancel drawing
+        // ESC key to cancel drawing or deselect
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && this.isDrawing) {
-                this.cancelDrawing();
+            if (e.key === 'Escape') {
+                if (this.isDrawing) {
+                    this.cancelDrawing();
+                } else if (this.activePolygon || this.canvas.getActiveObject()) {
+                    this.activePolygon = null; // Clear our tracking
+                    this.canvas.discardActiveObject();
+                    this.canvas.requestRenderAll();
+                }
             }
         });
-
-        // Select fairway by default
-        this.selectSurface('fairway');
 
         console.log('Hole Maker initialized');
     },
@@ -281,11 +296,36 @@ const holeMaker = {
         snappedX = Math.max(0, Math.min(canvasWidth, x));
         snappedY = Math.max(0, Math.min(canvasHeight, y));
 
-        // Snap to edges if close
+        // Snap to canvas edges if close
         if (Math.abs(snappedX) < SNAP_DISTANCE) snappedX = 0;
         if (Math.abs(snappedX - canvasWidth) < SNAP_DISTANCE) snappedX = canvasWidth;
         if (Math.abs(snappedY) < SNAP_DISTANCE) snappedY = 0;
         if (Math.abs(snappedY - canvasHeight) < SNAP_DISTANCE) snappedY = canvasHeight;
+
+        // Snap to vertices of other shapes (only if within threshold)
+        let minDistance = SNAP_DISTANCE;
+        let snapVertex = null;
+
+        this.shapes.forEach(shape => {
+            if (shape.polygon && shape.polygon.points) {
+                shape.polygon.points.forEach(point => {
+                    const dx = point.x - snappedX;
+                    const dy = point.y - snappedY;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        snapVertex = { x: point.x, y: point.y };
+                    }
+                });
+            }
+        });
+
+        // Only apply vertex snap if we found one within threshold
+        if (snapVertex && minDistance < SNAP_DISTANCE) {
+            snappedX = snapVertex.x;
+            snappedY = snapVertex.y;
+        }
 
         return { x: snappedX, y: snappedY };
     },
@@ -299,10 +339,24 @@ const holeMaker = {
         }
 
         if (e.target && e.target !== this.canvas) {
-            // Clicked on existing object
+            // Clicked on existing object - track it as our active polygon
+            if (e.target.type === 'polygon') {
+                this.activePolygon = e.target;
+                // Re-select it in Fabric to show vertex controls
+                this.canvas.setActiveObject(e.target);
+                this.canvas.requestRenderAll();
+            }
             return;
         }
 
+        // Clicked on empty canvas
+        // Check if a surface type is selected
+        if (!this.currentSurface) {
+            // No surface selected - do nothing (use ESC to deselect)
+            return;
+        }
+
+        // Surface type is selected - handle drawing
         if (!this.isDrawing) {
             this.isDrawing = true;
             this.currentPoints = [];
@@ -340,6 +394,14 @@ const holeMaker = {
         }
 
         this.canvas.renderAll();
+    },
+
+    onDoubleClick(e) {
+        // If we have an active polygon, add a point to it at the double-click location
+        if (this.activePolygon) {
+            const pointer = this.canvas.getPointer(e.e);
+            this.addPointToPolygon(this.activePolygon, pointer.x, pointer.y);
+        }
     },
 
     onMouseMove(e) {
@@ -398,25 +460,23 @@ const holeMaker = {
             transparentCorners: false,
             cornerColor: '#3498db',
             cornerSize: 12,
-            hasBorders: true,
-            borderColor: '#3498db',
+            hasBorders: false,  // Remove selection border
+            hasControls: true,  // Keep controls enabled for vertex editing
             hasRotatingPoint: false,
             lockRotation: true,
+            selectable: true,
+            evented: true,
             perPixelTargetFind: true
         });
 
-        // Remove default corner controls and enable polygon point editing
+        // Hide default transform controls (but allow custom vertex controls)
         polygon.setControlsVisibility({
             mt: false, mb: false, ml: false, mr: false,
             bl: false, br: false, tl: false, tr: false,
             mtr: false
         });
-        this.enablePolygonEditing(polygon);
 
-        // Add double-click handler to add points on edges
-        polygon.on('mousedblclick', (e) => {
-            this.addPointToPolygon(polygon, e);
-        });
+        this.enablePolygonEditing(polygon);
 
         this.canvas.add(polygon);
 
@@ -430,9 +490,15 @@ const holeMaker = {
 
         this.shapes.push(shapeData);
 
-        // Reset drawing state
+        // Reset drawing state and deselect surface type
         this.isDrawing = false;
         this.currentPoints = [];
+        this.currentSurface = null;
+
+        // Deselect the surface button in UI
+        document.querySelectorAll('.surface-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
 
         // Update layers list and recalculate hole length
         this.updateLayersList();
@@ -489,15 +555,30 @@ const holeMaker = {
                         y: (mouseLocalPosition.y * polygonBaseSize.y) / size.y + polygon.pathOffset.y
                     };
 
+                    console.log('Before snap:', finalPointPosition);
                     // Apply snap to edges and boundary constraints
                     const snapped = self.snapToEdges(finalPointPosition.x, finalPointPosition.y);
+                    console.log('After snap:', snapped);
                     polygon.points[index] = snapped;
+
+                    polygon.dirty = true;
+                    self.canvas.requestRenderAll();
+
+                    return true;
+                },
+                mouseUpHandler: (eventData, transform) => {
+                    const polygon = transform.target;
+
+                    // Force polygon to recalculate its path offset and dimensions
+                    polygon._calcDimensions();
+                    polygon.setCoords();
+                    polygon.dirty = true;
+                    self.canvas.requestRenderAll();
 
                     // Recalculate hole length if editing tee or green
                     const shapeData = self.shapes.find(s => s.polygon === polygon);
                     if (shapeData && (shapeData.type === 'tee' || shapeData.type === 'green')) {
-                        // Defer calculation until after drag completes
-                        setTimeout(() => self.calculateHoleLength(), 100);
+                        self.calculateHoleLength();
                     }
 
                     return true;
@@ -512,12 +593,9 @@ const holeMaker = {
         this.canvas.requestRenderAll();
     },
 
-    addPointToPolygon(polygon, event) {
-        // Get click position relative to polygon
-        const pointer = this.canvas.getPointer(event.e);
-        const localPoint = polygon.toLocalPoint(new fabric.Point(pointer.x, pointer.y), 'center', 'center');
-
-        // Convert to polygon coordinate space
+    addPointToPolygon(polygon, x, y) {
+        // Convert canvas coordinates to polygon coordinate space
+        const localPoint = polygon.toLocalPoint(new fabric.Point(x, y), 'center', 'center');
         const polygonBaseSize = polygon._getNonTransformedDimensions();
         const size = polygon._getTransformedDimensions(0, 0);
         const newPoint = {
