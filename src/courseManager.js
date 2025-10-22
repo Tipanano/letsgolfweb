@@ -57,15 +57,25 @@ class CourseManager {
 
     /**
      * Save a custom hole to the server
+     * If currentHoleId is set, updates existing hole, otherwise creates new one
      * @param {Object} holeData - The hole layout data (JSON format)
      * @returns {Promise<Object>} Result with holeId
      */
     async saveHole(holeData) {
-        const token = this.getAuthToken();
-
         if (!holeData || !holeData.name) {
             throw new Error('Hole data must include a name');
         }
+
+        // If we have a currentHoleId, update instead of creating new
+        if (this.currentHoleId) {
+            console.log(`Updating existing hole: ${this.currentHoleId}`);
+            const result = await this.updateHole(this.currentHoleId, holeData);
+            return { ...result, holeId: this.currentHoleId };
+        }
+
+        // Otherwise create new hole
+        console.log('Creating new hole');
+        const token = this.getAuthToken();
 
         const response = await fetch(`${API_BASE_URL}/holes/save`, {
             method: 'POST',

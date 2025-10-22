@@ -1236,7 +1236,11 @@ const holeMaker = {
         this.canvas.add(group);
         this.updateFlagCount();
 
-        // Don't auto-exit flag placement mode so user can place multiple
+        // Exit flag placement mode after placing
+        this.flagPlacementMode = false;
+        document.getElementById('flagModeText').textContent = 'Place Flag Position';
+        document.getElementById('flagModeText').parentElement.style.background = '';
+        this.canvas.defaultCursor = 'default';
     },
 
     updateFlagCount() {
@@ -1493,6 +1497,11 @@ const holeMaker = {
         this.teeBox = null;
         this.isDrawing = false;
         this.currentPoints = [];
+
+        // Clear the current hole ID so next save creates a new hole
+        courseManager.currentHoleId = null;
+        console.log('Cleared canvas and reset hole ID');
+
         this.redrawAll();
         this.updateLayersList(); // Updates calculated length
         this.updateFlagCount();
@@ -1893,6 +1902,11 @@ const holeMaker = {
                 this.updateFlagCount();
             }
 
+            // Bring tee box to front so it's selectable above all surfaces
+            if (this.teeBox && this.teeBox.visual) {
+                this.canvas.bringToFront(this.teeBox.visual);
+            }
+
             // Update layers list to show all imported objects
             this.updateLayersList();
             this.calculateHoleLength();
@@ -1939,8 +1953,10 @@ const holeMaker = {
         const holeData = JSON.parse(jsonText);
 
         try {
+            const isUpdate = !!courseManager.currentHoleId;
             const result = await courseManager.saveHole(holeData);
-            alert(`✅ Hole "${holeData.name}" saved successfully!`);
+            const action = isUpdate ? 'updated' : 'saved';
+            alert(`✅ Hole "${holeData.name}" ${action} successfully!`);
         } catch (error) {
             console.error('Error saving hole:', error);
             alert(`❌ Error saving hole: ${error.message}`);
@@ -1999,6 +2015,9 @@ const holeMaker = {
             document.getElementById('jsonOutput').value = JSON.stringify(hole.holeData, null, 2);
             this.importJSON();
             this.hideLoadHolesDialog();
+
+            // Store the holeId so we can update instead of creating new when saving
+            console.log(`Loaded hole with ID: ${holeId}`);
 
             alert(`✅ Loaded "${hole.holeData.name}"`);
 
