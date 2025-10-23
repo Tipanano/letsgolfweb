@@ -2,8 +2,9 @@
 import * as ui from '../ui.js';
 import { savePlayHoleState } from '../gameLogic/persistentGameState.js';
 import * as visuals from '../visuals.js'; // To trigger drawing
-import { setShotType, getCurrentShotType } from '../gameLogic/state.js'; // Import setShotType and getCurrentShotType
+import { setShotType, getCurrentShotType, setSelectedClub } from '../gameLogic/state.js'; // Import setShotType, getCurrentShotType, and setSelectedClub
 import { BALL_RADIUS } from '../visuals/core.js'; // For calculations
+import { playerManager } from '../playerManager.js'; // Import playerManager
 
 // --- State ---
 let currentHoleLayout = null;
@@ -56,6 +57,13 @@ export async function initializeMode(holeName) { // Made async, added holeName p
 
             localStorage.removeItem('previewHoleData');
 
+            // Set club based on par: Driver for par 4/5, 7-iron for par 3
+            const par = currentHoleLayout.par || 4;
+            const clubToSelect = (par >= 4) ? 'DR' : 'I7';
+            setSelectedClub(clubToSelect);
+            ui.setSelectedClubButton(clubToSelect);
+            console.log(`Par ${par} hole detected, setting club to ${clubToSelect}`);
+
             // Use the exact same flow as normal hole loading (lines 292-334)
             visuals.drawHole(currentHoleLayout);
             visuals.resetVisuals(currentBallPosition, currentLie);
@@ -79,7 +87,7 @@ export async function initializeMode(holeName) { // Made async, added holeName p
                 shotNum: shotsTaken + 1,
                 lie: currentLie,
                 wind: 'Calm',
-                playerName: 'Player 1',
+                playerName: playerManager.getDisplayName(),
                 totalScore: score,
                 position: '1st'
             });
@@ -166,7 +174,7 @@ export function handleShotResult(shotData) {
         shotNum: shotsTaken,
         lie: '...', // Hide during animation
         wind: 'Calm', // placeholder
-        playerName: 'Player 1', // placeholder
+        playerName: playerManager.getDisplayName(),
         totalScore: score,
         position: '1st' // placeholder
     });
@@ -190,7 +198,7 @@ export function handleShotResult(shotData) {
             shotNum: displayShotNum,
             lie: displayLie,
             wind: 'Calm',
-            playerName: 'Player 1',
+            playerName: playerManager.getDisplayName(),
             totalScore: score,
             position: '1st'
         });
