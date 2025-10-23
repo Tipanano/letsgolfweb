@@ -12,7 +12,7 @@ let currentHoleLayout = null;
 let shotsTaken = 0; // Strokes for the current hole
 let score = 0; // Total strokes for the round
 let currentBallPosition = null;
-let currentLie = 'tee'; // Default lie
+let currentLie = 'TEE'; // Default lie
 let holeJustCompleted = false; // Renamed from isHoledOut: true if hole was just finished, awaiting 'n'
 let currentModeActive = false;
 let currentHoleIndex = 0; // For now, always 0, representing the first/current hole
@@ -133,7 +133,7 @@ export async function initializeMode(holeName) { // Made async, added holeName p
             currentBallPosition = { x: initialX, y: BALL_RADIUS, z: initialZ };
             shotsTaken = 0;
             score = 0;
-            currentLie = 'tee';
+            currentLie = 'TEE';
             currentHoleIndex = 0;
 
             localStorage.removeItem('previewHoleData');
@@ -144,7 +144,7 @@ export async function initializeMode(holeName) { // Made async, added holeName p
 
             if (currentLie === 'green') {
                 setShotType('putt');
-            } else if (currentLie !== 'tee') {
+            } else if (currentLie .toUpperCase() !== 'TEE') {
                 const currentStateType = getCurrentShotType();
                 if (currentStateType === 'putt') {
                     setShotType('full');
@@ -218,7 +218,7 @@ export async function initializeMode(holeName) { // Made async, added holeName p
             }
             shotsTaken = 0;
             // score = score; // Keep existing total score if this was a mid-round load of a *new* hole
-            currentLie = 'tee';
+            currentLie = 'TEE';
             // Update currentHoleIndex based on holeName if we have a mapping
             // For now, if holeName is given, we assume it's the "current" one for display purposes.
             // This part needs more robust logic if we have a fixed course sequence.
@@ -293,7 +293,7 @@ export async function initializeMode(holeName) { // Made async, added holeName p
         }
 
 
-        currentLie = 'tee';
+        currentLie = 'TEE';
 
         currentHoleLayout = await holeGenerator.generateHoleLayout(holeToLoad);
         if (!currentHoleLayout) {
@@ -335,7 +335,7 @@ export async function initializeMode(holeName) { // Made async, added holeName p
     if (currentLie === 'green') {
         setShotType('putt');
         console.log("PlayHole: On green, setting shot type to putt.");
-    } else if (currentLie !== 'tee') {
+    } else if (currentLie .toUpperCase() !== 'TEE') {
         const currentStateType = getCurrentShotType();
         if (currentStateType === 'putt') {
             setShotType('full');
@@ -394,9 +394,7 @@ export function handleShotResult(shotData) {
 
     if (shotData.finalPosition) {
         currentBallPosition = { ...shotData.finalPosition }; // Ensure clean copy
-        if (currentBallPosition.y < BALL_RADIUS) {
-            currentBallPosition.y = BALL_RADIUS;
-        }
+        // Don't clamp Y position - simulation already accounts for ballLieOffset
         console.log(`New ball position (meters): x=${currentBallPosition.x.toFixed(2)}, y=${currentBallPosition.y.toFixed(2)}, z=${currentBallPosition.z.toFixed(2)}`);
     } else {
         console.error("PlayHole Error: Shot data did not contain finalPosition!");
@@ -472,7 +470,7 @@ export function prepareForTeeShotAfterHoleOut() {
 
     console.log("PlayHole: Preparing for tee shot after hole out.");
     shotsTaken = 0;
-    currentLie = 'tee';
+    currentLie = 'TEE';
     let initialX = 0;
     let initialZ = 0;
     if (currentHoleLayout?.tee?.center) {
@@ -532,7 +530,7 @@ export function getCurrentBallPosition() {
 
 export function getCurrentLie() {
     if (holeJustCompleted) {
-        return 'tee';
+        return 'TEE';
     }
     return currentLie;
 }

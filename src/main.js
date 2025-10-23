@@ -228,12 +228,18 @@ ui.addSwingSpeedInputListener((percentage) => {
 
 ui.addResetGameDataListener(); // Added listener for the new reset button
 
-ui.addClubChangeListener((clubKey) => {
+ui.addClubChangeListener(async (clubKey) => {
     logic.setSelectedClub(clubKey);
 
-    // Update tee and ball position if on tee box
+    // Update tee and ball position if on tee box (showBallAtAddress checks if on TEE surface)
     if (currentMode === GAME_MODES.CLOSEST_TO_FLAG) {
-        visuals.showBallAtAddress(); // Refresh ball/tee for new club
+        visuals.showBallAtAddress(); // Refresh ball/tee for new club (CTF always at default position)
+    } else if (currentMode === GAME_MODES.PLAY_HOLE) {
+        // In Play Hole, get current ball position and lie
+        const playHole = await import('./modes/playHole.js');
+        const ballPos = playHole.getCurrentBallPosition();
+        const lie = playHole.getCurrentLie();
+        visuals.showBallAtAddress(ballPos, lie); // Refresh with current position
     }
 });
 

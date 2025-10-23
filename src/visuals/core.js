@@ -90,6 +90,7 @@ export function initCoreVisuals(canvasElement) {
 
     // 2. Camera (Default - Range View)
     const aspectRatio = canvasElement.clientWidth / canvasElement.clientHeight;
+    console.log(`📷 Initial camera setup: aspect=${aspectRatio.toFixed(2)} (${canvasElement.clientWidth}/${canvasElement.clientHeight})`);
     camera = new THREE.PerspectiveCamera(60, aspectRatio, 0.1, 1000);
     // Slightly higher default position for range view
     camera.position.set(0, 18, -25); // Default: Range view position
@@ -99,8 +100,11 @@ export function initCoreVisuals(canvasElement) {
     activeCameraMode = CameraMode.STATIC; // Set initial mode
 
     // 3. Renderer
+    console.log(`🎨 Initial renderer setup: canvas.clientWidth=${canvasElement.clientWidth}, canvas.clientHeight=${canvasElement.clientHeight}`);
+    console.log(`🎨 Canvas element: width=${canvasElement.width}, height=${canvasElement.height}, style.width=${canvasElement.style.width}, style.height=${canvasElement.style.height}`);
     renderer = new THREE.WebGLRenderer({ canvas: canvasElement, antialias: true });
     renderer.setSize(canvasElement.clientWidth, canvasElement.clientHeight);
+    console.log(`🎨 Renderer size set to: ${canvasElement.clientWidth}x${canvasElement.clientHeight}`);
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.shadowMap.enabled = true;
 
@@ -157,7 +161,7 @@ export function initCoreVisuals(canvasElement) {
     return { scene, camera, renderer, ball };
 }
 
-function onWindowResize() {
+export function onWindowResize() {
     if (!renderer || !camera) {
         console.warn("onWindowResize: Renderer or Camera not available.");
         return;
@@ -167,7 +171,13 @@ function onWindowResize() {
     const newWidth = rect.width;
     const newHeight = rect.height;
 
-    console.log(`onWindowResize: Canvas getBoundingClientRect() width=${newWidth}, height=${newHeight}`);
+    console.log(`🔍 onWindowResize: Canvas getBoundingClientRect() width=${newWidth}, height=${newHeight}`);
+    console.log(`🔍 Canvas element properties: width=${canvas.width}, height=${canvas.height}`);
+    console.log(`🔍 Canvas client size: clientWidth=${canvas.clientWidth}, clientHeight=${canvas.clientHeight}`);
+    console.log(`🔍 Canvas style: width=${canvas.style.width}, height=${canvas.style.height}`);
+    console.log(`🔍 Canvas offsetWidth=${canvas.offsetWidth}, offsetHeight=${canvas.offsetHeight}`);
+    console.log(`🔍 Renderer current size:`, renderer.getSize(new THREE.Vector2()));
+    console.log(`🔍 Camera current aspect: ${camera.aspect}`);
 
     if (newHeight === 0) {
         console.warn("onWindowResize: Canvas clientHeight is 0, skipping update to prevent NaN aspect ratio.");
@@ -176,11 +186,12 @@ function onWindowResize() {
 
     camera.aspect = newWidth / newHeight;
     camera.updateProjectionMatrix();
-    console.log(`onWindowResize: Camera aspect updated to ${camera.aspect.toFixed(2)}`);
+    console.log(`✅ onWindowResize: Camera aspect updated to ${camera.aspect.toFixed(2)}`);
 
-    renderer.setPixelRatio(window.devicePixelRatio); 
-    renderer.setSize(newWidth, newHeight, false); 
-    console.log(`onWindowResize: Renderer size set to ${newWidth}x${newHeight}, pixelRatio: ${window.devicePixelRatio}`);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(newWidth, newHeight, false);
+    console.log(`✅ onWindowResize: Renderer size set to ${newWidth}x${newHeight}, pixelRatio: ${window.devicePixelRatio}`);
+    console.log(`✅ Renderer new size after setSize:`, renderer.getSize(new THREE.Vector2()));
 
     // Explicitly render the scene with the updated camera and renderer size
     // Determine which camera is active for rendering (main or measurement view)
@@ -468,7 +479,7 @@ export function showBallAtAddress(position = null, surfaceType = null) {
     // --- Tee Visibility and Positioning ---
     let teeHeightOffset = 0; // Additional height from tee
     if (teeMesh && smallTeeMesh) {
-        if (currentSurface === 'TEE') {
+        if (currentSurface.toUpperCase() === 'TEE') {
             // Determine tee size based on club type
             const selectedClub = getSelectedClub();
             const clubType = selectedClub?.type || 'iron';

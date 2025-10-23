@@ -75,8 +75,8 @@ export function getDebugTimingData() {
  */
 export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
     if (!pointMeters || !holeLayout) {
-        console.warn("getSurfaceTypeAtPoint: Missing point or holeLayout.");
-        return 'OUT_OF_BOUNDS'; // Default if layout is missing
+        // No hole layout means we're in range/practice mode - default to fairway
+        return 'FAIRWAY';
     }
 
     // All hole layouts are now in meters, no conversion needed

@@ -94,7 +94,7 @@ export function calculateFullSwingShot() {
     } else {
         // Range or other modes
         initialPositionObj = { x: 0, y: BALL_RADIUS, z: 0 };
-        currentSurface = 'tee'; // Assume range is always off a tee for full swings
+        currentSurface = 'TEE'; // Assume range is always off a tee for full swings
     }
     // Ensure surfaceType is uppercase for consistency (though lowercase check is used in physics)
     currentSurface = currentSurface.toUpperCase().replace(' ', '_');

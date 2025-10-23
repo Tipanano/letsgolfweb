@@ -15,6 +15,13 @@ const gameViewDiv = document.getElementById('game-view');
 const backToMenuButton = document.getElementById('back-to-menu-button');
 const switchHoleButton = document.getElementById('switch-hole-button'); // New
 const closeHoleSelectPopupButton = document.getElementById('close-hole-select-popup'); // New
+const fullscreenToggleBtn = document.getElementById('fullscreen-toggle-btn'); // Fullscreen button
+
+// Fullscreen bar buttons
+const fsExitFullscreenBtn = document.getElementById('fs-exit-fullscreen-btn');
+const fsMenuBtn = document.getElementById('fs-menu-btn');
+const fsSwitchHoleBtn = document.getElementById('fs-switch-hole-btn');
+const fsResetDataBtn = document.getElementById('fs-reset-data-btn');
 
 // Popups
 const holeSelectPopup = document.getElementById('hole-select-popup'); // New
@@ -916,7 +923,7 @@ export function updateVisualOverlayInfo(mode, { holeNum = 'N/A', par = 'N/A', di
 
     // --- Update Common Elements ---
     if (overlayWindSpan) overlayWindSpan.textContent = wind;
-    if (overlayLieSpan) overlayLieSpan.textContent = lie;
+    if (overlayLieSpan) overlayLieSpan.textContent = lie ? lie.toUpperCase() : '';
 
     // --- Update Mode-Specific Elements ---
     if (mode === 'play-hole' || mode === 'closest-to-flag') {
@@ -1157,6 +1164,11 @@ export function showGameView() {
     if (mainMenuDiv) mainMenuDiv.style.display = 'none';
     if (gameViewDiv) gameViewDiv.style.display = 'block'; // Or 'flex'
     console.log("UI: Switched to Game View");
+
+    // Enter fullscreen by default
+    if (!isFullscreen) {
+        setTimeout(() => toggleFullscreen(), 100);
+    }
 }
 
 // --- Event Listener Setup for Menu Navigation ---
@@ -1167,6 +1179,328 @@ export function addBackToMenuClickListener(callback) {
             if (callback) callback(); // Call additional callback if provided (e.g., to reset game state)
         });
     }
+}
+
+// --- Fullscreen Toggle Functionality ---
+let isFullscreen = false;
+
+async function toggleFullscreen() {
+    isFullscreen = !isFullscreen;
+
+    if (isFullscreen) {
+        document.body.classList.add('fullscreen-mode');
+        if (fullscreenToggleBtn) {
+            fullscreenToggleBtn.textContent = 'Exit Fullscreen';
+        }
+    } else {
+        document.body.classList.remove('fullscreen-mode');
+        if (fullscreenToggleBtn) {
+            fullscreenToggleBtn.textContent = 'Fullscreen';
+        }
+    }
+
+    // Wait for CSS transition/layout to complete, then trigger resize
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Import modules
+    const [coreModule, visualsModule] = await Promise.all([
+        import('./visuals/core.js'),
+        import('./visuals.js')
+    ]);
+
+    // First update canvas/camera dimensions
+    if (coreModule.onWindowResize) {
+        coreModule.onWindowResize();
+    }
+
+    // Wait a bit for renderer to settle
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    // Then redraw the geometry with new dimensions
+    if (visualsModule.redrawCurrentView) {
+        visualsModule.redrawCurrentView();
+    }
+
+    // Initialize fullscreen controls if entering fullscreen
+    if (isFullscreen) {
+        setTimeout(initFullscreenControls, 100);
+    }
+}
+
+// Add event listener for fullscreen button
+if (fullscreenToggleBtn) {
+    fullscreenToggleBtn.addEventListener('click', toggleFullscreen);
+}
+
+// Fullscreen bar button listeners
+if (fsExitFullscreenBtn) {
+    fsExitFullscreenBtn.addEventListener('click', toggleFullscreen);
+}
+
+if (fsMenuBtn) {
+    fsMenuBtn.addEventListener('click', () => {
+        // Exit fullscreen first, then go to menu
+        if (isFullscreen) {
+            toggleFullscreen();
+        }
+        showMainMenu();
+        // Trigger the back to menu callback if set
+        if (backToMenuButton) {
+            backToMenuButton.click();
+        }
+    });
+}
+
+if (fsSwitchHoleBtn) {
+    fsSwitchHoleBtn.addEventListener('click', () => {
+        if (switchHoleButton) {
+            switchHoleButton.click();
+        }
+    });
+}
+
+if (fsResetDataBtn) {
+    fsResetDataBtn.addEventListener('click', () => {
+        const resetButton = document.getElementById('reset-game-data-button');
+        if (resetButton) {
+            resetButton.click();
+        }
+    });
+}
+
+// --- Fullscreen Control Panels ---
+const fsClubBtn = document.getElementById('fs-club-btn');
+const fsShotTypeBtn = document.getElementById('fs-shot-type-btn');
+const fsPowerBtn = document.getElementById('fs-power-btn');
+const fsStanceBtn = document.getElementById('fs-stance-btn');
+
+const fsClubPanel = document.getElementById('fs-club-panel');
+const fsShotTypePanel = document.getElementById('fs-shot-type-panel');
+const fsPowerPanel = document.getElementById('fs-power-panel');
+const fsStancePanel = document.getElementById('fs-stance-panel');
+
+let currentOpenPanel = null;
+
+function closeFSPanels() {
+    [fsClubPanel, fsShotTypePanel, fsPowerPanel, fsStancePanel].forEach(panel => {
+        if (panel) panel.classList.remove('active');
+    });
+    currentOpenPanel = null;
+}
+
+function toggleFSPanel(panel) {
+    if (currentOpenPanel === panel) {
+        closeFSPanels();
+    } else {
+        closeFSPanels();
+        panel.classList.add('active');
+        currentOpenPanel = panel;
+    }
+}
+
+// Close panels when clicking outside
+document.addEventListener('click', (e) => {
+    if (currentOpenPanel && !e.target.closest('.fs-control-panel') && !e.target.closest('.fs-control-btn')) {
+        closeFSPanels();
+    }
+});
+
+// Toggle panels on button click
+if (fsClubBtn && fsClubPanel) {
+    fsClubBtn.addEventListener('click', () => toggleFSPanel(fsClubPanel));
+}
+if (fsShotTypeBtn && fsShotTypePanel) {
+    fsShotTypeBtn.addEventListener('click', () => toggleFSPanel(fsShotTypePanel));
+}
+if (fsPowerBtn && fsPowerPanel) {
+    fsPowerBtn.addEventListener('click', () => toggleFSPanel(fsPowerPanel));
+}
+if (fsStanceBtn && fsStancePanel) {
+    fsStanceBtn.addEventListener('click', () => toggleFSPanel(fsStancePanel));
+}
+
+// Initialize fullscreen club selection
+function initFSClubSelection() {
+    const fsClubGrid = document.getElementById('fs-club-grid');
+    const fsClubValue = document.getElementById('fs-club-value');
+    if (!fsClubGrid || !clubButtonsContainer) return;
+
+    // Copy clubs from main UI
+    const mainClubButtons = clubButtonsContainer.querySelectorAll('.club-button');
+    mainClubButtons.forEach(btn => {
+        const fsBtn = document.createElement('button');
+        fsBtn.className = 'fs-club-btn';
+        fsBtn.textContent = btn.textContent;
+        fsBtn.dataset.club = btn.dataset.club;
+
+        if (btn.classList.contains('selected')) {
+            fsBtn.classList.add('selected');
+            if (fsClubValue) fsClubValue.textContent = btn.textContent;
+        }
+
+        fsBtn.addEventListener('click', () => {
+            // Click the corresponding main button
+            btn.click();
+            // Update FS display
+            fsClubGrid.querySelectorAll('.fs-club-btn').forEach(b => b.classList.remove('selected'));
+            fsBtn.classList.add('selected');
+            if (fsClubValue) fsClubValue.textContent = btn.textContent;
+            closeFSPanels();
+        });
+
+        fsClubGrid.appendChild(fsBtn);
+    });
+}
+
+// Initialize fullscreen shot type selection
+function initFSShotTypeSelection() {
+    const fsShotTypeValue = document.getElementById('fs-shot-type-value');
+    const fsShotTypeBtns = document.querySelectorAll('.fs-shot-type-btn');
+
+    fsShotTypeBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const type = btn.dataset.type;
+            // Click corresponding radio button
+            const radio = document.querySelector(`input[name="shot-type"][value="${type}"]`);
+            if (radio) radio.click();
+
+            // Update display
+            fsShotTypeBtns.forEach(b => b.classList.remove('selected'));
+            btn.classList.add('selected');
+            if (fsShotTypeValue) fsShotTypeValue.textContent = btn.textContent;
+            closeFSPanels();
+        });
+    });
+
+    // Set initial selection
+    const selectedRadio = document.querySelector('input[name="shot-type"]:checked');
+    if (selectedRadio) {
+        const matchingBtn = document.querySelector(`.fs-shot-type-btn[data-type="${selectedRadio.value}"]`);
+        if (matchingBtn) {
+            matchingBtn.classList.add('selected');
+            if (fsShotTypeValue) fsShotTypeValue.textContent = matchingBtn.textContent;
+        }
+    }
+}
+
+// Initialize fullscreen power slider
+function initFSPowerSlider() {
+    const fsPowerSlider = document.getElementById('fs-power-slider');
+    const fsPowerDisplay = document.getElementById('fs-power-display');
+    const fsPowerValue = document.getElementById('fs-power-value');
+
+    if (fsPowerSlider && swingSpeedSlider) {
+        // Sync with main slider
+        fsPowerSlider.value = swingSpeedSlider.value;
+        if (fsPowerDisplay) fsPowerDisplay.textContent = `${fsPowerSlider.value}%`;
+        if (fsPowerValue) fsPowerValue.textContent = `${fsPowerSlider.value}%`;
+
+        fsPowerSlider.addEventListener('input', () => {
+            swingSpeedSlider.value = fsPowerSlider.value;
+            swingSpeedSlider.dispatchEvent(new Event('input'));
+            if (fsPowerDisplay) fsPowerDisplay.textContent = `${fsPowerSlider.value}%`;
+            if (fsPowerValue) fsPowerValue.textContent = `${fsPowerSlider.value}%`;
+        });
+
+        // Listen for changes from main slider
+        swingSpeedSlider.addEventListener('input', () => {
+            fsPowerSlider.value = swingSpeedSlider.value;
+            if (fsPowerDisplay) fsPowerDisplay.textContent = `${swingSpeedSlider.value}%`;
+            if (fsPowerValue) fsPowerValue.textContent = `${swingSpeedSlider.value}%`;
+        });
+    }
+}
+
+// Initialize fullscreen stance control
+function initFSStanceVisual() {
+    const fsStanceVisual = document.getElementById('fs-stance-visual');
+    const fsBallMarker = document.getElementById('fs-ball-marker');
+    const fsStanceValue = document.getElementById('fs-stance-value');
+
+    if (!fsStanceVisual || !fsBallMarker) return;
+
+    // Get the main ball position control elements
+    const mainBallMarker = document.getElementById('ball-marker');
+
+    // Sync initial position
+    if (mainBallMarker) {
+        const mainTop = mainBallMarker.style.top || '50%';
+        fsBallMarker.style.top = mainTop;
+    }
+
+    // Make the stance visual clickable
+    fsStanceVisual.addEventListener('click', (e) => {
+        const rect = fsStanceVisual.getBoundingClientRect();
+        const clickY = e.clientY - rect.top;
+        const percent = (clickY / rect.height) * 100;
+
+        // Clamp between 10% and 90% (roughly between the feet)
+        const clampedPercent = Math.max(10, Math.min(90, percent));
+
+        // Update fullscreen marker
+        fsBallMarker.style.top = `${clampedPercent}%`;
+
+        // Update main marker (this will trigger the game logic)
+        if (mainBallMarker) {
+            mainBallMarker.style.top = `${clampedPercent}%`;
+
+            // Dispatch a custom event or directly update game state
+            // Try to find and trigger the input handler's ball position change
+            const inputChangeEvent = new Event('ballPositionChange');
+            mainBallMarker.dispatchEvent(inputChangeEvent);
+        }
+
+        // Update display text
+        let positionText = 'Center';
+        if (clampedPercent < 40) {
+            positionText = 'Forward';
+        } else if (clampedPercent > 60) {
+            positionText = 'Back';
+        }
+        if (fsStanceValue) {
+            fsStanceValue.textContent = positionText;
+        }
+    });
+
+    // Listen for changes from other sources (like the main UI)
+    if (mainBallMarker) {
+        const observer = new MutationObserver(() => {
+            const mainTop = mainBallMarker.style.top;
+            if (fsBallMarker && mainTop) {
+                fsBallMarker.style.top = mainTop;
+
+                // Update text
+                const percent = parseFloat(mainTop);
+                let positionText = 'Center';
+                if (percent < 40) {
+                    positionText = 'Forward';
+                } else if (percent > 60) {
+                    positionText = 'Back';
+                }
+                if (fsStanceValue) {
+                    fsStanceValue.textContent = positionText;
+                }
+            }
+        });
+
+        observer.observe(mainBallMarker, {
+            attributes: true,
+            attributeFilter: ['style']
+        });
+    }
+
+    // Set initial text
+    if (fsStanceValue) {
+        fsStanceValue.textContent = 'Center';
+    }
+}
+
+// Initialize all fullscreen controls when entering fullscreen
+function initFullscreenControls() {
+    initFSClubSelection();
+    initFSShotTypeSelection();
+    initFSPowerSlider();
+    initFSStanceVisual();
 }
 
 // Initial state: Show main menu by default when script loads

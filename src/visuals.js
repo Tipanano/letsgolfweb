@@ -29,6 +29,7 @@ const VISUAL_MODES = {
     HOLE: 'hole' // Add HOLE mode
 };
 let currentVisualMode = VISUAL_MODES.NONE;
+let lastHoleLayout = null; // Store the last hole layout for redrawing
 
 export function initVisuals(canvasElement) {
     console.log("Initializing main visuals module (assuming 3D)...");
@@ -166,6 +167,7 @@ export function switchToHoleView(holeLayout, initialScene = null) {
     unloadCurrentView();
     console.log("Switching to Hole View...");
     currentVisualMode = VISUAL_MODES.HOLE;
+    lastHoleLayout = holeLayout; // Store for potential redraw
     RangeVisuals.removeRangeVisuals(sceneToUse); // Ensure range is gone
     TargetVisuals.hideTargetElements(); // Ensure target is gone
     HoleVisuals.drawHoleLayout(holeLayout); // Draw the actual hole
@@ -555,3 +557,22 @@ export const getMarkerPosition = PlayerMarkers.getMarkerPosition;
 
 // Export hole view functions
 export const drawHoleLayout = HoleVisuals.drawHoleLayout;
+
+// Function to redraw the current view after resize
+export function redrawCurrentView() {
+    console.log("Redrawing current view:", currentVisualMode);
+
+    if (currentVisualMode === VISUAL_MODES.HOLE && lastHoleLayout) {
+        // Redraw the hole
+        HoleVisuals.clearHoleLayout();
+        HoleVisuals.drawHoleLayout(lastHoleLayout);
+    } else if (currentVisualMode === VISUAL_MODES.RANGE) {
+        // Range view should already handle resize automatically
+        // Just ensure the ball is visible
+        showBallAtAddress();
+    } else if (currentVisualMode === VISUAL_MODES.TARGET) {
+        // Target view might need regeneration
+        // This is more complex as it depends on the target distance
+        console.log("Target view resize - may need manual refresh");
+    }
+}

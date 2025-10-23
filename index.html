@@ -51,9 +51,78 @@
 
     <!-- Game View (Initially Hidden) -->
     <div id="game-view" style="display: none;">
+        <!-- Normal mode buttons (hidden in fullscreen) -->
         <button id="back-to-menu-button" style="position: absolute; top: 10px; left: 10px; z-index: 1001;">Menu</button> <!-- Adjusted position and removed inline padding -->
         <button id="switch-hole-button" style="position: absolute; top: 50px; right: 10px; z-index: 1001;">Switch Hole</button>
         <button id="reset-game-data-button" style="position: absolute; top: 10px; right: 10px; z-index: 1001; background-color: #ffdddd; border-color: #ffaaaa;">Reset Game Data</button>
+        <button id="fullscreen-toggle-btn">Fullscreen</button>
+
+        <!-- Fullscreen top bar (only visible in fullscreen mode) -->
+        <div id="fullscreen-top-bar">
+            <button id="fs-exit-fullscreen-btn" class="fullscreen-bar-btn exit">Exit Fullscreen</button>
+            <button id="fs-menu-btn" class="fullscreen-bar-btn">Menu</button>
+            <button id="fs-switch-hole-btn" class="fullscreen-bar-btn">Switch Hole</button>
+            <button id="fs-reset-data-btn" class="fullscreen-bar-btn danger">Reset Game Data</button>
+        </div>
+
+        <!-- Fullscreen bottom-right controls (only visible in fullscreen mode) -->
+        <div id="fullscreen-controls">
+            <button class="fs-control-btn" id="fs-club-btn">
+                <span class="label">CLUB</span>
+                <span class="value" id="fs-club-value">7 Iron</span>
+            </button>
+            <button class="fs-control-btn" id="fs-shot-type-btn">
+                <span class="label">SHOT TYPE</span>
+                <span class="value" id="fs-shot-type-value">Regular</span>
+            </button>
+            <button class="fs-control-btn" id="fs-power-btn">
+                <span class="label">POWER</span>
+                <span class="value" id="fs-power-value">90%</span>
+            </button>
+            <button class="fs-control-btn" id="fs-stance-btn">
+                <span class="label">STANCE</span>
+                <span class="value" id="fs-stance-value">Center</span>
+            </button>
+        </div>
+
+        <!-- Popup panels for fullscreen controls -->
+        <div id="fs-club-panel" class="fs-control-panel">
+            <h3>Select Club</h3>
+            <div class="fs-club-grid" id="fs-club-grid">
+                <!-- Club buttons will be populated by JS -->
+            </div>
+        </div>
+
+        <div id="fs-shot-type-panel" class="fs-control-panel">
+            <h3>Shot Type</h3>
+            <div class="fs-shot-type-options">
+                <button class="fs-shot-type-btn" data-type="full">Regular</button>
+                <button class="fs-shot-type-btn" data-type="chip">Chip</button>
+            </div>
+        </div>
+
+        <div id="fs-power-panel" class="fs-control-panel">
+            <h3>Swing Power</h3>
+            <div class="fs-power-slider">
+                <div class="fs-power-value" id="fs-power-display">90%</div>
+                <input type="range" id="fs-power-slider" min="30" max="100" value="90">
+                <div style="font-size: 0.85em; opacity: 0.7; margin-top: 10px;">
+                    Reducing power makes timing easier but reduces distance.
+                </div>
+            </div>
+        </div>
+
+        <div id="fs-stance-panel" class="fs-control-panel">
+            <h3>Ball Position</h3>
+            <div class="fs-stance-visual" id="fs-stance-visual">
+                <div class="foot" id="fs-left-foot"></div>
+                <div class="ball-marker" id="fs-ball-marker" style="top: 50%;"></div>
+                <div class="foot" id="fs-right-foot"></div>
+            </div>
+            <div style="font-size: 0.85em; opacity: 0.7; margin-top: 10px; text-align: center;">
+                Click to adjust ball position
+            </div>
+        </div>
 
         <!-- Multiplayer Shot Timer - Now using top center status display instead -->
 

@@ -8,7 +8,7 @@ const getDefaultState = () => ({
     ballPosition: null, // { x, y, z }
     strokesThisHole: 0,
     totalStrokesRound: 0,
-    currentLie: 'tee', // e.g., 'tee', 'fairway', 'rough', 'green', 'bunker', 'water'
+    currentLie: 'TEE', // e.g., 'TEE', 'FAIRWAY', 'ROUGH', 'GREEN', 'BUNKER', 'WATER'
     holeLayoutData: null, // Will store the fully processed hole layout
     // Add any other relevant data to persist for playHole mode
 });

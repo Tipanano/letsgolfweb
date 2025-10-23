@@ -43,7 +43,7 @@ export const SURFACES = {
     },
     height: 0.01, // Visual height
     texturePath: 'assets/textures/fairway.png', // Added texture path
-    ballLieOffset: +0.16 // Slightly into
+    ballLieOffset: 0.11 // Ball sits slightly into the grass
   },
   LIGHT_ROUGH: {
     name: 'Light Rough',

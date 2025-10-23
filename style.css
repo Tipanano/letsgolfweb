@@ -157,13 +157,13 @@ h2 {
     border-radius: 5px;
     position: relative; /* Make this the positioning context */
     /* Ensure it contains the canvas height */
-    min-height: 400px; /* Match canvas height */
+    min-height: 600px; /* Increased from 400px */
 }
 
 #golf-canvas {
     display: block; /* Remove extra space below canvas */
     width: 100%;   /* Make canvas responsive */
-    height: 400px; /* Example fixed height */
+    height: 600px; /* Increased from 400px */
     background-color: #aaddcc; /* Placeholder canvas background */
     transform: scaleX(-1) !important; /* REMOVING THIS AGAIN FOR DIAGNOSIS */
 }
@@ -327,6 +327,11 @@ h2 {
     /* .overlay-text-item class will be applied to the span inside this div via HTML */
 }
 
+/* Move top center status down in fullscreen to avoid top bar */
+body.fullscreen-mode #top-center-status {
+    top: 70px;
+}
+
 /* --- Swing Arc Visualizer Overlay --- */
 #swing-arc-overlay {
     position: absolute;
@@ -340,6 +345,12 @@ h2 {
     backdrop-filter: blur(4px); /* More blur for depth */
     padding: 20px;
     box-sizing: border-box;
+}
+
+/* Move swing arc overlay down in fullscreen to avoid top bar */
+body.fullscreen-mode #swing-arc-overlay {
+    top: 60px;
+    height: calc(100% - 60px);
 }
 
 /* --- Ball Position Control (Simplified) --- */
@@ -510,6 +521,11 @@ h2 {
     display: flex;
     justify-content: space-between; /* Space out main left/right blocks */
     width: 100%;
+}
+
+/* Move overlay-top down in fullscreen to avoid top bar */
+body.fullscreen-mode .overlay-top {
+    margin-top: 60px;
 }
 
 /* Align text within the corner blocks */
@@ -750,13 +766,345 @@ body.mode-closest-to-flag #closest-to-flag-info {
 
 /* When game-view is active, make visuals larger */
 #game-view #visuals-container {
-    min-height: 600px; /* Increased height */
+    min-height: 900px; /* Increased from 600px to 900px (50% taller) */
     /* flex-grow: 1; already set, ensure it expands */
 }
 
 #game-view #golf-canvas {
-    height: 600px; /* Increased height */
+    height: 900px; /* Increased from 600px to 900px (50% taller) */
     /* width: 100%; already set */
+}
+
+/* Fullscreen mode styles */
+body.fullscreen-mode {
+    overflow: hidden;
+}
+
+body.fullscreen-mode #game-view {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 9999;
+    background: #e8f5e9;
+    padding: 0;
+    margin: 0;
+}
+
+body.fullscreen-mode #main-layout {
+    height: 100vh;
+    margin: 0;
+}
+
+body.fullscreen-mode #visuals-container {
+    min-height: 100vh;
+    height: 100vh;
+    width: 100vw;
+    border-radius: 0;
+    border: none;
+    margin: 0;
+    padding: 0;
+}
+
+body.fullscreen-mode #golf-canvas {
+    width: 100vw !important;
+    height: 100vh !important;
+}
+
+body.fullscreen-mode #ball-position-control,
+body.fullscreen-mode #bottom-controls,
+body.fullscreen-mode #timing-bars,
+body.fullscreen-mode #closest-to-flag-info,
+body.fullscreen-mode #instructions {
+    display: none !important;
+}
+
+/* Fullscreen bottom-right control panel */
+#fullscreen-controls {
+    display: none; /* Hidden by default, only show in fullscreen */
+    position: fixed;
+    bottom: 150px;
+    right: 10px;
+    z-index: 10000;
+    gap: 10px;
+    flex-direction: column;
+    align-items: flex-end;
+}
+
+body.fullscreen-mode #fullscreen-controls {
+    display: flex;
+}
+
+/* Control button showing current selection */
+.fs-control-btn {
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(8px);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    padding: 8px 12px;
+    color: white;
+    font-size: 0.85em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 140px;
+    text-align: left;
+}
+
+.fs-control-btn:hover {
+    background: rgba(0, 0, 0, 0.6);
+    border-color: rgba(255, 255, 255, 0.4);
+    transform: translateX(-3px);
+}
+
+.fs-control-btn .label {
+    display: block;
+    font-size: 0.7em;
+    opacity: 0.7;
+    margin-bottom: 2px;
+}
+
+.fs-control-btn .value {
+    display: block;
+    font-size: 1em;
+}
+
+/* Popup panels for each control */
+.fs-control-panel {
+    display: none;
+    position: fixed;
+    bottom: 150px;
+    right: 220px;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(12px);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 10px;
+    padding: 20px;
+    color: white;
+    z-index: 10001;
+    max-width: 300px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.fs-control-panel.active {
+    display: block;
+}
+
+.fs-control-panel h3 {
+    margin: 0 0 15px 0;
+    font-size: 1.1em;
+    color: white;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    padding-bottom: 8px;
+}
+
+/* Club selection in panel */
+.fs-club-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.fs-club-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 5px;
+    padding: 8px;
+    color: white;
+    font-size: 0.85em;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.fs-club-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.fs-club-btn.selected {
+    background: rgba(76, 175, 80, 0.8);
+    border-color: #4CAF50;
+}
+
+/* Shot type selection */
+.fs-shot-type-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.fs-shot-type-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 5px;
+    padding: 10px 15px;
+    color: white;
+    font-size: 0.9em;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: left;
+}
+
+.fs-shot-type-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.fs-shot-type-btn.selected {
+    background: rgba(76, 175, 80, 0.8);
+    border-color: #4CAF50;
+}
+
+/* Power/swing speed slider */
+.fs-power-slider {
+    margin-top: 15px;
+}
+
+.fs-power-slider input[type="range"] {
+    width: 100%;
+    margin: 10px 0;
+}
+
+.fs-power-value {
+    text-align: center;
+    font-size: 1.3em;
+    font-weight: bold;
+    color: #4CAF50;
+}
+
+/* Stance visualizer in panel */
+.fs-stance-visual {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    background-color: rgba(233, 236, 239, 0.2);
+    padding: 15px;
+    border-radius: 8px;
+    margin-top: 10px;
+    height: 150px;
+    position: relative;
+    cursor: pointer;
+    user-select: none;
+}
+
+.fs-stance-visual:hover {
+    background-color: rgba(233, 236, 239, 0.3);
+}
+
+.fs-stance-visual .foot {
+    width: 40px;
+    height: 30px;
+    background-color: #6c757d;
+    border: 2px solid #495057;
+    border-radius: 4px;
+    pointer-events: none;
+}
+
+.fs-stance-visual .ball-marker {
+    width: 15px;
+    height: 15px;
+    background-color: #fff;
+    border: 2px solid #333;
+    border-radius: 50%;
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    transition: top 0.2s ease;
+    pointer-events: none;
+}
+
+/* Fullscreen top bar */
+#fullscreen-top-bar {
+    display: none; /* Hidden by default, only show in fullscreen */
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 60px;
+    background: rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(4px);
+    z-index: 10000;
+    padding: 0 20px;
+    align-items: center;
+    gap: 15px;
+}
+
+body.fullscreen-mode #fullscreen-top-bar {
+    display: flex;
+}
+
+/* Hide the old buttons in fullscreen */
+body.fullscreen-mode #back-to-menu-button,
+body.fullscreen-mode #switch-hole-button,
+body.fullscreen-mode #reset-game-data-button,
+body.fullscreen-mode #fullscreen-toggle-btn {
+    display: none !important;
+}
+
+/* Fullscreen bar button styles */
+.fullscreen-bar-btn {
+    padding: 10px 18px;
+    font-size: 0.95em;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    border-radius: 6px;
+    color: white;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(8px);
+}
+
+.fullscreen-bar-btn:hover {
+    background: rgba(255, 255, 255, 0.25);
+    transform: translateY(-1px);
+}
+
+.fullscreen-bar-btn:active {
+    transform: translateY(0px);
+}
+
+.fullscreen-bar-btn.exit {
+    background: rgba(76, 175, 80, 0.8);
+}
+
+.fullscreen-bar-btn.exit:hover {
+    background: rgba(76, 175, 80, 1);
+}
+
+.fullscreen-bar-btn.danger {
+    background: rgba(244, 67, 54, 0.7);
+}
+
+.fullscreen-bar-btn.danger:hover {
+    background: rgba(244, 67, 54, 0.9);
+}
+
+#fullscreen-toggle-btn {
+    position: absolute;
+    top: 10px;
+    right: 150px;
+    z-index: 1001;
+    padding: 12px 20px;
+    font-size: 1em;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    border-radius: 6px;
+    background-color: #9c27b0;
+    color: white;
+    transition: background-color 0.3s ease, transform 0.1s ease;
+}
+
+#fullscreen-toggle-btn:hover {
+    background-color: #7b1fa2;
+    transform: translateY(-1px);
+}
+
+#fullscreen-toggle-btn:active {
+    transform: translateY(0px);
 }
 
 /* --- Shot Result Pop-up --- */

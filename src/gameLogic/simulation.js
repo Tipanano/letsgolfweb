@@ -6,6 +6,19 @@ import { getFlagPosition } from '../visuals/holeView.js'; // To get hole coordin
 import { BALL_RADIUS } from '../visuals/core.js'; // For ground check, hole interaction, and obstacle collision
 import { getSurfaceTypeAtPoint } from '../utils/gameUtils.js'; // For dynamic surface detection
 
+/**
+ * Helper function to get the correct ball Y position based on surface type
+ * @param {string} surfaceType - The surface type name
+ * @returns {number} The Y position for the ball
+ */
+function getBallYPositionForSurface(surfaceType) {
+    const surfaceProps = getSurfaceProperties(surfaceType);
+    if (surfaceProps && typeof surfaceProps.ballLieOffset === 'number' && surfaceProps.ballLieOffset !== -1) {
+        return BALL_RADIUS + surfaceProps.ballLieOffset;
+    }
+    return BALL_RADIUS; // Default
+}
+
 // --- Step-by-Step Flight Simulation ---
 // Takes initial position, velocity, spin vector (RPM), and the selected club object.
 // Returns simulation results including landing position, carry distance, peak height, time of flight, landing angle, and trajectory points.
@@ -361,6 +374,7 @@ export function simulateBouncePhase(landingPosition, landingVelocity, landingAng
     let bounceCount = 0;
     let inAir = false;
     let airTime = 0;
+    let currentSurfaceType = surfaceType; // Track current surface type throughout bounces
 
     // Constants for mini-flight between bounces (simplified from main flight sim)
     const gravity = 9.81;
@@ -373,7 +387,7 @@ export function simulateBouncePhase(landingPosition, landingVelocity, landingAng
             bounceCount++;
 
             // Check surface at bounce point (dynamic detection)
-            let currentSurfaceType = surfaceType; // Default to initial surface
+            currentSurfaceType = surfaceType; // Default to initial surface
             if (holeLayout) {
                 const detectedSurface = getSurfaceTypeAtPoint({ x: position.x, z: position.z }, holeLayout);
                 if (detectedSurface) {
@@ -488,8 +502,8 @@ export function simulateBouncePhase(landingPosition, landingVelocity, landingAng
                 break;
             }
 
-            // Set position exactly on ground and mark as airborne
-            position.y = BALL_RADIUS;
+            // Set position on ground with correct lie offset and mark as airborne
+            position.y = getBallYPositionForSurface(currentSurfaceType);
             bouncePoints.push({ x: position.x, y: position.y, z: position.z, time: time });
             inAir = true;
             airTime = 0;
@@ -512,9 +526,10 @@ export function simulateBouncePhase(landingPosition, landingVelocity, landingAng
 
             bouncePoints.push({ x: position.x, y: position.y, z: position.z, time: time });
 
-            // Check for ground contact
-            if (position.y <= BALL_RADIUS) {
-                position.y = BALL_RADIUS;
+            // Check for ground contact (need to get current surface for proper height check)
+            const groundY = getBallYPositionForSurface(currentSurfaceType);
+            if (position.y <= groundY) {
+                position.y = groundY;
                 inAir = false;
                 console.log(`Airtime: ${(airTime * 1000).toFixed(0)} ms`);
                 // Continue to next impact
@@ -523,7 +538,7 @@ export function simulateBouncePhase(landingPosition, landingVelocity, landingAng
             // Safety: max airtime per bounce
             if (airTime > 2.0) {
                 console.warn("Bounce airtime exceeded 2s, forcing landing");
-                position.y = BALL_RADIUS;
+                position.y = groundY;
                 inAir = false;
             }
         }
@@ -607,8 +622,8 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
     const initialSpeed = Math.sqrt(velocity.x**2 + velocity.z**2);
     console.log(`Initial horizontal speed: ${initialSpeed.toFixed(2)} m/s`);
 
-    // Ensure ball starts exactly on the ground visually for roll simulation
-    position.y = BALL_RADIUS;
+    // Ensure ball starts on the ground with correct lie offset for roll simulation
+    position.y = getBallYPositionForSurface(surfaceType);
     // We only care about horizontal velocity for rolling friction
     velocity.y = 0;
 
@@ -787,8 +802,8 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
 
         // Update position using the potentially modified velocity
         position.addScaledVector(velocity, dt);
-        // Keep ball on the ground plane
-        position.y = BALL_RADIUS;
+        // Keep ball on the ground plane with correct lie offset
+        position.y = getBallYPositionForSurface(currentSurfaceType);
 
         // Track distance traveled in this step
         const stepDistance = position.distanceTo(lastPosition);
