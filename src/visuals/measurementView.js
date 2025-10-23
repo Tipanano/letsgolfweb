@@ -281,8 +281,10 @@ function updateDistanceTexts(ballPos, clickPos, flagPos) {
     if (screenPosBall && screenPosClick) {
         const midScreenX_BallClick = (screenPosBall.x + screenPosClick.x) / 2;
         const midScreenY_BallClick = (screenPosBall.y + screenPosClick.y) / 2;
-        UIVisuals.createOrUpdateDistanceLabel('dist-label-ball-click', `${distBallClickYards} yd`, midScreenX_BallClick, midScreenY_BallClick);
+        console.log(`📏 Ball→Click label: ${distBallClickYards} yd at screen pos (${midScreenX_BallClick.toFixed(0)}, ${midScreenY_BallClick.toFixed(0)})`);
+        UIVisuals.createOrUpdateDistanceLabel('dist-label-ball-click', `${distBallClickYards} yd`, midScreenX_BallClick, midScreenY_BallClick, false);
     } else {
+        console.log('❌ Ball→Click label hidden (points not on screen)');
         // Hide label if endpoints aren't both on screen
         UIVisuals.removeDistanceLabel('dist-label-ball-click');
     }
@@ -290,8 +292,10 @@ function updateDistanceTexts(ballPos, clickPos, flagPos) {
     if (screenPosClick && screenPosFlag) {
         const midScreenX_ClickFlag = (screenPosClick.x + screenPosFlag.x) / 2;
         const midScreenY_ClickFlag = (screenPosClick.y + screenPosFlag.y) / 2;
-        UIVisuals.createOrUpdateDistanceLabel('dist-label-click-flag', `${distClickFlagYards} yd`, midScreenX_ClickFlag, midScreenY_ClickFlag);
+        console.log(`📏 Click→Flag label: ${distClickFlagYards} yd at screen pos (${midScreenX_ClickFlag.toFixed(0)}, ${midScreenY_ClickFlag.toFixed(0)})`);
+        UIVisuals.createOrUpdateDistanceLabel('dist-label-click-flag', `${distClickFlagYards} yd`, midScreenX_ClickFlag, midScreenY_ClickFlag, false);
     } else {
+        console.log('❌ Click→Flag label hidden (points not on screen)');
         // Hide label if endpoints aren't both on screen
         UIVisuals.removeDistanceLabel('dist-label-click-flag');
     }

@@ -86,6 +86,8 @@ const shotSummaryWidget = document.getElementById('shot-summary-widget');
 // Impact data elements
 const summaryClubspeedItem = document.getElementById('summary-clubspeed-item');
 const summaryClubspeedSpan = document.getElementById('summary-clubspeed');
+const summaryBallspeedItem = document.getElementById('summary-ballspeed-item');
+const summaryBallspeedSpan = document.getElementById('summary-ballspeed');
 const summaryBackspinItem = document.getElementById('summary-backspin-item');
 const summaryBackspinSpan = document.getElementById('summary-backspin');
 const summarySidespinItem = document.getElementById('summary-sidespin-item');
@@ -93,12 +95,16 @@ const summarySidespinSpan = document.getElementById('summary-sidespin');
 const summaryLaunchAngleItem = document.getElementById('summary-launch-angle-item');
 const summaryLaunchAngleSpan = document.getElementById('summary-launch-angle');
 // Landing/Final data elements
+const summaryPeakHeightItem = document.getElementById('summary-peak-height-item');
+const summaryPeakHeightSpan = document.getElementById('summary-peak-height');
 const summaryCarryItem = document.getElementById('summary-carry-item');
 const summaryCarrySpan = document.getElementById('summary-carry');
 const summaryRollItem = document.getElementById('summary-roll-item');
 const summaryRollSpan = document.getElementById('summary-roll');
 const summaryTotalItem = document.getElementById('summary-total-item');
 const summaryTotalSpan = document.getElementById('summary-total');
+const summaryMessageItem = document.getElementById('summary-message-item');
+const summaryMessageSpan = document.getElementById('summary-message');
 const showDetailsButton = document.getElementById('show-details-button');
 
 
@@ -379,9 +385,11 @@ export function updateResultDisplay(resultData) {
 
     // Populate all data for later progressive display
     if (shotSummaryWidget) {
+        if (summaryPeakHeightSpan) summaryPeakHeightSpan.textContent = formatNum(peakHeightYards, 1);
         if (summaryCarrySpan) summaryCarrySpan.textContent = formatNum(carryDistanceYards, 1);
         if (summaryRollSpan) summaryRollSpan.textContent = formatNum(rolloutDistanceYards, 1);
         if (summaryTotalSpan) summaryTotalSpan.textContent = formatNum(totalDistanceYards, 1);
+        if (summaryMessageSpan) summaryMessageSpan.textContent = resultData.message || 'N/A';
     }
 
     // DO NOT show the full shot result pop-up here automatically
@@ -405,6 +413,10 @@ function showShotImpactData(resultData, formatNum) {
         summaryClubspeedSpan.textContent = formatNum(resultData.clubHeadSpeed, 1);
         summaryClubspeedItem.style.display = 'block';
     }
+    if (summaryBallspeedItem && summaryBallspeedSpan) {
+        summaryBallspeedSpan.textContent = formatNum(resultData.ballSpeed, 1);
+        summaryBallspeedItem.style.display = 'block';
+    }
     if (summaryBackspinItem && summaryBackspinSpan) {
         summaryBackspinSpan.textContent = formatNum(resultData.backSpin, 0);
         summaryBackspinItem.style.display = 'block';
@@ -421,8 +433,9 @@ function showShotImpactData(resultData, formatNum) {
 
 // Show carry distance when ball lands
 export function showShotCarryData() {
-    if (!shotSummaryWidget || !summaryCarryItem) return;
-    summaryCarryItem.style.display = 'block';
+    if (!shotSummaryWidget) return;
+    if (summaryPeakHeightItem) summaryPeakHeightItem.style.display = 'block';
+    if (summaryCarryItem) summaryCarryItem.style.display = 'block';
 }
 
 // Show final roll and total when ball stops
@@ -430,13 +443,15 @@ export function showShotFinalData() {
     if (!shotSummaryWidget) return;
     if (summaryRollItem) summaryRollItem.style.display = 'block';
     if (summaryTotalItem) summaryTotalItem.style.display = 'block';
+    if (summaryMessageItem) summaryMessageItem.style.display = 'block';
 }
 
 // Hide all summary items (for reset)
 function hideAllShotSummaryItems() {
     const items = [
-        summaryClubspeedItem, summaryBackspinItem, summarySidespinItem,
-        summaryLaunchAngleItem, summaryCarryItem, summaryRollItem, summaryTotalItem
+        summaryClubspeedItem, summaryBallspeedItem, summaryBackspinItem, summarySidespinItem,
+        summaryLaunchAngleItem, summaryPeakHeightItem, summaryCarryItem, summaryRollItem,
+        summaryTotalItem, summaryMessageItem
     ];
     items.forEach(item => {
         if (item) item.style.display = 'none';
@@ -1100,8 +1115,10 @@ const distanceLabelClass = 'measurement-distance-label'; // CSS class for stylin
  */
 export function createOrUpdateDistanceLabel(id, text, screenX, screenY, convertToYards = true) {
     let labelElement = document.getElementById(id);
+    let isNewElement = false;
 
     if (!labelElement) {
+        isNewElement = true;
         labelElement = document.createElement('div');
         labelElement.id = id;
         labelElement.classList.add(distanceLabelClass);
@@ -1114,7 +1131,7 @@ export function createOrUpdateDistanceLabel(id, text, screenX, screenY, convertT
         labelElement.style.fontSize = '12px';
         labelElement.style.pointerEvents = 'none'; // Prevent interaction
         labelElement.style.whiteSpace = 'nowrap';
-        labelElement.style.zIndex = '100'; // Ensure it's above the canvas
+        labelElement.style.zIndex = '10000'; // Much higher z-index to ensure it's visible
         distanceLabelContainer.appendChild(labelElement);
     }
 
@@ -1130,6 +1147,8 @@ export function createOrUpdateDistanceLabel(id, text, screenX, screenY, convertT
     labelElement.style.top = `${screenY + 30}px`; // Adjust vertical offset as needed
     labelElement.style.transform = 'translateX(-50%)'; // Center horizontally
     labelElement.style.display = 'block'; // Ensure it's visible
+
+    console.log(`${isNewElement ? '✨ Created' : '🔄 Updated'} label #${id}: "${displayText}" at (${screenX}, ${screenY + 30}), z-index: ${labelElement.style.zIndex}, display: ${labelElement.style.display}`);
 }
 
 /**
@@ -1641,9 +1660,15 @@ if (switchHoleButton) {
         }
 
         // Open the play hole modal to select a different hole
-        playHoleModal.showModal((holeData) => {
-            // Hole selected - the modal callback in main.js will handle initialization
+        playHoleModal.showModal(async (holeData) => {
+            // Hole selected - reinitialize the game mode with the new hole
             console.log('Hole selected from switch button:', holeData);
+
+            // Import setGameMode and GAME_MODES from main.js
+            const { setGameMode, GAME_MODES } = await import('./main.js');
+
+            // Reinitialize play hole mode - this will load the new hole from localStorage
+            await setGameMode(GAME_MODES.PLAY_HOLE);
         });
     });
 }

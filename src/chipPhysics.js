@@ -313,6 +313,7 @@ export function calculateChipImpact(backswingDuration, rotationOffset, hitOffset
         // Core Impact Parameters (Simplified for Chip)
         potentialCHS: actualBallSpeed / 1.25, // Estimate CHS based on ball speed (placeholder)
         actualCHS: actualBallSpeed / 1.25,    // Estimate CHS (placeholder)
+        clubHeadSpeed: actualBallSpeed / 1.25, // Add clubHeadSpeed for consistency with full swing
         clubPathAngle: 0, // Assume 0 for chips for now
         faceAngleRelPath: 0, // Assume 0 for chips for now
         absoluteFaceAngle: 0, // Assume 0 for chips for now

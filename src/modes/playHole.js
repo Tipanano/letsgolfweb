@@ -57,6 +57,19 @@ export async function initializeMode(holeName) { // Made async, added holeName p
 
             localStorage.removeItem('previewHoleData');
 
+            // Reset swing speed to default (90%)
+            const defaultSwingSpeed = 90;
+            const { setSwingSpeed } = await import('../gameLogic/state.js');
+            setSwingSpeed(defaultSwingSpeed);
+
+            // Update UI slider to match
+            const swingSpeedSlider = document.getElementById('swing-speed-slider');
+            if (swingSpeedSlider) {
+                swingSpeedSlider.value = defaultSwingSpeed;
+                const swingSpeedValue = document.getElementById('swing-speed-value');
+                if (swingSpeedValue) swingSpeedValue.textContent = defaultSwingSpeed;
+            }
+
             // Set club based on par: Driver for par 4/5, 7-iron for par 3
             const par = currentHoleLayout.par || 4;
             const clubToSelect = (par >= 4) ? 'DR' : 'I7';
@@ -64,17 +77,24 @@ export async function initializeMode(holeName) { // Made async, added holeName p
             ui.setSelectedClubButton(clubToSelect);
             console.log(`Par ${par} hole detected, setting club to ${clubToSelect}`);
 
+            // Reset ball position to club's default
+            const { clubs } = await import('../clubs.js');
+            const selectedClubData = clubs[clubToSelect];
+            if (selectedClubData && selectedClubData.defaultBallPositionIndex !== undefined) {
+                ui.setBallPosition(selectedClubData.defaultBallPositionIndex);
+            }
+
             // Use the exact same flow as normal hole loading (lines 292-334)
             visuals.drawHole(currentHoleLayout);
             visuals.resetVisuals(currentBallPosition, currentLie);
 
+            // Set shot type based on lie
             if (currentLie === 'green') {
                 setShotType('putt');
-            } else if (currentLie .toUpperCase() !== 'TEE') {
-                const currentStateType = getCurrentShotType();
-                if (currentStateType === 'putt') {
-                    setShotType('full');
-                }
+            } else {
+                // For tee or any non-green lie, set to full swing
+                setShotType('full');
+                ui.setShotTypeRadio('full');
             }
 
             const initialDistToFlag = calculateDistanceToFlag(currentBallPosition, currentHoleLayout.flagPosition);
