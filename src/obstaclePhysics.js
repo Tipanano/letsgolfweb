@@ -1,16 +1,35 @@
 // Check if ball collides with an obstacle
-export function checkObstacleCollision(ballX, ballZ, ballRadius, obstacles) {
+// Now includes height (Y) checking for realistic 3D collision detection
+export function checkObstacleCollision(ballX, ballY, ballZ, ballRadius, obstacles) {
   for (const obstacle of obstacles) {
+    // 1. Check 2D distance (X, Z)
     const dx = ballX - obstacle.x;
     const dz = ballZ - obstacle.z;
-    const distance = Math.sqrt(dx * dx + dz * dz);
+    const horizontalDistance = Math.sqrt(dx * dx + dz * dz);
     const combinedRadius = ballRadius + obstacle.radius;
 
-    if (distance < combinedRadius) {
+    // If ball is outside horizontal radius, no collision
+    if (horizontalDistance >= combinedRadius) {
+      continue;
+    }
+
+    // 2. Check vertical position (Y/height)
+    // For trees: collision happens in the foliage area (above trunk)
+    // For bushes: collision happens from ground to top of bush
+    let minHeight = 0;
+    let maxHeight = obstacle.height;
+
+    if (obstacle.type === 'tree' && obstacle.trunkHeight) {
+      // Trees: only foliage area matters, trunk can pass through
+      minHeight = obstacle.trunkHeight;
+    }
+
+    // Check if ball's vertical position is within obstacle's height range
+    if (ballY >= minHeight && ballY <= maxHeight) {
       return {
         collided: true,
         obstacle,
-        distance,
+        distance: horizontalDistance,
         dx,
         dz
       };
@@ -53,8 +72,8 @@ export function applyObstacleEffect(velocity, collision) {
 }
 
 // Complete obstacle collision handling
-export function handleObstacleCollision(ballX, ballZ, ballRadius, velocityX, velocityZ, obstacles) {
-  const collision = checkObstacleCollision(ballX, ballZ, ballRadius, obstacles);
+export function handleObstacleCollision(ballX, ballY, ballZ, ballRadius, velocityX, velocityZ, obstacles) {
+  const collision = checkObstacleCollision(ballX, ballY, ballZ, ballRadius, obstacles);
 
   if (collision.collided) {
     const velocity = { x: velocityX, z: velocityZ };

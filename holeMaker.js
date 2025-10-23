@@ -23,11 +23,11 @@ let GREEN_ZONE_END = 225; // Bottom of green zone (y coordinate)
 const SURFACE_COLORS = {
     tee: '#ecf0f1',
     fairway: '#27ae60',
-    green: '#16a085',
+    green: '#9ACD32',  // Yellow-green for better distinction
     rough_light: '#95a5a6',
     rough_medium: '#7f8c8d',
     rough_heavy: '#5a6978',
-    bunker: '#f1c40f',
+    bunker: '#D2B48C',  // Tan/sand color for bunker
     water: '#3498db'
 };
 

@@ -124,10 +124,11 @@ export async function initializeMode(holeName) { // Made async, added holeName p
             }
 
             // Set initial position
+            // Preview holes from hole maker are already in meters, no conversion needed
             let initialX = 0, initialZ = 0;
             if (currentHoleLayout.tee?.center) {
-                initialX = currentHoleLayout.tee.center.x * YARDS_TO_METERS;
-                initialZ = currentHoleLayout.tee.center.z * YARDS_TO_METERS;
+                initialX = currentHoleLayout.tee.center.x;
+                initialZ = currentHoleLayout.tee.center.z;
             }
             currentBallPosition = { x: initialX, y: BALL_RADIUS, z: initialZ };
             shotsTaken = 0;

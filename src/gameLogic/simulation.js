@@ -223,11 +223,12 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club, 
         position.y += velocity.y * dt;
         position.z += velocity.z * dt;
 
-        // 5b. Check for obstacle collision (only if ball is near ground level)
-        // Trees/bushes affect ball when it's at their height
-        if (obstacles.length > 0 && position.y < 10) { // Check obstacles if below 10m height
+        // 5b. Check for obstacle collision with full 3D height checking
+        // Trees/bushes affect ball when it's at their height (foliage for trees, full height for bushes)
+        if (obstacles.length > 0) {
             const obstacleResult = handleObstacleCollision(
                 position.x,
+                position.y,
                 position.z,
                 BALL_RADIUS,
                 velocity.x,
@@ -238,7 +239,7 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club, 
             if (obstacleResult.collided) {
                 velocity.x = obstacleResult.velocityX;
                 velocity.z = obstacleResult.velocityZ;
-                console.log(`Ball hit ${obstacleResult.obstacle.type} (${obstacleResult.obstacle.size})!`);
+                console.log(`Ball hit ${obstacleResult.obstacle.type} (${obstacleResult.obstacle.size}) at height ${position.y.toFixed(1)}m!`);
             }
         }
 
@@ -305,6 +306,8 @@ const BASE_HORIZONTAL_SCRUB_FACTOR = 0.15; // Base horizontal velocity loss per 
 const SPIN_ENHANCED_SCRUB_FACTOR = 0.25; // Additional scrub at max backspin (10000 RPM)
 const ANGLE_ENHANCED_SCRUB_FACTOR = 0.35; // Additional scrub for steep landing angles (at 90°)
 const SPIN_TO_VELOCITY_TRANSFER = 0.004; // How backspin converts to horizontal velocity change on bounce (increased from 0.0008)
+const MAX_SPIN_COR_REDUCTION = 0.40; // Max % reduction in CoR from high backspin (40% at 10k RPM)
+const SPIN_COR_FIRMNESS_FACTOR = 1.2; // Multiplier for firm surfaces (green responds more to spin than rough)
 
 /**
  * Simulates the bouncing phase when ball first contacts ground.
@@ -383,7 +386,7 @@ export function simulateBouncePhase(landingPosition, landingVelocity, landingAng
 
             // Get surface properties for this bounce
             const surfaceProps = getSurfaceProperties(currentSurfaceType);
-            const coefficientOfRestitution = surfaceProps?.bounce || 0.4;
+            const baseCoR = surfaceProps?.bounce || 0.4;
 
             const impactSpeed = Math.sqrt(velocity.x**2 + velocity.y**2 + velocity.z**2);
             const horizontalSpeed = Math.sqrt(velocity.x**2 + velocity.z**2);
@@ -396,13 +399,23 @@ export function simulateBouncePhase(landingPosition, landingVelocity, landingAng
             console.log(`Impact Speed: ${impactSpeed.toFixed(2)} m/s, Horizontal: ${horizontalSpeed.toFixed(2)} m/s`);
             console.log(`Backspin: ${backspinRPM.toFixed(0)} RPM`);
 
-            // 1. Apply coefficient of restitution to vertical velocity
+            // 1. Calculate spin-dependent CoR (backspin "grabs" surface, reducing bounce)
+            // Higher backspin + firmer surface = more grip = lower bounce
+            const spinGripRatio = Math.min(backspinRPM / 10000, 1.0); // 0 to 1 (caps at 10k RPM)
+            // Firmness factor: higher CoR surfaces (firmer) respond more to spin
+            const firmnessFactor = Math.pow(baseCoR / 0.4, SPIN_COR_FIRMNESS_FACTOR); // Normalized to 0.4 baseline
+            const spinCoRReduction = spinGripRatio * firmnessFactor * MAX_SPIN_COR_REDUCTION;
+            const effectiveCoR = baseCoR * (1 - spinCoRReduction);
+
+            console.log(`CoR Calc: Base=${baseCoR.toFixed(2)}, SpinGrip=${spinGripRatio.toFixed(2)}, Firmness=${firmnessFactor.toFixed(2)}, Reduction=${(spinCoRReduction*100).toFixed(1)}%, Effective=${effectiveCoR.toFixed(2)}`);
+
+            // 2. Apply effective coefficient of restitution to vertical velocity
             const oldVerticalVel = velocity.y;
-            velocity.y = -velocity.y * coefficientOfRestitution;
+            velocity.y = -velocity.y * effectiveCoR;
 
-            console.log(`Vertical velocity: ${oldVerticalVel.toFixed(2)} → ${velocity.y.toFixed(2)} m/s (CoR: ${coefficientOfRestitution})`);
+            console.log(`Vertical velocity: ${oldVerticalVel.toFixed(2)} → ${velocity.y.toFixed(2)} m/s (CoR: ${effectiveCoR.toFixed(2)})`);
 
-            // 2. Horizontal velocity scrub from ground contact friction (scales with backspin AND landing angle)
+            // 3. Horizontal velocity scrub from ground contact friction (scales with backspin AND landing angle)
             // More backspin = more friction = more scrub
             // Steeper landing angle (first bounce only) = more scrub
             const spinScrubMultiplier = Math.min(backspinRPM / 10000, 1.0); // 0 to 1 based on spin (caps at 10k RPM)
@@ -559,7 +572,7 @@ const NEUTRAL_BACKSPIN_RPM = 2500; // RPM at which spin has minimal effect on ro
 const SPIN_FRICTION_FACTOR = 0.00008; // How much friction changes per RPM deviation (Increased, needs tuning!) // KEEPING THIS FOR NOW, might remove later
 
 // --- New Spin Physics Constants (Tunable) ---
-const BACKSPIN_ACCELERATION_FACTOR = 0.000005; // Acceleration per RPM (m/s^2 / RPM) - Needs tuning!
+const BASE_BACKSPIN_ACCELERATION_FACTOR = 0.000012; // Base acceleration per RPM (m/s^2 / RPM) - INCREASED from 0.000005
 const SIDESPIN_ACCELERATION_FACTOR = 0.000004; // Acceleration per RPM (m/s^2 / RPM) - Needs tuning!
 const BACKSPIN_DECAY_RATE_PER_SECOND = 1500; // RPM decay per second - Needs tuning!
 const SIDESPIN_DECAY_RATE_PER_SECOND = 2000; // RPM decay per second - Needs tuning!
@@ -605,7 +618,11 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
 
     const surfaceProps = getSurfaceProperties(surfaceType);
     const baseFrictionCoefficient = surfaceProps?.friction || 0.1; // Base friction from surface
+    const surfaceSpinResponse = surfaceProps?.spinResponse || 1.0; // How much surface responds to spin
     const gravity = 9.81;
+
+    // Calculate surface-specific backspin acceleration factor
+    const effectiveBackspinAccelFactor = BASE_BACKSPIN_ACCELERATION_FACTOR * surfaceSpinResponse;
 
     // COMMENTED OUT: Spin-modified friction (we handle spin effect via direct acceleration instead)
     // // Adjust friction based on backspin
@@ -625,9 +642,10 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
     const frictionDecelerationMagnitude = effectiveFrictionCoefficient * gravity;
 
     console.log("\n--- Roll Physics Setup ---");
+    console.log(`Surface: ${surfaceType}, Spin Response: ${surfaceSpinResponse.toFixed(2)}x`);
     console.log(`Base friction coefficient: ${baseFrictionCoefficient.toFixed(4)}`);
     console.log(`Friction deceleration: ${frictionDecelerationMagnitude.toFixed(3)} m/s²`);
-    console.log(`Backspin accel factor: ${(currentBackspinRPM * BACKSPIN_ACCELERATION_FACTOR).toFixed(4)} m/s²`);
+    console.log(`Backspin accel factor: ${(currentBackspinRPM * effectiveBackspinAccelFactor).toFixed(4)} m/s² (Base: ${BASE_BACKSPIN_ACCELERATION_FACTOR}, Response: ${surfaceSpinResponse.toFixed(2)}x)`);
     console.log(`Sidespin accel factor: ${(Math.abs(currentSideSpinRPM) * SIDESPIN_ACCELERATION_FACTOR).toFixed(4)} m/s²`);
 
     let time = startTime; // Start from end of bounce time
@@ -713,7 +731,7 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
         if (Math.abs(currentBackspinRPM) >= MIN_SPIN_EFFECT_RPM) {
             // Positive backspin creates force opposite initial direction (slows down faster or pulls back)
             // Negative backspin (topspin) creates force *along* initial direction (less slowing)
-            const backspinAccelMag = currentBackspinRPM * BACKSPIN_ACCELERATION_FACTOR; // Magnitude can be negative for topspin
+            const backspinAccelMag = currentBackspinRPM * effectiveBackspinAccelFactor; // Magnitude can be negative for topspin
             const backspinAccel = initialHorizontalVelocityDir.clone().multiplyScalar(-backspinAccelMag); // Negate mag to align force correctly
             netAccelerationVec.add(backspinAccel);
         }
@@ -739,7 +757,7 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
             // Calculate the component of backspin acceleration opposing the *current* velocity
             let opposingBackspinMagnitude = 0;
             if (Math.abs(currentBackspinRPM) >= MIN_SPIN_EFFECT_RPM) {
-                const backspinAccelMag = currentBackspinRPM * BACKSPIN_ACCELERATION_FACTOR;
+                const backspinAccelMag = currentBackspinRPM * effectiveBackspinAccelFactor;
                 const backspinAccelVec = initialHorizontalVelocityDir.clone().multiplyScalar(-backspinAccelMag);
                 // Project backspin accel onto the negative current velocity direction
                 opposingBackspinMagnitude = -backspinAccelVec.dot(currentVelocityDir);

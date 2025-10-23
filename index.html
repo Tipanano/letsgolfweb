@@ -318,13 +318,43 @@
     <script type="module" src="src/main.js"></script>
     <script type="module" src="src/tools.js"></script>
 
-    <!-- Hole Selection Popup -->
-    <div id="hole-select-popup" class="popup" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background-color: white; border: 1px solid #ccc; padding: 20px; z-index: 1002; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
-        <h2>Select Hole</h2>
-        <div id="hole-list-container" style="margin-bottom: 15px; max-height: 200px; overflow-y: auto;">
-            <!-- Hole buttons will be dynamically added here -->
+    <!-- Play Hole Selection Modal -->
+    <div id="play-hole-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 2000; justify-content: center; align-items: center;">
+        <div style="background: white; padding: 30px; border-radius: 10px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+            <h2 style="margin-top: 0; color: #333;">Select Hole</h2>
+
+            <!-- Segmented Control for tabs -->
+            <div id="hole-tabs" style="display: flex; margin-bottom: 20px; border-bottom: 2px solid #e0e0e0;">
+                <button id="tab-official" class="hole-tab active" style="flex: 1; padding: 12px; border: none; background: none; cursor: pointer; font-weight: bold; color: #4CAF50; border-bottom: 3px solid #4CAF50; transition: all 0.2s;">Official Holes</button>
+                <button id="tab-community" class="hole-tab" style="flex: 1; padding: 12px; border: none; background: none; cursor: pointer; color: #666; border-bottom: 3px solid transparent; transition: all 0.2s;">Community Holes</button>
+                <button id="tab-yours" class="hole-tab" style="flex: 1; padding: 12px; border: none; background: none; cursor: pointer; color: #666; border-bottom: 3px solid transparent; transition: all 0.2s;">Your Holes</button>
+            </div>
+
+            <!-- Tab Content -->
+            <div id="tab-content-official" class="tab-content" style="display: block; min-height: 200px;">
+                <p style="color: #666; text-align: center; padding: 60px 20px; font-size: 1.1em;">🏗️ Coming Soon</p>
+            </div>
+
+            <div id="tab-content-community" class="tab-content" style="display: none; min-height: 200px;">
+                <p style="color: #666; text-align: center; padding: 60px 20px; font-size: 1.1em;">🏗️ Coming Soon</p>
+            </div>
+
+            <div id="tab-content-yours" class="tab-content" style="display: none; min-height: 200px;">
+                <div id="your-holes-loading" style="text-align: center; padding: 40px 20px; color: #666;">
+                    <div style="font-size: 1.1em; margin-bottom: 10px;">Loading your holes...</div>
+                    <div style="font-size: 0.9em; color: #999;">Please wait</div>
+                </div>
+                <div id="your-holes-list" style="display: none; max-height: 400px; overflow-y: auto;">
+                    <!-- Holes will be listed here -->
+                </div>
+                <div id="your-holes-empty" style="display: none; text-align: center; padding: 60px 20px; color: #666;">
+                    <p style="font-size: 1.1em; margin-bottom: 10px;">You haven't created any holes yet!</p>
+                    <p style="font-size: 0.9em; color: #999;">Use the Hole Maker to create your first hole.</p>
+                </div>
+            </div>
+
+            <button id="close-play-hole-modal" style="margin-top: 20px; padding: 12px 25px; background: #757575; color: white; border: none; border-radius: 5px; cursor: pointer; width: 100%; font-size: 1em; transition: background 0.2s;" onmouseover="this.style.background='#616161'" onmouseout="this.style.background='#757575'">Cancel</button>
         </div>
-        <button id="close-hole-select-popup">Close</button>
     </div>
 
     <!-- Nano Registration Modal -->

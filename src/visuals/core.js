@@ -841,17 +841,45 @@ export function setCameraBehindBallLookingAtTarget(ballPosition, targetPosition,
     // const aimAngle = getShotDirectionAngle(); // REMOVED - Use parameter
     const pivot = ballPosition.clone(); // Pivot around the current ball position
 
-    // --- Calculate Distance/Height (Remains the same) ---
-    const maxDist = 50;
-    const minDistBehind = 8;
-    const maxDistBehind = 25;
-    const minHeight = 4;
-    const maxHeight = 18;
+    // --- Calculate Distance/Height (Context-aware based on distance to target) ---
+    let minDistBehind, maxDistBehind, minHeight, maxHeight, maxDist;
+
+    if (distanceToTarget <= 10) {
+        // Very close shots (putts, very short chips) - Close and low camera
+        maxDist = 10;
+        minDistBehind = 3;  // Very close for putts
+        maxDistBehind = 6;  // Still close for short chips
+        minHeight = 1.5;    // Very low for putting perspective
+        maxHeight = 3;      // Low for short chips
+    } else if (distanceToTarget <= 30) {
+        // Short chips/pitches - Medium-close camera
+        maxDist = 30;
+        minDistBehind = 6;
+        maxDistBehind = 10;
+        minHeight = 3;
+        maxHeight = 6;
+    } else if (distanceToTarget <= 60) {
+        // Longer chips/short approach - Medium camera
+        maxDist = 60;
+        minDistBehind = 10;
+        maxDistBehind = 15;
+        minHeight = 6;
+        maxHeight = 12;
+    } else {
+        // Full approach/long shots - Further back camera
+        maxDist = 100;
+        minDistBehind = 15;
+        maxDistBehind = 25;
+        minHeight = 12;
+        maxHeight = 18;
+    }
+
     const clampedDistance = Math.min(distanceToTarget, maxDist);
     const interpFactor = clampedDistance / maxDist;
     const distanceBehind = THREE.MathUtils.lerp(minDistBehind, maxDistBehind, interpFactor);
     const cameraHeight = THREE.MathUtils.lerp(minHeight, maxHeight, interpFactor);
-    console.log(`Distance: ${distanceToTarget.toFixed(1)}m, Interp: ${interpFactor.toFixed(2)}, DistBehind: ${distanceBehind.toFixed(1)}, Height: ${cameraHeight.toFixed(1)}`);
+    const rangeLabel = distanceToTarget <= 10 ? 'Putt' : distanceToTarget <= 30 ? 'Short Chip' : distanceToTarget <= 60 ? 'Long Chip' : 'Full';
+    console.log(`Distance: ${distanceToTarget.toFixed(1)}m, Range: ${rangeLabel}, DistBehind: ${distanceBehind.toFixed(1)}, Height: ${cameraHeight.toFixed(1)}`);
 
     // --- Calculate Base Position and LookAt (Relative to Pivot at 0 degrees) ---
     // Assume 0 degrees means looking down positive Z axis from behind the ball

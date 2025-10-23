@@ -6,6 +6,7 @@ export const SURFACES = {
     color: '#6AC46A', // Slightly different green for tee
     bounce: 0.18, // Similar to fairway
     rollOut: 0.50, // Similar to fairway
+    spinResponse: 1.2, // How much surface responds to backspin during roll (1.0 = baseline)
     flightModification: {
       spinReduction: 0.0,
       launchAngleChange: 0,
@@ -19,6 +20,7 @@ export const SURFACES = {
     color: '#3A9A3A', // A nice green color
     bounce: 0.30, // Firm surface, higher bounce than fairway (reduced slightly)
     rollOut: 0.90, // High roll out (less friction)
+    spinResponse: 1.5, // Firm surface = more spin effect
     flightModification: { // Minimal impact on flight from green
       spinReduction: 0.05,
       launchAngleChange: 0,
@@ -33,6 +35,7 @@ export const SURFACES = {
     color: '#5DBB5D', // Slightly lighter green
     bounce: 0.18, // Moderate grass absorption
     rollOut: 0.50, // Significantly more friction than green
+    spinResponse: 1.0, // Baseline
     flightModification: {
       spinReduction: 0.0,
       launchAngleChange: 0,
@@ -47,6 +50,7 @@ export const SURFACES = {
     color: '#228b22', // Paler green
     bounce: 0.14, // Softer grass absorbs more energy
     rollOut: 0.35, // Significant drag from grass
+    spinResponse: 0.7, // Softer = less spin effect
     flightModification: {
       spinReduction: [0.05, 0.1], // Range for spin reduction
       launchAngleChange: 0.5, // Slight increase in launch angle possible
@@ -61,6 +65,7 @@ export const SURFACES = {
     color: '#228b22', // Even paler green
     bounce: 0.11, // Significantly softer
     rollOut: 0.25, // Heavy friction
+    spinResponse: 0.5, // Much less spin effect
     flightModification: {
       spinReduction: [0.1, 0.25], // Range for spin reduction
       launchAngleChange: 1.0, // Can affect launch angle more
@@ -75,6 +80,7 @@ export const SURFACES = {
     color: '#228b22', // Very pale green, almost greyish
     bounce: 0.08, // Very soft, minimal bounce
     rollOut: 0.15, // Ball barely rolls
+    spinResponse: 0.3, // Very little spin effect
     flightModification: {
       spinReduction: [0.20, 0.40], // Range for spin reduction
       launchAngleChange: 2.0, // Potential for significant launch angle change
@@ -89,6 +95,7 @@ export const SURFACES = {
     color: '#F4A460', // Sandy color
     bounce: 0.06, // Sand absorbs almost all energy
     rollOut: 0.10, // Sand kills roll very quickly
+    spinResponse: 0.4, // Sand has some grip but inconsistent
     flightModification: {
       spinReduction: [0.50, 0.75], // Range for spin reduction
       launchAngleChange: 1.5, // Tends to increase launch angle

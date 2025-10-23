@@ -215,21 +215,19 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
          }
     }
 
-    // 7. Background / Fallback Rough / Out of Bounds
+    // 7. Background / Fallback (respects background surface property)
     // If it's not in any specific feature above, check if it's within the background bounds.
     if (holeLayout.background?.vertices) {
         if (isPointInPolygon(point, holeLayout.background.vertices)) {
             // It's within the background polygon but not any specific feature.
-            // Treat this as the thickest rough by default if not caught by a specific rough polygon.
-            // Or potentially a different 'Waste Area' surface if defined.
-            // For now, let's assume it's THICK_ROUGH if inside the background but outside everything else.
-            console.log(`LIE DETECTION: Found THICK_ROUGH (background fallback)`);
-            return 'THICK_ROUGH'; // Fallback to thickest rough within bounds
+            // Use the background's actual surface property (e.g., OUT_OF_BOUNDS or THICK_ROUGH)
+            const backgroundSurfaceName = holeLayout.background.surface?.name?.toUpperCase() || 'OUT_OF_BOUNDS';
+            console.log(`LIE DETECTION: Found ${backgroundSurfaceName} (background)`);
+            return backgroundSurfaceName;
         }
     }
     // If not inside the background polygon either, it's definitely OOB.
     console.log(`LIE DETECTION: OUT_OF_BOUNDS (not in any polygon)`);
-
 
     // Default: If not inside any defined polygon (including background)
     return 'OUT_OF_BOUNDS';

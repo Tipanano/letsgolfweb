@@ -15,6 +15,7 @@ import { playerManager } from './playerManager.js'; // Import player manager
 import * as nanoAuth from './nanoAuth.js'; // Import Nano authentication
 import * as multiplayerManager from './multiplayerManager.js'; // Import multiplayer manager
 import { initSwingArcVisualizer } from './swingArcVisualizer.js'; // Import swing arc visualizer
+import * as playHoleModal from './playHoleModal.js'; // Import play hole modal
 
 // --- Game Data ---
 const AVAILABLE_HOLE_FILES = [ // This would ideally be fetched or dynamically discovered
@@ -238,6 +239,10 @@ ui.addClubChangeListener((clubKey) => {
 
 ui.addShotTypeChangeListener((shotType) => {
     logic.setShotType(shotType);
+
+    // If in Play Hole mode and using camera 1 (hole view), refresh camera
+    // The camera is distance-based so shot type change doesn't need to trigger update
+    // The distance-based ranges will handle the appropriate camera position
 });
 
 ui.addNextShotClickListener(() => {
@@ -254,8 +259,12 @@ document.getElementById('mode-btn-closest')?.addEventListener('click', () => {
     setGameMode(GAME_MODES.CLOSEST_TO_FLAG);
 });
 document.getElementById('mode-btn-hole')?.addEventListener('click', () => {
-    ui.showGameView();
-    setGameMode(GAME_MODES.PLAY_HOLE);
+    // Show hole selection modal
+    playHoleModal.showModal((holeData) => {
+        // Hole selected, start game
+        ui.showGameView();
+        setGameMode(GAME_MODES.PLAY_HOLE);
+    });
 });
 
 // --- Connect "Back to Menu" Button ---
