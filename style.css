@@ -824,7 +824,7 @@ body.fullscreen-mode #instructions {
 #fullscreen-controls {
     display: none; /* Hidden by default, only show in fullscreen */
     position: fixed;
-    bottom: 150px;
+    top: 220px; /* Position below the overlay-top */
     right: 10px;
     z-index: 10000;
     gap: 10px;
@@ -1154,9 +1154,10 @@ body.fullscreen-mode #fullscreen-toggle-btn {
     text-align: right;
     z-index: 6;
     pointer-events: auto;
-    background-color: transparent;
-    padding: 0;
-    border-radius: 0;
+    background-color: rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(4px);
+    padding: 8px 12px;
+    border-radius: 6px;
 }
 
 /* #shot-summary-widget div will now use .overlay-text-item */

@@ -57,6 +57,7 @@ let currentTrajectoryPoints = [];
 let currentAnimationCallback = null; // Add variable to store the callback
 let currentIsHoledOut = false; // Added for holed-out state
 let currentHoledOutPosition = null; // Added for holed-out state
+let hasLandedDuringAnimation = false; // Track if ball has landed to show carry data
 const BALL_PIVOT_POINT = new THREE.Vector3(0, BALL_RADIUS, 0); // Define pivot for standard views
 
 // --- Helper Function for Rotation ---
@@ -225,7 +226,19 @@ function animate(timestamp) {
                     nextPoint,
                     Math.max(0, Math.min(1, segmentProgress))
                 );
-                if (ball) ball.position.copy(interpolatedPosition);
+                if (ball) {
+                    ball.position.copy(interpolatedPosition);
+
+                    // Detect when ball lands (y position close to BALL_RADIUS, which is ground level)
+                    // Only trigger once per shot
+                    if (!hasLandedDuringAnimation && interpolatedPosition.y <= BALL_RADIUS + 0.1) {
+                        hasLandedDuringAnimation = true;
+                        // Import and call UI function to show carry data
+                        import('../ui.js').then(ui => {
+                            ui.showShotCarryData();
+                        });
+                    }
+                }
 
             } else {
                 console.error(`Invalid trajectory point or missing timestamp: current=${currentPoint}, next=${nextPoint}`);
@@ -543,6 +556,7 @@ export function startBallAnimation(points, duration, onCompleteCallback = null, 
 
         currentTrajectoryPoints = points; // Store Vector3 points with timestamps
         isBallAnimating = true;
+        hasLandedDuringAnimation = false; // Reset landing flag for new shot
         ballAnimationStartTime = performance.now();
     } else {
         console.warn("No trajectory data received for animation.");

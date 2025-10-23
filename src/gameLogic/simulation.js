@@ -577,6 +577,17 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
     let currentSideSpinRPM = initialSideSpinRPM;
 
     const surfaceProps = getSurfaceProperties(surfaceType);
+    const initialRollOut = surfaceProps?.rollOut || 0.5;
+
+    // Check for special value -1.0 (water/OOB penalty area): stop all physics immediately
+    if (initialRollOut < 0) {
+        return {
+            finalPosition: initialPosition.clone(),
+            isHoledOut: false,
+            rollTrajectoryPoints: [{ x: initialPosition.x, y: initialPosition.y, z: initialPosition.z, time: startTime }]
+        };
+    }
+
     const baseFrictionCoefficient = surfaceProps?.friction || 0.1; // Base friction from surface
     const surfaceSpinResponse = surfaceProps?.spinResponse || 1.0; // How much surface responds to spin
     const gravity = 9.81;
@@ -750,6 +761,15 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
 
                 // Update friction coefficients
                 const newSurfaceProps = getSurfaceProperties(currentSurfaceType);
+                const newRollOut = newSurfaceProps?.rollOut || 0.5;
+
+                // Check for special value -1.0 (water/OOB): stop immediately
+                if (newRollOut < 0) {
+                    velocity.set(0, 0, 0);
+                    console.log(`Ball entered ${currentSurfaceType}, stopping roll immediately.`);
+                    break; // Exit simulation loop
+                }
+
                 currentFrictionCoefficient = newSurfaceProps?.friction || 0.1;
                 currentFrictionDecelerationMagnitude = currentFrictionCoefficient * gravity;
 

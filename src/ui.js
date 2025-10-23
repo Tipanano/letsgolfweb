@@ -83,8 +83,22 @@ const launchAngleText = document.getElementById('launch-angle-text'); // Added f
 const shotResultDiv = document.getElementById('shot-result'); // Reference for the pop-up
 // Shot Summary Widget Elements
 const shotSummaryWidget = document.getElementById('shot-summary-widget');
+// Impact data elements
+const summaryClubspeedItem = document.getElementById('summary-clubspeed-item');
+const summaryClubspeedSpan = document.getElementById('summary-clubspeed');
+const summaryBackspinItem = document.getElementById('summary-backspin-item');
+const summaryBackspinSpan = document.getElementById('summary-backspin');
+const summarySidespinItem = document.getElementById('summary-sidespin-item');
+const summarySidespinSpan = document.getElementById('summary-sidespin');
+const summaryLaunchAngleItem = document.getElementById('summary-launch-angle-item');
+const summaryLaunchAngleSpan = document.getElementById('summary-launch-angle');
+// Landing/Final data elements
+const summaryCarryItem = document.getElementById('summary-carry-item');
 const summaryCarrySpan = document.getElementById('summary-carry');
+const summaryRollItem = document.getElementById('summary-roll-item');
 const summaryRollSpan = document.getElementById('summary-roll');
+const summaryTotalItem = document.getElementById('summary-total-item');
+const summaryTotalSpan = document.getElementById('summary-total');
 const showDetailsButton = document.getElementById('show-details-button');
 
 
@@ -360,11 +374,14 @@ export function updateResultDisplay(resultData) {
     totalDistanceText.textContent = formatNum(totalDistanceYards, 1);
     launchAngleText.textContent = formatNum(resultData.launchAngle, 1); // Added Launch Angle display
 
-    // Populate the shot summary widget but don't show it yet (will be shown after animation)
-    if (shotSummaryWidget && summaryCarrySpan && summaryRollSpan) {
-        summaryCarrySpan.textContent = formatNum(carryDistanceYards, 1);
-        summaryRollSpan.textContent = formatNum(rolloutDistanceYards, 1);
-        shotSummaryWidget.style.display = 'none'; // Hide initially, will be shown after animation
+    // Show impact data immediately in shot summary widget
+    showShotImpactData(resultData, formatNum);
+
+    // Populate all data for later progressive display
+    if (shotSummaryWidget) {
+        if (summaryCarrySpan) summaryCarrySpan.textContent = formatNum(carryDistanceYards, 1);
+        if (summaryRollSpan) summaryRollSpan.textContent = formatNum(rolloutDistanceYards, 1);
+        if (summaryTotalSpan) summaryTotalSpan.textContent = formatNum(totalDistanceYards, 1);
     }
 
     // DO NOT show the full shot result pop-up here automatically
@@ -373,6 +390,60 @@ export function updateResultDisplay(resultData) {
     // }
 }
 
+// Show impact data immediately when shot is hit
+function showShotImpactData(resultData, formatNum) {
+    if (!shotSummaryWidget) return;
+
+    // Hide all items first
+    hideAllShotSummaryItems();
+
+    // Show widget with impact data
+    shotSummaryWidget.style.display = 'block';
+
+    // Show impact data
+    if (summaryClubspeedItem && summaryClubspeedSpan) {
+        summaryClubspeedSpan.textContent = formatNum(resultData.clubHeadSpeed, 1);
+        summaryClubspeedItem.style.display = 'block';
+    }
+    if (summaryBackspinItem && summaryBackspinSpan) {
+        summaryBackspinSpan.textContent = formatNum(resultData.backSpin, 0);
+        summaryBackspinItem.style.display = 'block';
+    }
+    if (summarySidespinItem && summarySidespinSpan) {
+        summarySidespinSpan.textContent = formatNum(resultData.sideSpin, 0);
+        summarySidespinItem.style.display = 'block';
+    }
+    if (summaryLaunchAngleItem && summaryLaunchAngleSpan) {
+        summaryLaunchAngleSpan.textContent = formatNum(resultData.launchAngle, 1);
+        summaryLaunchAngleItem.style.display = 'block';
+    }
+}
+
+// Show carry distance when ball lands
+export function showShotCarryData() {
+    if (!shotSummaryWidget || !summaryCarryItem) return;
+    summaryCarryItem.style.display = 'block';
+}
+
+// Show final roll and total when ball stops
+export function showShotFinalData() {
+    if (!shotSummaryWidget) return;
+    if (summaryRollItem) summaryRollItem.style.display = 'block';
+    if (summaryTotalItem) summaryTotalItem.style.display = 'block';
+}
+
+// Hide all summary items (for reset)
+function hideAllShotSummaryItems() {
+    const items = [
+        summaryClubspeedItem, summaryBackspinItem, summarySidespinItem,
+        summaryLaunchAngleItem, summaryCarryItem, summaryRollItem, summaryTotalItem
+    ];
+    items.forEach(item => {
+        if (item) item.style.display = 'none';
+    });
+}
+
+// Legacy function for compatibility
 export function showShotSummaryWidget() {
     if (shotSummaryWidget) {
         shotSummaryWidget.style.display = 'block';

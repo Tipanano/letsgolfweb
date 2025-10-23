@@ -302,8 +302,8 @@ export function animateBallFlightWithLanding(shotData, trajectoryColor = 0xffff0
             ui.updateStatus('Press (n) for next shot');
         }
 
-        // Show shot summary widget after animation completes
-        ui.showShotSummaryWidget();
+        // Show final shot data (roll + total) after animation completes
+        ui.showShotFinalData();
 
         // Notify multiplayer manager that ball has stopped, pass shot data
         multiplayerManager.onBallStopped(shotData);

@@ -198,11 +198,33 @@
                             <div class="overlay-text-item">Total: <span id="overlay-total-score">N/A</span> (<span id="overlay-position">N/A</span>)</div>
                         </div>
                         <!-- Range / CTF might not need bottom left, or could show something else -->
-                         <!-- NEW Shot Summary Widget (now part of overlay-bottom for positioning if desired, or keep separate) -->
+                         <!-- Shot Summary Widget - Progressive shot data display -->
                         <div id="shot-summary-widget" style="display: none;">
-                            <div class="overlay-text-item">Carry: <span id="summary-carry">N/A</span> yd</div>
-                            <div class="overlay-text-item">Roll: <span id="summary-roll">N/A</span> yd</div>
-                            <button id="show-details-button">+</button> <!-- Button style is separate -->
+                            <!-- Impact data (shown immediately) -->
+                            <div class="overlay-text-item" id="summary-clubspeed-item" style="display: none;">
+                                Clubspeed: <span id="summary-clubspeed">N/A</span> mph
+                            </div>
+                            <div class="overlay-text-item" id="summary-backspin-item" style="display: none;">
+                                Backspin: <span id="summary-backspin">N/A</span> rpm
+                            </div>
+                            <div class="overlay-text-item" id="summary-sidespin-item" style="display: none;">
+                                Sidespin: <span id="summary-sidespin">N/A</span> rpm
+                            </div>
+                            <div class="overlay-text-item" id="summary-launch-angle-item" style="display: none;">
+                                Launch: <span id="summary-launch-angle">N/A</span>°
+                            </div>
+                            <!-- Landing data (shown when ball lands) -->
+                            <div class="overlay-text-item" id="summary-carry-item" style="display: none;">
+                                Carry: <span id="summary-carry">N/A</span> yd
+                            </div>
+                            <!-- Final data (shown when ball stops) -->
+                            <div class="overlay-text-item" id="summary-roll-item" style="display: none;">
+                                Roll: <span id="summary-roll">N/A</span> yd
+                            </div>
+                            <div class="overlay-text-item" id="summary-total-item" style="display: none;">
+                                Total: <span id="summary-total">N/A</span> yd
+                            </div>
+                            <button id="show-details-button">+</button>
                         </div>
                     </div>
                 </div>

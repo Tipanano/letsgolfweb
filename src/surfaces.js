@@ -109,7 +109,7 @@ export const SURFACES = {
     name: 'Water',
     color: '#4682B4', // Steel blue
     bounce: -1.0, // Special value: stops all physics immediately (no bounce, no roll)
-    rollOut: 0.1, // Not used (ball stops on contact)
+    rollOut: -1.0, // Not used (ball stops on contact)
     flightModification: { // Extreme effects, ball likely lost
       spinReduction: 1.0,
       launchAngleChange: 0, // Not applicable if ball is submerged
@@ -123,7 +123,7 @@ export const SURFACES = {
     name: 'Out of Bounds',
     color: '#808080', // Grey
     bounce: -1.0,      // Very low bounce
-    rollOut: 0.1,     // Very high friction (low roll out)
+    rollOut: -1.0,     // Very high friction (low roll out)
     flightModification: { // Significant penalty, but maybe not instant stop like water
       spinReduction: 0.9,
       launchAngleChange: 0,
