@@ -1,9 +1,9 @@
 import { clubs, defaultPlayerBag } from './clubs.js'; // Import club data and defaultPlayerBag
 import { metersToYards, YARDS_TO_METERS } from './utils/unitConversions.js'; // Import conversion utilities
 import { getWind, getTemperature } from './gameLogic/state.js'; // Import environment state getters (Corrected Path)
-import { clearPlayHoleState } from './gameLogic/persistentGameState.js';
 import { toast } from './ui/toast.js';
 import { modal } from './ui/modal.js';
+import * as playHoleModal from './playHoleModal.js';
 
 // --- DOM Element References ---
 // --- DOM Element References ---
@@ -13,8 +13,7 @@ const gameViewDiv = document.getElementById('game-view');
 
 // Buttons
 const backToMenuButton = document.getElementById('back-to-menu-button');
-const switchHoleButton = document.getElementById('switch-hole-button'); // New
-const closeHoleSelectPopupButton = document.getElementById('close-hole-select-popup'); // New
+const switchHoleButton = document.getElementById('switch-hole-button');
 const fullscreenToggleBtn = document.getElementById('fullscreen-toggle-btn'); // Fullscreen button
 
 // Fullscreen bar buttons
@@ -22,10 +21,6 @@ const fsExitFullscreenBtn = document.getElementById('fs-exit-fullscreen-btn');
 const fsMenuBtn = document.getElementById('fs-menu-btn');
 const fsSwitchHoleBtn = document.getElementById('fs-switch-hole-btn');
 const fsResetDataBtn = document.getElementById('fs-reset-data-btn');
-
-// Popups
-const holeSelectPopup = document.getElementById('hole-select-popup'); // New
-const holeListContainer = document.getElementById('hole-list-container'); // New
 
 
 // Other UI Elements
@@ -147,66 +142,6 @@ const ballPositionLabels = [
 let currentBallPositionIndex = 5; // Start near Center (index 5 for 10 levels, 0-9)
 
 // --- UI Update Functions ---
-
-// List of available hole files (to be populated from main.js or elsewhere)
-let availableHoleFiles = [];
-let onHoleSelectedCallback = null; // Callback to notify main.js of hole selection
-
-export function setAvailableHoleFiles(holeFiles) {
-    availableHoleFiles = holeFiles;
-}
-
-export function setOnHoleSelectedCallback(callback) {
-    onHoleSelectedCallback = callback;
-}
-
-export function populateHoleList() {
-    if (!holeListContainer) return;
-    holeListContainer.innerHTML = ''; // Clear existing
-
-    availableHoleFiles.forEach(holeFile => {
-        const button = document.createElement('button');
-        button.classList.add('hole-select-item'); // For styling
-        button.dataset.holefile = holeFile;
-        // Make a nicer name, e.g., "mickelson_01.json" -> "Mickelson 01"
-        const displayName = holeFile.replace('.json', '').replace('_', ' ');
-        button.textContent = displayName.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
-
-
-        button.addEventListener('click', () => {
-            if (onHoleSelectedCallback) {
-                onHoleSelectedCallback(holeFile);
-            }
-            hideHoleSelectPopup();
-        });
-        holeListContainer.appendChild(button);
-    });
-}
-
-function showHoleSelectPopup() {
-    if (holeSelectPopup) {
-        populateHoleList(); // Populate with the latest list of holes
-        holeSelectPopup.style.display = 'block';
-        // Add the global click listener when the pop-up is shown
-        document.addEventListener('click', handleClickOutsideHoleSelectPopup, true);
-    }
-}
-
-function hideHoleSelectPopup() {
-    if (holeSelectPopup) {
-        holeSelectPopup.style.display = 'none';
-    }
-    document.removeEventListener('click', handleClickOutsideHoleSelectPopup, true);
-}
-
-function handleClickOutsideHoleSelectPopup(event) {
-    if (holeSelectPopup && holeSelectPopup.style.display !== 'none') {
-        if (!holeSelectPopup.contains(event.target) && event.target !== switchHoleButton) {
-            hideHoleSelectPopup();
-        }
-    }
-}
-
 
 export function updateStatus(text) {
     if (statusTextDisplay) {
@@ -749,13 +684,12 @@ export function addResetGameDataListener() {
     if (resetButton) {
         resetButton.addEventListener('click', async () => {
             const confirmed = await modal.confirm(
-                'Are you sure you want to reset all saved game data for Play Hole mode? This action cannot be undone.',
-                'Reset Game Data',
+                'Are you sure you want to reload the page?',
+                'Reload Page',
                 'warning'
             );
             if (confirmed) {
-                clearPlayHoleState();
-                toast.info('Game data reset. Reloading the page...');
+                toast.info('Reloading the page...');
                 setTimeout(() => window.location.reload(), 1000);
             }
         });
@@ -1623,65 +1557,49 @@ if (rightFoot) {
     });
 }
 
-// --- Event Listener for Switch Hole Button & Popup ---
+// --- Switch Hole Button ---
 if (switchHoleButton) {
-    switchHoleButton.addEventListener('click', (event) => {
-        event.stopPropagation(); // Prevent click-outside from immediately closing if it's already open
-
-        // Import getCurrentGameMode at the top of the file if not already imported
-        const currentMode = window.getCurrentGameMode ? window.getCurrentGameMode() : null;
-
-        if (currentMode === 'closest-to-flag') {
-            // In CTF mode, generate a new hole layout
-            if (window.generateNewCTFHole) {
-                window.generateNewCTFHole();
-            } else {
-                console.error('generateNewCTFHole function not available');
-            }
-        } else {
-            // In Play Hole mode, show the hole selection popup
-            if (holeSelectPopup) {
-                const isVisible = holeSelectPopup.style.display === 'block';
-                if (isVisible) {
-                    hideHoleSelectPopup();
-                } else {
-                    // Hide other popups if open
-                    hideBallPosInfoPopup();
-                    hideSwingSpeedInfoPopup();
-                    hideShotResultPopup();
-                    showHoleSelectPopup(); // This will populate and show
-                }
+    switchHoleButton.addEventListener('click', () => {
+        // Exit fullscreen mode if active before showing modal
+        if (isFullscreen) {
+            document.body.classList.remove('fullscreen-mode');
+            isFullscreen = false;
+            if (fullscreenToggleBtn) {
+                fullscreenToggleBtn.textContent = 'Fullscreen';
             }
         }
+
+        // Open the play hole modal to select a different hole
+        playHoleModal.showModal((holeData) => {
+            // Hole selected - the modal callback in main.js will handle initialization
+            console.log('Hole selected from switch button:', holeData);
+        });
     });
 }
 
-if (closeHoleSelectPopupButton) {
-    closeHoleSelectPopupButton.addEventListener('click', () => {
-        hideHoleSelectPopup();
+// Fullscreen switch hole button - just clicks the main button
+if (fsSwitchHoleBtn) {
+    fsSwitchHoleBtn.addEventListener('click', () => {
+        if (switchHoleButton) {
+            switchHoleButton.click();
+        }
     });
 }
 
 /**
- * Update switch hole button text based on current game mode
- * @param {string} gameMode - Current game mode ('play-hole', 'closest-to-flag', etc.)
+ * Update switch hole button visibility/text based on game mode
+ * @param {string} gameMode - Current game mode
+ * @param {boolean} isMultiplayer - Whether in multiplayer mode
  */
 export function updateSwitchHoleButton(gameMode, isMultiplayer = false) {
     if (!switchHoleButton) return;
 
-    if (gameMode === 'closest-to-flag') {
-        if (isMultiplayer) {
-            // Hide the button in multiplayer CTF (server controls hole generation)
-            switchHoleButton.style.display = 'none';
-        } else {
-            // Show as "New Hole" in single player CTF
-            switchHoleButton.style.display = 'block';
-            switchHoleButton.textContent = 'New Hole';
-        }
-    } else {
-        // Show as "Switch Hole" in Play Hole mode
+    // For now, just show the button in play-hole mode
+    if (gameMode === 'play-hole') {
         switchHoleButton.style.display = 'block';
         switchHoleButton.textContent = 'Switch Hole';
+    } else {
+        switchHoleButton.style.display = 'none';
     }
 }
 

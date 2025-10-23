@@ -1,11 +1,9 @@
 import * as ui from './ui.js';
 // Import specific functions, including updateEnvironmentDisplay
-// Added setAvailableHoleFiles and setOnHoleSelectedCallback
-import { showMainMenu, showGameView, addBackToMenuClickListener, updateEnvironmentDisplay, setAvailableHoleFiles, setOnHoleSelectedCallback } from './ui.js';
+import { showMainMenu, showGameView, addBackToMenuClickListener, updateEnvironmentDisplay } from './ui.js';
 import * as logic from './gameLogic.js'; // Game state and actions
 import * as visuals from './visuals.js';
 import * as inputHandler from './inputHandler.js'; // Import the new input handler
-import { clearPlayHoleState } from './gameLogic/persistentGameState.js'; // Import for resetting state
 import * as environment from './gameLogic/environment.js'; // Import environment simulation
 import * as closestToFlag from './modes/closestToFlag.js'; // Import the CTF mode logic
 import * as playHole from './modes/playHole.js'; // Import the Play Hole mode logic
@@ -17,14 +15,6 @@ import * as multiplayerManager from './multiplayerManager.js'; // Import multipl
 import { initSwingArcVisualizer } from './swingArcVisualizer.js'; // Import swing arc visualizer
 import * as playHoleModal from './playHoleModal.js'; // Import play hole modal
 
-// --- Game Data ---
-const AVAILABLE_HOLE_FILES = [ // This would ideally be fetched or dynamically discovered
-    "mickelson_01.json",
-    "norman_02.json",
-    "woods_03.json"
-    // Add more hole files here as they are created
-];
-
 // --- Game Modes ---
 export const GAME_MODES = {
     RANGE: 'range',
@@ -32,19 +22,6 @@ export const GAME_MODES = {
     PLAY_HOLE: 'play-hole',
 };
 let currentMode = GAME_MODES.RANGE; // Default mode
-
-
-// Function to switch to a new hole in Play Hole mode
-async function switchGameToHole(holeFileName) {
-    if (currentMode !== GAME_MODES.PLAY_HOLE) {
-        console.warn("Cannot switch hole when not in Play Hole mode. Setting mode to Play Hole first.");
-        await setGameMode(GAME_MODES.PLAY_HOLE, holeFileName); // Pass holeFileName to setGameMode
-    } else {
-        clearPlayHoleState(); // Clear previous hole's saved state
-        // playHole.initializeMode is async, so await it.
-        await playHole.initializeMode(holeFileName); // Initialize the new hole
-    }
-}
 
 // Function to generate a new CTF hole layout
 function generateNewCTFHole() {
@@ -150,11 +127,6 @@ ui.updatePlayerDisplay(playerManager.getDisplayName(), playerManager.currentPlay
 
 // Create the club buttons first
 ui.createClubButtons();
-
-// Pass hole files and selection callback to UI
-ui.setAvailableHoleFiles(AVAILABLE_HOLE_FILES);
-ui.setOnHoleSelectedCallback(switchGameToHole);
-
 
 // Get initial values from UI (slider and now-updated club buttons) and set them in logic
 const initialSwingSpeed = parseInt(document.getElementById('swing-speed-slider').value, 10);
