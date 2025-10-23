@@ -34,7 +34,6 @@ export function clearHoleLayout() {
     currentGreenRadius = null;
     // Clear obstacles
     clearObstacles(scene);
-    console.log("Cleared previous hole layout visuals, obstacles, and reset stored positions.");
 }
 
 /**
@@ -51,7 +50,6 @@ export function drawHoleLayout(holeLayout) {
     currentFlagPosition = null; // Reset flag position on new draw
     currentGreenCenter = null; // Reset green data
     currentGreenRadius = null;
-    console.log("Drawing hole layout:", holeLayout);
 
     const scale = 1.0; // All hole layouts are now in meters, no conversion needed
     const textureLoader = new TextureLoader(); // Create texture loader instance
@@ -88,7 +86,6 @@ export function drawHoleLayout(holeLayout) {
                     uvAttribute.setXY(i, u, v);
                 }
                 bgGeometry.setAttribute('uv', uvAttribute);
-                console.log("Manually calculated UVs for background geometry.");
             } else {
                 console.warn("Background geometry has zero size in X or Y dimension, cannot calculate UVs.");
             }
@@ -117,7 +114,6 @@ export function drawHoleLayout(holeLayout) {
                         side: THREE.DoubleSide
                     });
                     bgMesh.material.needsUpdate = true;
-                    console.log(`Texture ${bgSurface.texturePath} loaded and applied to background.`);
                 },
                 undefined,
                 (err) => {
@@ -134,7 +130,6 @@ export function drawHoleLayout(holeLayout) {
                 color: bgSurface?.color || '#8B4513', // Fallback color
                 side: THREE.DoubleSide
             });
-            console.log("Applied color to background.");
         }
 
         scene.add(bgMesh);
@@ -148,7 +143,6 @@ export function drawHoleLayout(holeLayout) {
             return;
         }
 
-        console.log(`Creating ${roughTypeName} shape from vertices.`);
         const roughShape = new THREE.Shape();
         const firstPoint = roughData.vertices[0];
         roughShape.moveTo(firstPoint.x * scale, firstPoint.z * scale);
@@ -223,7 +217,6 @@ export function drawHoleLayout(holeLayout) {
                         vertexColors: true
                     });
                     roughMesh.material.needsUpdate = true;
-                    console.log(`Texture loaded for ${roughTypeName}.`);
                 },
                 undefined,
                 (err) => {
@@ -322,7 +315,6 @@ export function drawHoleLayout(holeLayout) {
                             uvAttribute.setXY(i, u, v);
                         }
                         waterGeometry.setAttribute('uv', uvAttribute);
-                        // console.log("Manually calculated UVs for polygon water geometry."); // Optional: less verbose logging
                     } else {
                         console.warn("Polygon water geometry has zero size in X or Y dimension, cannot calculate UVs.");
                     }
@@ -358,7 +350,6 @@ export function drawHoleLayout(holeLayout) {
                             map: texture
                         });
                         waterMesh.material.needsUpdate = true;
-                        console.log(`Texture ${waterSurface.texturePath} loaded and applied to water.`);
                     },
                     undefined,
                     (err) => {
@@ -375,7 +366,6 @@ export function drawHoleLayout(holeLayout) {
                      ...waterMaterialOptions,
                     color: waterSurface?.color || '#ADD8E6' // Fallback color
                 });
-                console.log("Applied color to water.");
             }
 
 
@@ -433,7 +423,6 @@ export function drawHoleLayout(holeLayout) {
                             uvAttribute.setXY(i, u, v);
                         }
                         bunkerGeometry.setAttribute('uv', uvAttribute);
-                         // console.log("Manually calculated UVs for polygon bunker geometry."); // Optional: less verbose logging
                     } else {
                         console.warn("Polygon bunker geometry has zero size in X or Y dimension, cannot calculate UVs.");
                     }
@@ -466,7 +455,6 @@ export function drawHoleLayout(holeLayout) {
                             side: THREE.DoubleSide
                         });
                         bunkerMesh.material.needsUpdate = true;
-                        console.log(`Texture ${bunkerSurface.texturePath} loaded and applied to bunker.`);
                     },
                     // onProgress callback (optional)
                     undefined,
@@ -487,7 +475,6 @@ export function drawHoleLayout(holeLayout) {
                     color: bunkerSurface?.color || '#D2B48C', // Fallback color (Tan)
                     side: THREE.DoubleSide
                 });
-                console.log("Applied color to bunker.");
             }
 
             scene.add(bunkerMesh); // Add mesh to scene (material might be applied async)
@@ -504,7 +491,6 @@ export function drawHoleLayout(holeLayout) {
             return;
         }
 
-        console.log(`Creating ${fairwayName} shape from vertices.`);
         const fairwayShape = new THREE.Shape();
         const firstPoint = fairwayData.vertices[0];
         fairwayShape.moveTo(firstPoint.x * scale, firstPoint.z * scale);
@@ -554,7 +540,6 @@ export function drawHoleLayout(holeLayout) {
                         side: THREE.DoubleSide
                     });
                     fairwayMesh.material.needsUpdate = true;
-                    console.log(`Texture ${fairwaySurface.texturePath} loaded and applied to ${fairwayName}.`);
                 },
                 undefined,
                 (err) => {
@@ -571,7 +556,6 @@ export function drawHoleLayout(holeLayout) {
                 color: fairwaySurface?.color || '#5DBB5D',
                 side: THREE.DoubleSide
             });
-            console.log(`Applied color to ${fairwayName}.`);
         }
         scene.add(fairwayMesh);
         currentHoleObjects.push(fairwayMesh);
@@ -619,7 +603,6 @@ export function drawHoleLayout(holeLayout) {
                     uvAttribute.setXY(i, u, v);
                 }
                 greenGeometry.setAttribute('uv', uvAttribute);
-                console.log("Manually calculated UVs for green geometry.");
             } else {
                 console.warn("Green geometry has zero size in X or Y dimension, cannot calculate UVs.");
             }
@@ -654,7 +637,6 @@ export function drawHoleLayout(holeLayout) {
                         side: THREE.DoubleSide
                     });
                     greenMesh.material.needsUpdate = true;
-                    console.log(`Texture ${greenSurface.texturePath} loaded and applied to green.`);
                 },
                  // onProgress callback (optional)
                 undefined,
@@ -675,7 +657,6 @@ export function drawHoleLayout(holeLayout) {
                 color: greenSurface?.color || '#3A9A3A', // Fallback color
                 side: THREE.DoubleSide
             });
-            console.log("Applied color to green.");
         }
         scene.add(greenMesh); // Add mesh to scene
         currentHoleObjects.push(greenMesh);
@@ -701,7 +682,6 @@ export function drawHoleLayout(holeLayout) {
         });
         currentGreenRadius = sumDist / holeLayout.green.vertices.length;
 
-        console.log(`Drawn polygon green at height ${greenHeight.toFixed(3)}, center: (${centerX.toFixed(1)}, ${centerZ.toFixed(1)}), radius: ${currentGreenRadius.toFixed(1)}`);
 
     } else if (holeLayout.green && holeLayout.green.center && holeLayout.green.radius) {
          // Fallback for old circle definition (optional, can be removed later)
@@ -771,7 +751,6 @@ export function drawHoleLayout(holeLayout) {
             0, // Assuming flag base is at y=0 world coordinate
             holeLayout.flagPosition.z * scale
         );
-        console.log("Stored flag position (meters):", currentFlagPosition);
 
 
         // Optional: Add a little flag cloth
@@ -814,7 +793,6 @@ export function drawHoleLayout(holeLayout) {
 
     // --- Draw Obstacles (Trees/Bushes) ---
     if (holeLayout.obstacles && Array.isArray(holeLayout.obstacles)) {
-        console.log(`Rendering ${holeLayout.obstacles.length} obstacles (trees/bushes)`);
 
         // Convert obstacle data from JSON format to full obstacle objects with properties
         const obstaclesWithProps = holeLayout.obstacles.map(obs =>
@@ -823,10 +801,8 @@ export function drawHoleLayout(holeLayout) {
 
         // Render obstacles to the scene
         renderObstacles(scene, obstaclesWithProps);
-        console.log(`Rendered ${obstaclesWithProps.length} obstacles`);
     }
 
-    console.log("Finished drawing hole layout. Added objects:", currentHoleObjects.length);
 }
 
 /**
@@ -864,7 +840,6 @@ export function setFlagstickVisibility(visible) {
     if (flagClothMesh) {
         flagClothMesh.visible = visible;
     }
-    console.log(`Flagstick visibility set to: ${visible}`);
 }
 
 /**

@@ -35,8 +35,6 @@ function clamp(value, min, max) {
  * @returns {object} An object containing calculated putt impact parameters.
  */
 export function calculatePuttImpact(backswingDuration, hitOffset) {
-    console.log("--- Calculating Putt Impact Physics ---");
-    console.log(`Inputs: Duration=${backswingDuration?.toFixed(0)}, HitOffset=${hitOffset?.toFixed(0)}`);
 
     // Handle missing inputs
     const effectiveHitOffset = hitOffset ?? 9999; // Use large offset if 'i' wasn't pressed
@@ -47,11 +45,6 @@ export function calculatePuttImpact(backswingDuration, hitOffset) {
     // Ideal timing is at a fixed percentage of the visual bar duration (matches colored zone)
     const idealHitOffset = PUTT_VISUAL_DURATION_MS * PUTT_IDEAL_TIMING_PERCENT; // ~1237ms for 82.5%
     const hitDeviation = effectiveHitOffset - idealHitOffset;
-    console.log(`PUTT TIMING DEBUG:`);
-    console.log(`  Backswing Duration: ${backswingDuration?.toFixed(0)}ms (determines power only)`);
-    console.log(`  Hit Offset (actual): ${effectiveHitOffset.toFixed(0)}ms`);
-    console.log(`  Ideal Offset: ${idealHitOffset.toFixed(0)}ms (${(PUTT_IDEAL_TIMING_PERCENT * 100).toFixed(1)}% of fixed ${PUTT_VISUAL_DURATION_MS}ms tempo)`);
-    console.log(`  Deviation: ${hitDeviation.toFixed(0)}ms`);
 
     // 1. Calculate Base Power/Speed from Backswing Duration
     // Use non-linear curve: short putts easier to control, long putts harder
@@ -68,7 +61,6 @@ export function calculatePuttImpact(backswingDuration, hitOffset) {
     // Apply minimum speed (ensures short putts move noticeably)
     actualBallSpeed = Math.max(PUTT_MIN_SPEED, actualBallSpeed);
 
-    console.log(`Power Calculation: Backswing=${effectiveBackswing.toFixed(0)}ms (${(backswingPercent*100).toFixed(0)}%) → Power=${(powerPercent*100).toFixed(0)}% → Speed=${actualBallSpeed.toFixed(1)}mph`);
 
     // 2. Determine Strike Quality (Push/Pull/Center) based on Hit Timing Deviation
     let strikeQuality = "Center";
@@ -77,7 +69,6 @@ export function calculatePuttImpact(backswingDuration, hitOffset) {
     } else if (hitDeviation > PUTT_PULL_THRESHOLD_MS) {
         strikeQuality = "Pull"; // Late
     }
-    console.log(`Strike Quality: ${strikeQuality}`);
 
     // 3. Calculate Horizontal Launch Angle (Push/Pull Effect)
     // Positive deviation (late) = Pull (negative angle)
@@ -85,7 +76,6 @@ export function calculatePuttImpact(backswingDuration, hitOffset) {
     // Clamp the deviation effect
     const clampedHitDeviation = clamp(hitDeviation, -PUTT_TIMING_SENSITIVITY_MS, PUTT_TIMING_SENSITIVITY_MS);
     let horizontalLaunchAngle = -clampedHitDeviation * PUTT_TIMING_SIDE_ANGLE_FACTOR; // Negative sign makes late pull left (-)
-    console.log(`Horizontal Angle: ${horizontalLaunchAngle.toFixed(2)} deg (HitDev: ${hitDeviation.toFixed(0)})`);
 
     // 4. Set Vertical Launch Angle (Fixed at 0 for putts)
     const launchAngle = 0; // Vertical launch angle is always 0
@@ -117,8 +107,6 @@ export function calculatePuttImpact(backswingDuration, hitOffset) {
                  'Good Putt'
     };
 
-    console.log("--- Putt Impact Calculation Complete ---");
-    console.log("Result:", impactResult);
 
     return impactResult;
 }

@@ -83,4 +83,3 @@ export {
 // export { simulateFlightStepByStep } from './gameLogic/simulation.js';
 // export { calculateTrajectoryPoints, calculatePuttTrajectoryPoints } from './gameLogic/trajectory.js';
 
-console.log("Game Logic Facade Loaded."); // Indicate the facade is ready

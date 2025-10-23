@@ -14,7 +14,6 @@ export async function generateHoleLayout(holeNameInput = "mickelson_01") {
     // Ensure holeName does not have .json extension for internal use and fetching
     const holeName = holeNameInput.replace(/\.json$/, '');
 
-    console.log(`Attempting to load and generate layout for hole: ${holeName}`);
     let sourceLayout;
     const filePath = `./holes/${holeName}.json`;
     try {
@@ -23,7 +22,6 @@ export async function generateHoleLayout(holeNameInput = "mickelson_01") {
             throw new Error(`HTTP error! status: ${response.status} for ${filePath}`);
         }
         sourceLayout = await response.json();
-        console.log(`Successfully loaded raw layout for ${holeName} from ${filePath}:`, sourceLayout);
     } catch (error) {
         console.error(`Error loading hole data for ${holeName} from ${filePath}:`, error);
         return null; // Return null if loading fails
@@ -52,7 +50,6 @@ export async function generateHoleLayout(holeNameInput = "mickelson_01") {
         // Depending on strictness, you might want to return null here or proceed with potentially broken surfaces.
     }
     
-    console.log("Processing shapes for loaded hole layout...");
 
     // Process Tee Box: Calculate vertices from center/width/depth
     if (layoutToReturn.tee && layoutToReturn.tee.center && layoutToReturn.tee.width && layoutToReturn.tee.depth) {
@@ -66,7 +63,6 @@ export async function generateHoleLayout(holeNameInput = "mickelson_01") {
             { x: c.x - hw, z: c.z + hd }  // Back-left
         ];
         layoutToReturn.tee.type = 'polygon'; // Add type
-        console.log("Calculated tee vertices:", layoutToReturn.tee.vertices);
     } else {
         console.warn("Tee definition missing center, width, or depth. Cannot calculate vertices.");
         layoutToReturn.tee = { ...(layoutToReturn.tee || {}), vertices: [] }; // Ensure vertices array exists
@@ -84,7 +80,6 @@ export async function generateHoleLayout(holeNameInput = "mickelson_01") {
         const greenCenter = calculatePolygonCenter(greenVertices);
         if (greenCenter) {
             layoutToReturn.flagPosition = greenCenter;
-            console.log(`Calculated flag position (green center): x=${greenCenter.x.toFixed(1)}, z=${greenCenter.z.toFixed(1)}`);
         } else {
             console.warn("Could not calculate green center for flag position. Using default.");
             // Fallback to a default position if center calculation fails
@@ -136,13 +131,11 @@ export async function generateHoleLayout(holeNameInput = "mickelson_01") {
 
     // Process Fairway: Use its controlPoints for randomized shaping
     if (layoutToReturn.fairway && layoutToReturn.fairway.controlPoints && layoutToReturn.fairway.controlPoints.length > 0) {
-        console.log("Processing fairway with createRandomizedFairwayShape...");
         // Note: The JSON stores these as 'controlPoints' for the fairway.
         const fairwayVertices = createRandomizedFairwayShape(layoutToReturn.fairway.controlPoints);
         layoutToReturn.fairway.vertices = fairwayVertices;
         delete layoutToReturn.fairway.controlPoints; // Remove control points, keep final vertices
         layoutToReturn.fairway.type = 'polygon'; // Ensure type is set
-        console.log(`Generated ${layoutToReturn.fairway.vertices.length} vertices for fairway.`);
     } else {
         console.warn("Fairway definition missing controlPoints. Cannot apply randomized shaping.");
         layoutToReturn.fairway = { ...(layoutToReturn.fairway || {}), vertices: [], type: 'polygon' }; // Ensure structure
@@ -155,7 +148,6 @@ export async function generateHoleLayout(holeNameInput = "mickelson_01") {
     }
 
 
-    console.log(`Finished processing shapes for hole layout: ${layoutToReturn.name || holeName}.`);
     return layoutToReturn;
 }
 

@@ -114,7 +114,6 @@ export function initSwingArcVisualizer() {
 
     container.appendChild(svgElement);
 
-    console.log('SwingArc: Visualizer initialized');
     return true;
 }
 
@@ -338,7 +337,6 @@ export function startBackswingArc(swingSpeed, shotType = 'full') {
     idealZoneElement.style.display = 'none';
     clearPressMarkers();
 
-    console.log(`SwingArc: Backswing started (${shotType})`);
 }
 
 /**
@@ -397,7 +395,6 @@ export function markHipInitiationOnArc(progress) {
     hipMarkerElement.setAttribute('cy', straightY);
     hipMarkerElement.style.display = 'block';
 
-    console.log(`SwingArc: Hip initiated at ${(progress * 100).toFixed(0)}%`);
 }
 
 /**
@@ -406,7 +403,6 @@ export function markHipInitiationOnArc(progress) {
 export function endBackswingArc() {
     // Show ideal zone at apex if needed
     // (Could add visual feedback here)
-    console.log('SwingArc: Backswing ended');
 }
 
 // --- Downswing Updates ---
@@ -430,7 +426,6 @@ export function startDownswingArc() {
     progressElement.setAttribute('stroke-dasharray', `${halfLength} ${totalLength}`);
     progressElement.setAttribute('stroke', ARC_CONFIG.downswingRotationColor);
 
-    console.log('SwingArc: Downswing started');
 }
 
 /**
@@ -533,7 +528,6 @@ export function markKeyPressOnArc(key, progress) {
     pressMarkersGroup.appendChild(marker);
 
     // No label needed - the colored zones show ideal ranges, marker shows actual timing
-    console.log(`SwingArc: Marked ${key} press at ${(progress * 100).toFixed(0)}%`);
 }
 
 /**
@@ -560,7 +554,6 @@ export function resetSwingArc() {
     idealZoneElement.style.display = 'none';
     clearPressMarkers();
 
-    console.log('SwingArc: Reset');
 }
 
 /**

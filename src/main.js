@@ -40,7 +40,6 @@ async function switchGameToHole(holeFileName) {
         console.warn("Cannot switch hole when not in Play Hole mode. Setting mode to Play Hole first.");
         await setGameMode(GAME_MODES.PLAY_HOLE, holeFileName); // Pass holeFileName to setGameMode
     } else {
-        console.log("Main: Switching to hole:", holeFileName);
         clearPlayHoleState(); // Clear previous hole's saved state
         // playHole.initializeMode is async, so await it.
         await playHole.initializeMode(holeFileName); // Initialize the new hole
@@ -54,7 +53,6 @@ function generateNewCTFHole() {
         return;
     }
 
-    console.log("Main: Generating new CTF hole layout...");
 
     // Clear the current hole config so a new one will be generated
     visuals.clearTargetViewConfig();
@@ -71,7 +69,6 @@ function generateNewCTFHole() {
     visuals.showBallAtAddress();
 
     ui.updateStatus('Ready');
-    console.log("Main: New CTF hole generated successfully.");
 }
 
 
@@ -82,7 +79,6 @@ export async function setGameMode(newMode, initialHoleName = null, targetDistanc
         return;
     }
 
-    console.log(`Switching game mode from ${currentMode} to: ${newMode}`);
 
     // Terminate previous mode if necessary
     if (currentMode === GAME_MODES.CLOSEST_TO_FLAG) {
@@ -100,7 +96,6 @@ export async function setGameMode(newMode, initialHoleName = null, targetDistanc
         visualsSystemInitialized = visuals.initVisuals(canvas);
         if (visualsSystemInitialized) {
             environment.startWindSimulation(); // Start wind updates once visuals are ready
-            console.log("Visuals system initialized.");
         } else {
             console.error("Visuals system failed to initialize. Game may not display correctly.");
             // Optionally, inform the user via an on-page message
@@ -120,7 +115,6 @@ export async function setGameMode(newMode, initialHoleName = null, targetDistanc
         visuals.showBallAtAddress(); // Ensure ball is shown
     } else if (currentMode === GAME_MODES.CLOSEST_TO_FLAG) {
         const actualTargetDistance = closestToFlag.initializeMode(targetDistance);
-        console.log('CTF Mode: Target distance from initializeMode:', actualTargetDistance);
         visuals.switchToTargetView(actualTargetDistance);
         visuals.showBallAtAddress(); // Ensure ball is shown
     } else if (currentMode === GAME_MODES.PLAY_HOLE) {
@@ -131,7 +125,6 @@ export async function setGameMode(newMode, initialHoleName = null, targetDistanc
         // Ball position is handled by playHole.initializeMode.
     }
     
-    console.log(`Game mode ${currentMode} initialized and visuals set up.`);
 
     // Update switch hole button text based on mode and multiplayer status
     const isMultiplayer = multiplayerManager.getCurrentSessionId() !== null;
@@ -151,7 +144,6 @@ export function getCurrentGameMode() {
 
 // Initialize player manager first (auto-creates guest if needed)
 await playerManager.init();
-console.log('Player initialized:', playerManager.getDisplayName());
 
 // Update UI with player info
 ui.updatePlayerDisplay(playerManager.getDisplayName(), playerManager.currentPlayer.playerType);
@@ -188,7 +180,6 @@ ui.setupTimingBarWindows(initialSwingSpeed / 100); // Setup downswing windows ba
 // Initialize swing arc visualizer
 const swingArcInitialized = initSwingArcVisualizer();
 if (swingArcInitialized) {
-    console.log("Swing arc visualizer initialized.");
 } else {
     console.warn("Swing arc visualizer failed to initialize.");
 }
@@ -275,7 +266,6 @@ document.getElementById('mode-btn-hole')?.addEventListener('click', () => {
 
 // --- Connect "Back to Menu" Button ---
 function handleBackToMenu() {
-    console.log("Returning to Main Menu...");
 
     // Clear the hole configuration to prevent stale data from persisting
     // This ensures a clean slate when starting a new game (especially important for multiplayer)
@@ -311,7 +301,6 @@ nanoAuth.init();
 // Check for preview mode from hole maker
 const previewData = localStorage.getItem('previewHoleData');
 if (previewData) {
-    console.log('Preview mode detected - auto-starting Play Hole mode...');
     ui.showGameView();
     await setGameMode(GAME_MODES.PLAY_HOLE);
 }
@@ -332,19 +321,16 @@ if (logoutBtn) {
         // Update UI to reflect guest status
         const player = playerManager.currentPlayer;
         ui.updatePlayerDisplay(player.guestName, player.playerType);
-        console.log('Logged out, reverted to guest account');
     });
 }
 
 
 // Add global key listeners that call the input handler
 document.addEventListener('keydown', (event) => {
-    // console.log(`main.js keydown: ${event.key} (code: ${event.code})`); // Log listener firing (optional)
     inputHandler.handleKeyDown(event); // Call the input handler
 });
 
 document.addEventListener('keyup', (event) => {
-    // console.log(`main.js keyup: ${event.key} (code: ${event.code})`); // Log listener firing (optional)
     inputHandler.handleKeyUp(event); // Call the input handler
 });
 
@@ -354,12 +340,10 @@ canvas?.addEventListener('mousedown', (event) => {
 });
 
 
-console.log("Main script loaded, event listeners attached.");
 
 
 // --- Shot Completion Handler ---
 function handleShotCompletion(shotData) {
-    console.log("main.js: Handling shot completion:", shotData);
 
     // 1. Update Standard UI Result Display
     // Pass all relevant properties from shotData to the UI function

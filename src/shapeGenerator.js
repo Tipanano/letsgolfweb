@@ -13,7 +13,6 @@
  * @returns {Array<{x: number, z: number}>} An array of control points.
  */
 export function generateGreenControlPoints(shapeType = 'round', size = 30, center = { x: 0, z: 0 }, rotation = 0, complexity = 6, randomness = 0.1) {
-    console.log(`ShapeGen: Generating green control points - Type: ${shapeType}, Size: ${size}, Center: (${center.x}, ${center.z})`);
     // TODO: Implement logic based on shapeType.
     // - 'round': Generate points roughly on a circle, add randomness.
     // - 'kidney': Generate points for a kidney bean shape.
@@ -47,7 +46,6 @@ export function generateGreenControlPoints(shapeType = 'round', size = 30, cente
  * @returns {Array<{x: number, z: number}>} An array of control points.
  */
 export function generateBunkerControlPoints(shapeType = 'amoeba', size = 10, center = { x: 0, z: 0 }, rotation = 0, complexity = 5, randomness = 0.2) {
-    console.log(`ShapeGen: Generating bunker control points - Type: ${shapeType}, Size: ${size}, Center: (${center.x}, ${center.z})`);
     // TODO: Implement logic based on shapeType.
     // - 'pot': Small, deep, likely near-circular.
     // - 'waste': Large, sprawling, irregular.
@@ -69,7 +67,6 @@ export function generateBunkerControlPoints(shapeType = 'amoeba', size = 10, cen
  * @returns {{leftEdge: Array<{x: number, z: number}>, rightEdge: Array<{x: number, z: number}>}} Object containing arrays of control points for left and right edges.
  */
 export function generateFairwayControlPoints(shapeType = 'straight', startPoint = { x: 0, z: 0 }, endPoint = { x: 0, z: 300 }, lengthYards = 300, widthYards = 40, curveFactor = 0) {
-    console.log(`ShapeGen: Generating fairway control points - Type: ${shapeType}`);
     // TODO: Implement logic based on shapeType.
     // 1. Generate centerline points based on type, start, end, curveFactor.
     // 2. Calculate perpendicular vectors at points along the centerline.
@@ -102,7 +99,6 @@ export function generateFairwayControlPoints(shapeType = 'straight', startPoint 
  * @returns {Array<{x: number, z: number}>} An array of control points.
  */
 export function generateWaterControlPoints(shapeType = 'pond', size = 20, center = { x: 0, z: 0 }, rotation = 0, complexity = 7, randomness = 0.15) {
-    console.log(`ShapeGen: Generating water control points - Type: ${shapeType}, Size: ${size}, Center: (${center.x}, ${center.z})`);
     // TODO: Implement logic based on shapeType.
     // - 'pond': Similar to a round or amoeba green/bunker.
     // - 'lake': Larger, potentially more complex.

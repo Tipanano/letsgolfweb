@@ -14,7 +14,6 @@ export async function loadHoleLayout(holeNameInput = "custom_hole_01") {
     // Ensure holeName does not have .json extension for internal use and fetching
     const holeName = holeNameInput.replace(/\.json$/, '');
 
-    console.log(`Loading hole layout: ${holeName}`);
     let sourceLayout;
     const filePath = `./holes/${holeName}.json`;
 
@@ -24,7 +23,6 @@ export async function loadHoleLayout(holeNameInput = "custom_hole_01") {
             throw new Error(`HTTP error! status: ${response.status} for ${filePath}`);
         }
         sourceLayout = await response.json();
-        console.log(`Successfully loaded hole layout for ${holeName}:`, sourceLayout);
     } catch (error) {
         console.error(`Error loading hole data for ${holeName} from ${filePath}:`, error);
         return null;
@@ -53,7 +51,6 @@ export async function loadHoleLayout(holeNameInput = "custom_hole_01") {
             ];
             layout.tee.surface = SURFACES[layout.tee.surface];
             layout.tee.type = 'polygon';
-            console.log("Calculated tee vertices:", layout.tee.vertices);
         }
 
         // Process Fairways: Support multiple fairways (or single legacy fairway)
@@ -153,13 +150,11 @@ export async function loadHoleLayout(holeNameInput = "custom_hole_01") {
                     x: layout.flagPositions[0].x,
                     z: layout.flagPositions[0].z
                 };
-                console.log(`Using flag position #1: x=${layout.flagPosition.x}, z=${layout.flagPosition.z}`);
             }
         }
 
         // Process Obstacles (trees/bushes)
         if (layout.obstacles && Array.isArray(layout.obstacles)) {
-            console.log(`Loaded ${layout.obstacles.length} obstacles (trees/bushes)`);
             // Obstacles are already in the correct format with x, z, type, size
             // The rendering code will need to handle these separately
         }
@@ -169,6 +164,5 @@ export async function loadHoleLayout(holeNameInput = "custom_hole_01") {
         return null;
     }
 
-    console.log(`Finished loading hole layout: ${layout.name || holeName}`);
     return layout;
 }

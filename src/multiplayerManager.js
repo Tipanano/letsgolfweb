@@ -58,7 +58,6 @@ const gameLeaveBtn = document.getElementById('game-leave-btn');
 let playerScores = {}; // { playerId: { distanceMeters, distanceYards, hasShot } }
 
 export function init() {
-    console.log('Multiplayer Manager initialized');
 
     // Set up button handlers
     lobbyReadyBtn?.addEventListener('click', handleReadyClick);
@@ -72,21 +71,17 @@ export function init() {
 
     // Listen for wager-ready event (all players paid)
     window.addEventListener('wager-ready', (event) => {
-        console.log('All players paid!');
         escrowStatus = 'ready';
 
         // Only host sends the start game command
         if (isHost) {
-            console.log('🎮 Host starting game...');
             wsManager.sendGameStart();
         } else {
-            console.log('⏳ Waiting for host to start game...');
         }
     });
 
     // Listen for leave-game event (from wagering cancel)
     window.addEventListener('leave-game', () => {
-        console.log('Leaving game due to payment cancellation...');
         wsManager.disconnect();
         hideLobby();
         resetState();
@@ -113,12 +108,6 @@ export async function hostGame(mode = 'closest-to-flag', settings = {}) {
         isWageringGame = settings.wagerAmount ? true : false;
         wagerAmount = settings.wagerAmount || null;
 
-        console.log('🎮 [HOST] Creating game session...', {
-            playerId: localPlayerId,
-            playerName: playerManager.getDisplayName(),
-            wagerAmount: settings.wagerAmount || null
-        });
-
         const response = await apiClient.createGameSession(localPlayerToken, {
             playerName: playerManager.getDisplayName(),
             settings: {
@@ -131,16 +120,10 @@ export async function hostGame(mode = 'closest-to-flag', settings = {}) {
         currentSessionId = response.sessionId;
         currentRoomCode = response.roomCode;
 
-        console.log('✅ [HOST] Game created:', {
-            sessionId: currentSessionId,
-            roomCode: currentRoomCode
-        });
-
         // Don't initialize players array locally - wait for server to send it
         // The server will send game:stateUpdate when we connect via WebSocket
 
         // Connect WebSocket (this will trigger game:stateUpdate with the player list)
-        console.log('🔌 [HOST] Connecting WebSocket with sessionId:', currentSessionId);
         wsManager.connect(currentSessionId, localPlayerToken);
 
         // Show lobby (player list will update when we receive game:stateUpdate)
@@ -166,12 +149,6 @@ export async function joinGame(roomCode) {
 
         isHost = false;
 
-        console.log('🚪 [JOIN] Joining game...', {
-            roomCode,
-            playerId: localPlayerId,
-            playerName: playerManager.getDisplayName()
-        });
-
         const response = await apiClient.joinGameSession(
             localPlayerToken,
             roomCode,
@@ -182,14 +159,7 @@ export async function joinGame(roomCode) {
         currentRoomCode = roomCode;
         players = response.players || [];
 
-        console.log('✅ [JOIN] Joined game:', {
-            sessionId: currentSessionId,
-            roomCode,
-            existingPlayers: players.length
-        });
-
         // Connect WebSocket
-        console.log('🔌 [JOIN] Connecting WebSocket with sessionId:', currentSessionId);
         wsManager.connect(currentSessionId, localPlayerToken);
 
         // Show lobby
@@ -206,12 +176,10 @@ export async function joinGame(roomCode) {
 
 function setupWebSocketHandlers() {
     wsManager.setOnOpenCallback(() => {
-        console.log('WebSocket connected');
         updateStatus('Connected to game');
     });
 
     wsManager.setOnPlayerJoinedCallback((data) => {
-        console.log('Player joined:', data);
         if (data.player) {
             // Add or update player in list
             const existingIndex = players.findIndex(p => p.id === data.player.id);
@@ -226,18 +194,14 @@ function setupWebSocketHandlers() {
     });
 
     wsManager.setOnPlayerLeftCallback((data) => {
-        console.log('Player left:', data);
         players = players.filter(p => p.id !== data.playerId);
         updateLobbyDisplay();
         updateStatus('A player left');
     });
 
     wsManager.setOnGameStateUpdateCallback((data) => {
-        console.log('🎮 Game state update received:', data);
-        console.log('📋 Players from server:', data.players);
         if (data.players) {
             players = data.players;
-            console.log('✅ Updated local players array:', players);
             updateLobbyDisplay();
         } else {
             console.warn('⚠️ Game state update had no players array!');
@@ -245,21 +209,17 @@ function setupWebSocketHandlers() {
     });
 
     wsManager.setOnGameStartCallback((data) => {
-        console.log('Game started!', data);
 
         // Store hole configuration from server (server sends meters, keep in meters internally)
         if (data.holeConfig) {
             holeConfig = data.holeConfig;
             // Keep distance in meters internally (conversion to yards happens in UI only)
             targetDistance = data.holeConfig.distanceMeters;
-            console.log('🏌️ Received hole config from server:', holeConfig);
-            console.log(`   Distance: ${targetDistance}m`);
         }
 
         // Track which player's turn it is
         if (data.currentPlayerIndex !== undefined) {
             currentPlayerIndex = data.currentPlayerIndex;
-            console.log('Starting turn index:', currentPlayerIndex);
         }
 
         // Save active game session to localStorage for rejoin on refresh
@@ -276,19 +236,16 @@ function setupWebSocketHandlers() {
 
     // Listen for turn changes
     wsManager.setOnTurnChangeCallback((data) => {
-        console.log('Turn changed:', data);
         handleTurnChange(data);
     });
 
     // Listen for shots from other players
     wsManager.setOnPlayerShotCallback((data) => {
-        console.log('Shot received:', data);
         handlePlayerShot(data);
     });
 
     // Listen for player ready status changes
     wsManager.setOnCustomEventCallback('player:readyStatus', (data) => {
-        console.log('Player ready status:', data);
         // Update the player's ready status in our local list
         const player = players.find(p => p.id === data.playerId);
         if (player) {
@@ -300,7 +257,6 @@ function setupWebSocketHandlers() {
 
     // Listen for when game can be started
     wsManager.setOnCustomEventCallback('game:canStart', (data) => {
-        console.log('Game can start:', data);
         if (isHost) {
             updateLobbyDisplay(); // This will show the start button
             updateStatus('All players ready! Click Start Game');
@@ -309,13 +265,11 @@ function setupWebSocketHandlers() {
 
     // Listen for game finished event
     wsManager.setOnCustomEventCallback('game:finished', (data) => {
-        console.log('🏁 Game finished event received:', data);
         handleGameFinished(data);
     });
 
     // Listen for game reset to lobby (after game finishes, for play again)
     wsManager.setOnCustomEventCallback('game:resetToLobby', (data) => {
-        console.log('🔄 Game reset to lobby:', data);
         // Update players list with new ready statuses
         players = data.players || players;
         // Show lobby
@@ -325,32 +279,27 @@ function setupWebSocketHandlers() {
 
     // Listen for escrow created (wagering games)
     wsManager.setOnCustomEventCallback('escrow:created', (data) => {
-        console.log('💰 Escrow created, showing payment UI:', data);
         handleEscrowCreated(data);
     });
 
     // Listen for payment status updates (wagering games)
     wsManager.setOnCustomEventCallback('payment:status', (data) => {
-        console.log('💰 Payment status update:', data);
         handlePaymentStatus(data);
     });
 
     // Listen for payment complete (all players paid)
     wsManager.setOnCustomEventCallback('payment:complete', (data) => {
-        console.log('✅ All payments complete!', data);
         escrowStatus = 'ready';
         // Game will start automatically via server's game:started event
     });
 
     // Listen for game cancelled (host left)
     wsManager.setOnCustomEventCallback('game:cancelled', (data) => {
-        console.log('❌ Game cancelled:', data);
         handleGameCancelled(data);
     });
 
     // Listen for payout complete (wagering games)
     wsManager.setOnCustomEventCallback('payout:complete', (data) => {
-        console.log('💰 Payout complete!', data);
         handlePayoutComplete(data);
     });
 
@@ -376,7 +325,6 @@ function handleGameCancelled(data) {
 }
 
 function handleEscrowCreated(data) {
-    console.log('💰 Escrow created, showing payment UI for all players');
 
     // Show payment UI for all players (host and joiners)
     wageringManager.showPaymentUIFromBroadcast(
@@ -389,7 +337,6 @@ function handleEscrowCreated(data) {
 }
 
 function handlePaymentStatus(data) {
-    console.log('💰 Updating payment status:', data);
 
     // Update players with payment status
     if (data.players && Array.isArray(data.players)) {
@@ -424,7 +371,6 @@ function handleGameFinished(data) {
         return;
     }
 
-    console.log('Game finished! Winner:', winner.name, 'Distance:', winner.distanceFromHole, 'meters');
 
     // Mark game as finished to prevent status message updates
     isGameFinished = true;
@@ -466,7 +412,6 @@ function handleGameFinished(data) {
         payoutData,
         isWageringGame,
         onPlayAgain: () => {
-            console.log('Play again requested - marking ready');
             wsManager.sendPlayerReady();
         },
         onReturnToMenu: returnToMenu
@@ -474,7 +419,6 @@ function handleGameFinished(data) {
 }
 
 function returnToMenu() {
-    console.log('Returning to menu from multiplayer...');
 
     // Terminate game modes
     if (gameMode === 'closest-to-flag') {
@@ -499,7 +443,6 @@ function returnToMenu() {
 }
 
 function handlePayoutComplete(data) {
-    console.log('💰 Payout completed successfully:', data);
 
     const isLocalWinner = data.winner.id === localPlayerId;
     const payoutNano = data.payoutAmount;
@@ -539,11 +482,9 @@ function handleReadyClick() {
 async function handleStartClick() {
     if (!isHost) return;
 
-    console.log('Host starting game...');
 
     // If this is a wagering game, create escrow first
     if (isWageringGame) {
-        console.log('Wagering game - initiating payment flow...');
 
         // Validate all players are registered
         const validation = wageringManager.validateAllPlayersRegistered(players);
@@ -797,7 +738,6 @@ export function updatePlayerScore(playerId, distanceMeters, distanceYards, isPen
 }
 
 async function startMultiplayerGame() {
-    console.log('Starting multiplayer Closest to Flag game...');
 
     // Safety: Reset game state from any previous game
     logic.resetSwing();
@@ -819,9 +759,7 @@ async function startMultiplayerGame() {
         const { clearHoleConfig, setHoleConfig } = await import('./visuals/targetView.js');
         // Force clear any existing hole data to ensure a clean slate (defense in depth)
         clearHoleConfig();
-        console.log('🧹 Cleared any existing hole config before setting server config');
         setHoleConfig(holeConfig);
-        console.log('✅ Set server hole config before initializing CTF mode');
     }
 
     // Initialize CTF mode with server-provided target distance (or null for single-player)
@@ -832,11 +770,9 @@ async function startMultiplayerGame() {
 
     // Find our local player index
     const localPlayerIdx = players.findIndex(p => p.id === localPlayerId);
-    console.log('Local player index:', localPlayerIdx, 'Current turn:', currentPlayerIndex);
 
     // Only start timer if it's this player's turn
     if (localPlayerIdx === currentPlayerIndex) {
-        console.log('It\'s your turn! Starting timer...');
         // Show alert modal with sound notification
         playTurnNotificationSound();
         modal.alert('It\'s your turn! Take your shot.', 'Your Turn!', 'success');
@@ -845,32 +781,27 @@ async function startMultiplayerGame() {
         // Switch to camera 1 (static behind ball) for your turn
         const { activateHoleViewCamera } = await import('./visuals.js');
         activateHoleViewCamera();
-        console.log('Switched to camera 1 (static) for your turn');
     } else {
         // Show waiting message for other players
         const currentPlayer = players[currentPlayerIndex];
         const playerName = currentPlayer?.name || 'Player';
-        console.log('Waiting for', playerName, '\'s turn');
         startWatchingTimer(playerName);
 
         // Switch to camera 3 (reverse angle) for watching
         const { activateReverseCamera } = await import('./visuals.js');
         activateReverseCamera();
-        console.log('Switched to camera 3 (reverse) for watching');
     }
 }
 
 function handleTurnChange(data) {
     // Don't process turn changes if game is finished
     if (isGameFinished) {
-        console.log('Ignoring turn change - game is finished');
         return;
     }
 
     // Update the current turn index
     if (data.currentPlayerIndex !== undefined) {
         currentPlayerIndex = data.currentPlayerIndex;
-        console.log('Turn changed to player index:', currentPlayerIndex);
     }
 
     // Update scoreboard to show whose turn it is
@@ -881,7 +812,6 @@ function handleTurnChange(data) {
 
     // Check if it's now our turn
     if (localPlayerIdx === currentPlayerIndex) {
-        console.log('It\'s now your turn!');
         // Show alert modal with sound notification
         playTurnNotificationSound();
         modal.alert('It\'s your turn! Take your shot.', 'Your Turn!', 'success');
@@ -890,7 +820,6 @@ function handleTurnChange(data) {
         // Switch to camera 1 (static behind ball) for your turn
         import('./visuals.js').then(({ activateHoleViewCamera }) => {
             activateHoleViewCamera();
-            console.log('Switched to camera 1 (static) for your turn');
         });
     } else {
         // Stop timer if it was running
@@ -899,13 +828,11 @@ function handleTurnChange(data) {
         // Show waiting message for other player's turn
         const currentPlayer = players[currentPlayerIndex];
         const playerName = currentPlayer?.name || 'Player';
-        console.log('Waiting for', playerName, '\'s turn');
         startWatchingTimer(playerName);
 
         // Switch to camera 3 (reverse angle) for watching
         import('./visuals.js').then(({ activateReverseCamera }) => {
             activateReverseCamera();
-            console.log('Switched to camera 3 (reverse) for watching');
         });
     }
 }
@@ -913,29 +840,17 @@ function handleTurnChange(data) {
 function handlePlayerShot(data) {
     const { playerId, shotData } = data;
 
-    console.log('handlePlayerShot received:', { playerId, shotData });
 
     // Update scoreboard with player's distance (for both local and remote players)
     if (shotData && shotData.distanceFromHoleMeters !== undefined && shotData.distanceFromHoleYards !== undefined) {
         const isPenalty = shotData.isPenalty || false;
-        console.log('Updating player score with distance:', shotData.distanceFromHoleYards, 'yards', isPenalty ? '(PENALTY)' : '');
         updatePlayerScore(playerId, shotData.distanceFromHoleMeters, shotData.distanceFromHoleYards, isPenalty);
     } else {
         console.warn('Shot data missing distance fields:', shotData);
     }
 
     // Ignore shots from ourselves (we already animated it)
-    console.log('🔍 Shot replay check:', {
-        playerId,
-        localPlayerId,
-        match: playerId === localPlayerId,
-        strictMatch: playerId === localPlayerId,
-        typeOf_playerId: typeof playerId,
-        typeOf_localPlayerId: typeof localPlayerId
-    });
-
     if (playerId === localPlayerId) {
-        console.log('✓ Received our own shot, ignoring animation');
         return;
     }
 
@@ -944,7 +859,6 @@ function handlePlayerShot(data) {
     const playerName = player?.name || 'Player';
     const playerColor = player?.color ? parseInt(player.color.replace('#', '0x')) : 0xffff00;
 
-    console.log(`Received shot from ${playerName}, animating with color ${player?.color || 'yellow'}...`);
     shotTimer.setStatusMessage(`Watching ${playerName}'s shot...`);
 
     // Set flag to prevent onBallStopped from sending duplicate shot data
@@ -1003,21 +917,17 @@ function playTurnNotificationSound() {
 }
 
 function startShotTimer(messageTemplate) {
-    console.log('Starting shot timer for player turn');
 
     shotTimer.startTimer(() => {
-        console.log('Shot timer expired!');
         modal.alert('Time\'s up! You took too long.', 'Timer Expired', 'warning');
         // TODO: Auto-forfeit turn or take random shot
     }, messageTemplate);
 }
 
 function startWatchingTimer(playerName) {
-    console.log('Starting watching timer for', playerName);
 
     // Use the timer but with a different message template
     shotTimer.startTimer(() => {
-        console.log('Other player\'s timer expired');
         // Don't need to do anything for other player's timeout
     }, `${playerName}'s turn, {time} seconds left`);
 }
@@ -1029,7 +939,6 @@ export function onShotStarted() {
         return; // Not in multiplayer, nothing to do
     }
 
-    console.log('Shot started, stopping timer');
     shotTimer.stopTimer();
     shotTimer.setStatusMessage('Shot in progress...');
 }
@@ -1043,7 +952,6 @@ export function onBallStopped(shotData) {
 
     // If we're watching someone else's shot, don't send data to server
     if (isWatchingOtherPlayerShot) {
-        console.log('Finished watching other player\'s shot');
 
         // Place marker for the other player
         const otherPlayer = players.find(p => playerScores[p.id]?.hasShot && p.id !== localPlayerId);
@@ -1067,7 +975,6 @@ export function onBallStopped(shotData) {
     }
 
     // This is our own shot - send it to the server
-    console.log('Ball stopped, sending shot to server immediately');
 
     // Send shot data to server immediately so other players can see the animation
     if (shotData) {
@@ -1081,7 +988,6 @@ export function onBallStopped(shotData) {
             distanceFromHoleMeters: shotData.distanceFromHoleMeters, // CTF distance
             distanceFromHoleYards: shotData.distanceFromHoleYards // CTF distance
         };
-        console.log('Sending shot data with distance:', shotPayload.distanceFromHoleYards, 'yards');
         wsManager.sendShotData(shotPayload);
 
         // Place marker for own shot
@@ -1107,7 +1013,6 @@ export function onBallStopped(shotData) {
     setTimeout(() => {
         // Don't update message if game has finished
         if (!isGameFinished) {
-            console.log('5 second delay complete, ready for next turn');
             shotTimer.setStatusMessage('Waiting for server...');
         }
     }, 5000);
@@ -1117,18 +1022,15 @@ export function onPlayerTookShot() {
     // Legacy function - keeping for compatibility
     // Stop timer when player takes their shot
     shotTimer.stopTimer();
-    console.log('Shot taken, timer stopped');
 }
 
 // Check for active game session on page load and attempt to rejoin
 async function checkAndRejoinActiveGame() {
     const savedSession = loadActiveGameSession();
     if (!savedSession) {
-        console.log('No active game session found');
         return;
     }
 
-    console.log('Found saved game session, attempting to rejoin:', savedSession);
 
     try {
         // Verify session still exists on server
@@ -1142,13 +1044,11 @@ async function checkAndRejoinActiveGame() {
         });
 
         if (!response.ok) {
-            console.log('Saved game session no longer valid, clearing');
             clearActiveGameSession();
             return;
         }
 
         const sessionData = await response.json();
-        console.log('Session still active on server, rejoining:', sessionData);
 
         // Restore state
         currentSessionId = savedSession.sessionId;
@@ -1191,7 +1091,6 @@ function saveActiveGameSession() {
         savedAt: Date.now()
     };
     localStorage.setItem('letsgolf_activeGame', JSON.stringify(sessionData));
-    console.log('Active game session saved to localStorage');
 }
 
 function loadActiveGameSession() {
@@ -1214,7 +1113,6 @@ function loadActiveGameSession() {
 
 function clearActiveGameSession() {
     localStorage.removeItem('letsgolf_activeGame');
-    console.log('Active game session cleared from localStorage');
 }
 
 function resetState() {

@@ -288,7 +288,6 @@ export function setupTimingBarWindows(swingSpeed) {
     if (windowJ) windowJ.style.display = 'none';
     if (windowD) windowD.style.display = 'none';
 
-    // console.log("UI: setupTimingBarWindows called - downswing ideal windows are now hidden by default, shown post-shot.");
 }
 
 export function updateBackswingBar(elapsedTime, swingSpeed) {
@@ -317,7 +316,6 @@ export function markHipInitiationOnBackswingBar(hipPressTime, swingSpeed) {
 
     hipInitiationMarker.style.left = `${markerPercent}%`;
     hipInitiationMarker.style.display = 'block';
-    console.log(`UI: Marked hip initiation at ${hipPressTime.toFixed(0)}ms (${markerPercent.toFixed(1)}%) on backswing bar.`);
 }
 
 export function updateTimingBars(elapsedTime, swingSpeed) {
@@ -427,17 +425,23 @@ export function updateResultDisplay(resultData) {
     totalDistanceText.textContent = formatNum(totalDistanceYards, 1);
     launchAngleText.textContent = formatNum(resultData.launchAngle, 1); // Added Launch Angle display
 
-    // Populate and show the shot summary widget
+    // Populate the shot summary widget but don't show it yet (will be shown after animation)
     if (shotSummaryWidget && summaryCarrySpan && summaryRollSpan) {
         summaryCarrySpan.textContent = formatNum(carryDistanceYards, 1);
         summaryRollSpan.textContent = formatNum(rolloutDistanceYards, 1);
-        shotSummaryWidget.style.display = 'block'; // Or 'flex' if styled with flex
+        shotSummaryWidget.style.display = 'none'; // Hide initially, will be shown after animation
     }
 
     // DO NOT show the full shot result pop-up here automatically
     // if (shotResultDiv) {
     //     shotResultDiv.style.display = 'block';
     // }
+}
+
+export function showShotSummaryWidget() {
+    if (shotSummaryWidget) {
+        shotSummaryWidget.style.display = 'block';
+    }
 }
 
 export function updateDebugTimingInfo(timingData) {
@@ -596,7 +600,6 @@ export function adjustBallPosition(delta) {
     // Clamp index within bounds [0, ballPositionLevels - 1]
     currentBallPositionIndex = Math.max(0, Math.min(ballPositionLevels - 1, newIndex));
     updateBallPositionDisplay();
-    console.log(`Ball position adjusted to: ${ballPositionLabels[currentBallPositionIndex]} (Index: ${currentBallPositionIndex})`);
 }
 
 // Function to directly set the ball position index (e.g., from club default)
@@ -604,7 +607,6 @@ export function setBallPosition(index) {
     // Clamp index within bounds [0, ballPositionLevels - 1]
     currentBallPositionIndex = Math.max(0, Math.min(ballPositionLevels - 1, index));
     updateBallPositionDisplay();
-    console.log(`Ball position set to: ${ballPositionLabels[currentBallPositionIndex]} (Index: ${currentBallPositionIndex})`);
 }
 
 // Function to get the current ball position index for game logic
@@ -637,7 +639,6 @@ export function setShotTypeRadio(shotType) {
             radio.checked = false;
         }
     });
-    // console.log(`UI: Shot type radio set to ${shotType}`);
 }
 
 export function setSwingSpeedControlState(enabled) {
@@ -649,7 +650,6 @@ export function setSwingSpeedControlState(enabled) {
     } else {
         sliderContainer.classList.add('disabled');
     }
-    console.log(`UI: Swing speed control ${enabled ? 'enabled' : 'disabled'}`);
 }
 
 // Function to show/hide timing bars, windows, AND other controls based on shot type
@@ -701,7 +701,6 @@ export function updateTimingBarVisibility(shotType) { // Consider renaming later
         idealBackswingMarker.style.display = isFullSwing ? '' : 'none';
     }
 
-    console.log(`UI: Updated control visibility for shot type: ${shotType}`);
 }
 
 // New function specifically for updating the putt downswing timing bar (e.g., progressD)
@@ -724,7 +723,6 @@ export function setSelectedClubButton(clubKey) {
             }
             buttonToSelect.classList.add('selected');
             selectedClubButton = buttonToSelect;
-            // console.log(`UI: Set selected club button to ${clubKey}`);
         } else {
             console.warn(`UI: Club button for key ${clubKey} not found.`);
         }
@@ -889,7 +887,6 @@ export function displayDownswingFeedbackWindows(rotationStartMs, rotationWidthMs
         item.el.style.left = `${leftPercent}%`;
         item.el.style.width = `${widthPercent}%`;
         item.el.style.display = 'block';
-        // console.log(`UI: Displaying ${item.name} feedback window at ${leftPercent.toFixed(1)}% width ${widthPercent.toFixed(1)}%`);
     });
 }
 
@@ -991,7 +988,6 @@ export function setGameModeClass(mode) {
     body.classList.remove('mode-range', 'mode-closest-to-flag', 'mode-play-hole');
     // Add the new mode class
     body.classList.add(`mode-${mode}`);
-    console.log(`UI: Set body class to mode-${mode}`);
 }
 
 // Function to update the target distance display in CTF mode
@@ -1157,13 +1153,11 @@ export function showMainMenu() {
     if (mainMenuDiv) mainMenuDiv.style.display = 'flex'; // Or 'block' based on its CSS
     if (gameViewDiv) gameViewDiv.style.display = 'none';
     if (shotResultDiv) shotResultDiv.style.display = 'none'; // Ensure shot result is hidden
-    console.log("UI: Switched to Main Menu");
 }
 
 export function showGameView() {
     if (mainMenuDiv) mainMenuDiv.style.display = 'none';
     if (gameViewDiv) gameViewDiv.style.display = 'block'; // Or 'flex'
-    console.log("UI: Switched to Game View");
 
     // Enter fullscreen by default
     if (!isFullscreen) {
@@ -1639,7 +1633,6 @@ if (switchHoleButton) {
 
         if (currentMode === 'closest-to-flag') {
             // In CTF mode, generate a new hole layout
-            console.log('UI: Generating new CTF hole layout...');
             if (window.generateNewCTFHole) {
                 window.generateNewCTFHole();
             } else {

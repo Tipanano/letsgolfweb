@@ -37,7 +37,5 @@ export function calculatePuttTrajectoryPoints(shotData, initialPosition = { x: 0
     }
 
     const finalPoint = puttPoints[puttPoints.length - 1] || initialPosition;
-    console.log(`Trajectory (Putt): Angle=${finalAngleDegrees.toFixed(1)}deg, Dist=${totalDistanceMeters.toFixed(1)}m`);
-    console.log(`Trajectory (Putt): Generated ${puttPoints.length} points. Start: (${startX.toFixed(1)}, ${startY.toFixed(1)}, ${startZ.toFixed(1)})m, End: (${finalPoint.x.toFixed(1)}, ${finalPoint.y.toFixed(1)}, ${finalPoint.z.toFixed(1)})m`);
     return puttPoints;
 }

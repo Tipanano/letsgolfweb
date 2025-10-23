@@ -25,7 +25,6 @@ export function savePlayHoleState(state) {
     }
     try {
         localStorage.setItem(PLAY_HOLE_STORAGE_KEY, JSON.stringify(state));
-        console.log('PersistentGameState: PlayHole state saved.', state);
     } catch (error) {
         console.error('PersistentGameState: Error saving PlayHole state to localStorage:', error);
     }
@@ -40,10 +39,8 @@ export function loadPlayHoleState() {
         const savedState = localStorage.getItem(PLAY_HOLE_STORAGE_KEY);
         if (savedState) {
             const parsedState = JSON.parse(savedState);
-            console.log('PersistentGameState: PlayHole state loaded.', parsedState);
             return parsedState;
         }
-        console.log('PersistentGameState: No saved PlayHole state found.');
         return null;
     } catch (error) {
         console.error('PersistentGameState: Error loading PlayHole state from localStorage:', error);
@@ -57,7 +54,6 @@ export function loadPlayHoleState() {
 export function clearPlayHoleState() {
     try {
         localStorage.removeItem(PLAY_HOLE_STORAGE_KEY);
-        console.log('PersistentGameState: PlayHole state cleared from localStorage.');
     } catch (error) {
         console.error('PersistentGameState: Error clearing PlayHole state from localStorage:', error);
     }

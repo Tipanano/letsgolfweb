@@ -28,7 +28,6 @@ function updateWindTarget() {
     const directionTarget = getRandomInRange(baseWindDirection - directionVariance, baseWindDirection + directionVariance);
     currentTargetWind.direction = (directionTarget + 360) % 360; // Normalize to 0-359.99...
 
-    // console.log(`New wind target: ${currentTargetWind.speed.toFixed(1)} m/s, ${currentTargetWind.direction.toFixed(1)}°`);
 }
 
 /**
@@ -84,7 +83,6 @@ export function startWindSimulation() {
         console.warn("Wind simulation already running.");
         return;
     }
-    console.log("Starting wind simulation...");
     // Set initial target and time
     updateWindTarget();
     lastChangeTime = performance.now();
@@ -97,7 +95,6 @@ export function startWindSimulation() {
  */
 export function stopWindSimulation() {
     if (windUpdateIntervalId !== null) {
-        console.log("Stopping wind simulation.");
         clearInterval(windUpdateIntervalId);
         windUpdateIntervalId = null;
     }
@@ -118,7 +115,6 @@ export function setWindParameters(speed, direction, sVariance, dVariance, interv
     if (dVariance !== undefined) directionVariance = Math.max(0, dVariance); // Ensure non-negative
     if (interval !== undefined) changeInterval = Math.max(100, interval); // Ensure reasonable interval
 
-    console.log(`Wind parameters set: Base ${baseWindSpeed}m/s @ ${baseWindDirection}°, SpeedVar ${speedVariance}, DirVar ${directionVariance}, Interval ${changeInterval}ms`);
 
     // Immediately update target to reflect new base values if simulation is running
     if (windUpdateIntervalId !== null) {

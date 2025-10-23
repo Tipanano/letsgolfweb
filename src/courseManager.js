@@ -68,13 +68,11 @@ class CourseManager {
 
         // If we have a currentHoleId, update instead of creating new
         if (this.currentHoleId) {
-            console.log(`Updating existing hole: ${this.currentHoleId}`);
             const result = await this.updateHole(this.currentHoleId, holeData);
             return { ...result, holeId: this.currentHoleId };
         }
 
         // Otherwise create new hole
-        console.log('Creating new hole');
         const token = this.getAuthToken();
 
         const response = await fetch(`${API_BASE_URL}/holes/save`, {

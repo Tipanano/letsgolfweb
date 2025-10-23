@@ -64,10 +64,8 @@ function updateFullDownswingBarsAnimation(timestamp) {
     } else {
         // Bars filled up - Timeout
         setFullDownswingAnimationFrameId(null);
-        console.log("Animation: Full Swing downswing bars reached 100%");
         // Check if the shot hasn't already been triggered by key presses
         if (getGameState() === 'downswingWaiting') { // Re-check state in case it changed
-            console.log("Animation: Full Swing downswing timed out. Triggering calculation.");
             // State is set within calculateFullSwingShot now
             calculateFullSwingShot();
         }
@@ -97,10 +95,8 @@ function updateChipDownswingBarsAnimation(timestamp) {
     } else {
         // Bars filled up - Timeout
         setChipDownswingAnimationFrameId(null);
-        console.log("Animation: Chip downswing bars reached 100%");
         // Check if the shot hasn't already been triggered by key presses
         if (getGameState() === 'chipDownswingWaiting') { // Re-check state
-            console.log("Animation: Chip downswing timed out. Triggering calculation.");
             // State is set within calculateChipShot now
             // setGameState('calculatingChip'); // Set state before calling
             calculateChipShot();
@@ -131,12 +127,10 @@ function updatePuttDownswingBarAnimation(timestamp) {
     } else {
         // Visual bar is full. Stop the animation.
         setPuttDownswingAnimationFrameId(null);
-        console.log("Animation: Putt downswing visual bar reached 100%.");
 
         // Now, check if the shot hasn't already been triggered by the 'i' key press.
         // If still waiting, it means the player didn't press 'i' in time (or at all).
         if (getGameState() === 'puttDownswingWaiting') { // Re-check state
-            console.log("Animation: Putt downswing timed out (visual bar full). Triggering calculation.");
             // puttHitTime remains null, which puttPhysics handles as a very late hit (pull)
             // State is set within calculatePuttShot now
             // setGameState('calculatingPutt'); // Set state before calling

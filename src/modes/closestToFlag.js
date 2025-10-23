@@ -12,7 +12,6 @@ let currentModeActive = false;
 // --- Functions ---
 
 export function initializeMode(providedTargetDistanceMeters = null) {
-    console.log("Initializing Closest to Flag mode...");
     currentModeActive = true;
     shotsTaken = 0;
     bestDistanceToHoleMeters = Infinity;
@@ -22,9 +21,7 @@ export function initializeMode(providedTargetDistanceMeters = null) {
                            (Math.floor(Math.random() * (183 - 110 + 1)) + 110);
 
     if (providedTargetDistanceMeters) {
-        console.log(`Target distance set to: ${targetDistanceMeters.toFixed(1)} meters (from server)`);
     } else {
-        console.log(`Target distance randomly set to: ${targetDistanceMeters.toFixed(1)} meters (~${metersToYards(targetDistanceMeters).toFixed(0)} yards)`);
     }
 
     // Update UI (convert meters to yards for display)
@@ -47,13 +44,11 @@ export function initializeMode(providedTargetDistanceMeters = null) {
 }
 
 export function terminateMode() {
-    console.log("Terminating Closest to Flag mode.");
     currentModeActive = false;
     // TODO: Clean up UI elements specific to this mode?
 }
 
 export function prepareForNextShot() {
-    console.log("CTF: Preparing for next shot...");
 
     // Reset UI overlay with initial values (distance to target and tee lie)
     ui.updateVisualOverlayInfo('closest-to-flag', {
@@ -61,14 +56,12 @@ export function prepareForNextShot() {
         lie: 'Tee'
     });
 
-    console.log("CTF: UI overlay reset for next shot.");
 }
 
 export function handleShotResult(shotData) {
     if (!currentModeActive) return;
 
     shotsTaken++;
-    console.log("ClosestToFlag: Handling shot result:", shotData);
 
     // Calculate distance from hole (simple 2D for now)
     // shotData distances are now in meters
@@ -85,7 +78,6 @@ export function handleShotResult(shotData) {
 
     // Convert to yards for display
     const distanceFromHoleYards = metersToYards(distanceFromHoleMeters);
-    console.log(`Shot ${shotsTaken}: Landed ${distanceFromHoleYards.toFixed(1)} yards from the hole${isPenalty ? ' (PENALTY)' : ''}.`);
 
     if (distanceFromHoleMeters < bestDistanceToHoleMeters) {
         bestDistanceToHoleMeters = distanceFromHoleMeters;

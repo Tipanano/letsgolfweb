@@ -112,7 +112,6 @@ function startPolling() {
             const response = await fetch(`${API_BASE}/auth/status/${currentLoginSecret}`);
             const status = await response.json();
 
-            console.log('Auth status:', status);
 
             if (status.status === 'needs_username') {
                 // Payment received, but new user - need username
@@ -285,5 +284,4 @@ export function init() {
         }
     });
 
-    console.log('Nano Auth initialized (new flow)');
 }

@@ -38,7 +38,6 @@ export async function hostNewGame(gameSettings) {
         const response = await apiClient.createGameSession(authToken, gameSettings);
         currentSessionId = response.sessionId;
         currentGameCode = response.gameCode; // Server should return a game code
-        console.log(`Game session created: ${currentSessionId}, Code: ${currentGameCode}`);
 
         // Add self to player list (server might also send this)
         // Assuming the server confirms the host as the first player or sends player list
@@ -84,7 +83,6 @@ export async function joinExistingGame(gameCodeToJoin) {
         currentSessionId = response.sessionId;
         currentGameCode = gameCodeToJoin; // We already have this
         // The response should ideally include the list of current players and course data
-        console.log(`Joined game session: ${currentSessionId}`);
         
         // Update player list from response
         if (response.players && Array.isArray(response.players)) {
@@ -113,7 +111,6 @@ export async function joinExistingGame(gameCodeToJoin) {
 export function leaveGame() {
     if (currentSessionId) {
         RWS.disconnect();
-        console.log(`Left game session: ${currentSessionId}`);
     }
     currentSessionId = null;
     currentGameCode = null;
@@ -154,7 +151,6 @@ export function addPlayer(playerData) {
         const newPlayer = createPlayer(playerData.playerId, playerData.displayName);
         players.push(newPlayer);
         if (onPlayerListUpdateCallback) onPlayerListUpdateCallback([...players]);
-        console.log('Player added:', newPlayer);
     }
 }
 
@@ -167,7 +163,6 @@ export function removePlayer(playerIdToRemove) {
     players = players.filter(p => p.playerId !== playerIdToRemove);
     if (players.length < initialLength) {
         if (onPlayerListUpdateCallback) onPlayerListUpdateCallback([...players]);
-        console.log('Player removed:', playerIdToRemove);
     }
 }
 
@@ -181,7 +176,6 @@ export function updatePlayerData(playerIdToUpdate, updatedData) {
     if (player) {
         Object.assign(player, updatedData); // Simple merge, can be more sophisticated
         if (onPlayerListUpdateCallback) onPlayerListUpdateCallback([...players]);
-        console.log('Player data updated:', playerIdToUpdate, updatedData);
     }
 }
 

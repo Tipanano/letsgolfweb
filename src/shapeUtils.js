@@ -43,7 +43,6 @@ export function createSmoothClosedShape(controlPoints, segments = 32) {
     }
 
 
-    console.log(`createSmoothClosedShape: Generated ${finalVertices.length} vertices from ${controlPoints.length} control points.`);
     return finalVertices;
 }
 
@@ -131,7 +130,6 @@ export function createRandomizedFairwayShape(controlPoints, straightChance = 0.4
 
                 if (angleDeg < 90) { // If the angle is acute (sharp turn)
                     forceStraight = true;
-                    // console.log(`Forcing straight segment at index ${i} due to sharp angle: ${angleDeg.toFixed(1)} degrees`);
                 }
             } else {
                 forceStraight = true; // If any segment has zero length, make it straight to avoid issues
@@ -203,7 +201,6 @@ export function createRandomizedFairwayShape(controlPoints, straightChance = 0.4
         }
     }
     
-    console.log(`createRandomizedFairwayShape: Generated ${cleanedVertices.length} vertices from ${numPoints} control points.`);
     return cleanedVertices;
 }
 

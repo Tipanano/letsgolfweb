@@ -18,7 +18,6 @@ class PlayerManager {
         // Validate token expiry first
         if (this.isTokenExpired(stored.tokenExpiry)) {
           // Token expired, downgrade to guest
-          console.log('Session expired, creating guest account');
           this.createGuestPlayer();
         } else {
           // Verify with server that user still exists
@@ -26,17 +25,14 @@ class PlayerManager {
           if (isValid) {
             // Restore registered player
             this.currentPlayer = stored;
-            console.log('Restored registered player:', stored.username);
           } else {
             // Server doesn't recognize user (server restart), downgrade to guest
-            console.log('User not found on server (server restart), creating guest account');
             this.createGuestPlayer();
           }
         }
       } else {
         // Guest player
         this.currentPlayer = stored;
-        console.log('Restored guest player:', stored.guestName);
       }
     } else {
       // First time - create guest
@@ -72,7 +68,6 @@ class PlayerManager {
       lastPlayed: Date.now()
     };
 
-    console.log('Created guest player:', this.currentPlayer.guestName);
   }
 
   /**
@@ -100,7 +95,6 @@ class PlayerManager {
     };
 
     this.saveToLocalStorage();
-    console.log('Upgraded to registered player:', username, 'with userId:', userId);
   }
 
   /**
@@ -178,7 +172,6 @@ class PlayerManager {
    */
   logout() {
     if (this.currentPlayer?.playerType === 'registered') {
-      console.log('Logging out:', this.currentPlayer.username);
       this.createGuestPlayer(); // Downgrade to guest
       this.saveToLocalStorage();
     }

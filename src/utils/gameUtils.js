@@ -82,7 +82,6 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
     // All hole layouts are now in meters, no conversion needed
     const point = pointMeters;
 
-    console.log(`LIE DETECTION: Point (meters): x=${point.x.toFixed(2)}, z=${point.z.toFixed(2)}`);
 
     // Check order: Tee > Green > Fairway > Bunkers > Water > Rough > Background
     // Note: holeLayout vertices are now in METERS.
@@ -90,7 +89,6 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
     // 1. Tee Box (Polygon) - Check first as it might overlap rough/background
     if (holeLayout.tee?.type === 'polygon' && holeLayout.tee.vertices) {
         if (isPointInPolygon(point, holeLayout.tee.vertices)) {
-            console.log(`LIE DETECTION: Found TEE`);
             return 'TEE';
         }
     }
@@ -98,7 +96,6 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
     // 2. Green (Polygon)
     if (holeLayout.green?.type === 'polygon' && holeLayout.green.vertices) {
         if (isPointInPolygon(point, holeLayout.green.vertices)) {
-            console.log(`LIE DETECTION: Found GREEN`);
             return 'GREEN';
         }
     }
@@ -110,14 +107,12 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
         for (let i = 0; i < holeLayout.fairways.length; i++) {
             const fairway = holeLayout.fairways[i];
             if (fairway.vertices && isPointInPolygon(point, fairway.vertices)) {
-                console.log(`LIE DETECTION: Found FAIRWAY (polygon #${i})`);
                 return 'FAIRWAY';
             }
         }
     } else if (holeLayout.fairway?.vertices) {
         // Legacy single fairway support
         if (isPointInPolygon(point, holeLayout.fairway.vertices)) {
-            console.log(`LIE DETECTION: Found FAIRWAY (legacy single)`);
             return 'FAIRWAY';
         }
     }
@@ -128,14 +123,12 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
             const bunker = holeLayout.bunkers[i];
             if (bunker.type === 'polygon' && bunker.vertices) {
                 if (isPointInPolygon(point, bunker.vertices)) {
-                    console.log(`LIE DETECTION: Found BUNKER (polygon #${i})`);
                     return 'BUNKER';
                 }
             } else if (bunker.type === 'circle' && bunker.center && bunker.radius) {
                 const dx = point.x - bunker.center.x;
                 const dz = point.z - bunker.center.z;
                 if (dx * dx + dz * dz <= bunker.radius * bunker.radius) {
-                    console.log(`LIE DETECTION: Found BUNKER (circle #${i})`);
                     return 'BUNKER';
                 }
             }
@@ -148,14 +141,12 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
             const water = holeLayout.waterHazards[i];
             if (water.type === 'polygon' && water.vertices) {
                 if (isPointInPolygon(point, water.vertices)) {
-                    console.log(`LIE DETECTION: Found WATER (polygon #${i})`);
                     return 'WATER';
                 }
             } else if (water.type === 'circle' && water.center && water.radius) {
                 const dx = point.x - water.center.x;
                 const dz = point.z - water.center.z;
                 if (dx * dx + dz * dz <= water.radius * water.radius) {
-                    console.log(`LIE DETECTION: Found WATER (circle #${i})`);
                     return 'WATER';
                 }
             } else if (water.type === 'ellipse' && water.center && water.radiusX && water.radiusZ) {
@@ -165,7 +156,6 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
                 const normalized = (dx * dx) / (water.radiusX * water.radiusX) +
                                   (dz * dz) / (water.radiusZ * water.radiusZ);
                 if (normalized <= 1) {
-                    console.log(`LIE DETECTION: Found WATER (ellipse #${i})`);
                     return 'WATER';
                 }
             }
@@ -178,7 +168,6 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
         for (let i = 0; i < holeLayout.thickRough.length; i++) {
             const rough = holeLayout.thickRough[i];
             if (rough.vertices && isPointInPolygon(point, rough.vertices)) {
-                console.log(`LIE DETECTION: Found THICK_ROUGH (polygon #${i})`);
                 return 'THICK_ROUGH';
             }
         }
@@ -189,7 +178,6 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
         for (let i = 0; i < holeLayout.mediumRough.length; i++) {
             const rough = holeLayout.mediumRough[i];
             if (rough.vertices && isPointInPolygon(point, rough.vertices)) {
-                console.log(`LIE DETECTION: Found MEDIUM_ROUGH (polygon #${i})`);
                 return 'MEDIUM_ROUGH';
             }
         }
@@ -200,7 +188,6 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
         for (let i = 0; i < holeLayout.lightRough.length; i++) {
             const rough = holeLayout.lightRough[i];
             if (rough.vertices && isPointInPolygon(point, rough.vertices)) {
-                console.log(`LIE DETECTION: Found LIGHT_ROUGH (polygon #${i})`);
                 return 'LIGHT_ROUGH';
             }
         }
@@ -210,7 +197,6 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
     if (holeLayout.rough?.vertices) {
          if (isPointInPolygon(point, holeLayout.rough.vertices)) {
              const roughSurfaceName = holeLayout.rough.surface?.name?.toUpperCase() || 'THICK_ROUGH';
-             console.log(`LIE DETECTION: Found ${roughSurfaceName} (legacy rough polygon)`);
              return roughSurfaceName;
          }
     }
@@ -222,12 +208,10 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
             // It's within the background polygon but not any specific feature.
             // Use the background's actual surface property (e.g., OUT_OF_BOUNDS or THICK_ROUGH)
             const backgroundSurfaceName = holeLayout.background.surface?.name?.toUpperCase() || 'OUT_OF_BOUNDS';
-            console.log(`LIE DETECTION: Found ${backgroundSurfaceName} (background)`);
             return backgroundSurfaceName;
         }
     }
     // If not inside the background polygon either, it's definitely OOB.
-    console.log(`LIE DETECTION: OUT_OF_BOUNDS (not in any polygon)`);
 
     // Default: If not inside any defined polygon (including background)
     return 'OUT_OF_BOUNDS';

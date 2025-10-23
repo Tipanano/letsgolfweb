@@ -34,10 +34,6 @@ export function init(coreRenderer, coreScene, coreCanvas /* Removed coreCourseOb
     // REMOVED: courseObjects = coreCourseObjects || [];
 
     // --- DEBUG LOGGING ---
-    console.log("MeasurementView.init: Received Renderer:", !!coreRenderer);
-    console.log("MeasurementView.init: Received Scene:", !!coreScene);
-    console.log("MeasurementView.init: Received Canvas:", !!coreCanvas);
-    // REMOVED: console.log(`MeasurementView.init: Received Course Objects Count: ${courseObjects.length}`);
     // REMOVED: if (courseObjects.length > 0) { ... }
     // --- END DEBUG LOGGING ---
 
@@ -55,7 +51,6 @@ export function init(coreRenderer, coreScene, coreCanvas /* Removed coreCourseOb
     // Initialize the raycaster
     raycaster = new THREE.Raycaster();
 
-    console.log("MeasurementView initialized.");
 }
 
 /**
@@ -105,7 +100,6 @@ export function activate(ballPosition, flagPosition) {
     orthographicCamera.bottom = -halfHeight;
     orthographicCamera.updateProjectionMatrix();
 
-    console.log(`MeasurementView activated. Centered at (${midpoint.x.toFixed(1)}, ${midpoint.z.toFixed(1)}). View halfWidth: ${halfWidth.toFixed(1)}`);
     // Note: The main render loop in core.js will need to switch to using this camera.
 }
 
@@ -115,7 +109,6 @@ export function activate(ballPosition, flagPosition) {
 export function deactivate() {
     isActive = false;
     clearMeasurementVisuals();
-    console.log("MeasurementView deactivated.");
     // Note: The main render loop in core.js will need to switch back to its primary camera.
 }
 
@@ -148,17 +141,14 @@ export function handleCourseClick(mouseX, mouseY, currentBallPosition, currentFl
     const intersection = getCourseIntersection(mouseX, mouseY);
     if (intersection) {
         clickedPoint = intersection.point.clone(); // Store a clone of the intersection point
-        console.log("Clicked on course at:", clickedPoint);
         updateMeasurementLines(currentBallPosition, clickedPoint, currentFlagPosition); // Draw lines
         updateDistanceTexts(currentBallPosition, clickedPoint, currentFlagPosition); // Update text
         // console.warn("Line drawing and text update not yet implemented."); // Removed warning
     } else {
-        console.log("Click did not intersect with course objects.");
         // Optionally clear previous click point and lines if the user clicks off the course?
         // clickedPoint = null;
         // clearMeasurementVisuals();
     }
-    // console.log(`handleCourseClick called at ${mouseX}, ${mouseY}. Raycasting and line drawing to be implemented.`); // Removed redundant log
 }
 
 /**
@@ -172,7 +162,6 @@ function getCourseIntersection(mouseX, mouseY) {
     const currentCourseObjects = getCoreCourseObjects ? getCoreCourseObjects() : [];
 
     // --- DEBUG LOGGING ---
-    console.log(`getCourseIntersection Check: raycaster=${!!raycaster}, camera=${!!orthographicCamera}, canvas=${!!canvas}, courseObjects=${!!currentCourseObjects}, count=${currentCourseObjects?.length}`);
     // --- END DEBUG LOGGING ---
 
     if (!raycaster || !orthographicCamera || !canvas || !currentCourseObjects || currentCourseObjects.length === 0) {
@@ -195,10 +184,8 @@ function getCourseIntersection(mouseX, mouseY) {
 
     // 4. Return the first intersection (closest object)
     if (intersects.length > 0) {
-        // console.log("Raycaster hit:", intersects[0].object.name || 'Unnamed Object', "at point:", intersects[0].point);
         return intersects[0];
     } else {
-        // console.log("Raycaster did not hit any course objects.");
         return null;
     }
 }
@@ -263,7 +250,6 @@ function updateMeasurementLines(ballPos, clickPos, flagPos) {
     lineClickToFlag.computeLineDistances(); // Required for dashed lines
     scene.add(lineClickToFlag);
 
-    console.log("Measurement lines drawn.");
 }
 
 /**
@@ -283,7 +269,6 @@ function updateDistanceTexts(ballPos, clickPos, flagPos) {
     const distBallClickYards = metersToYards(distBallClick).toFixed(1);
     const distClickFlagYards = metersToYards(distClickFlag).toFixed(1);
 
-    console.log(`Distances: Ball->Click=${distBallClickYards}yd, Click->Flag=${distClickFlagYards}yd`);
 
     // Project the 3D endpoints of the lines to 2D screen coordinates
     // Use a slight Y offset for projection to match the line's visual position
@@ -366,5 +351,4 @@ export function clearMeasurementVisuals() {
     }
     // Hide UI labels
     UIVisuals.hideAllDistanceLabels();
-    console.log("Measurement visuals cleared.");
 }

@@ -17,7 +17,6 @@ const statusDisplay = document.getElementById('status-text-display');
  * @param {string} template - Message template with {time} placeholder (optional)
  */
 export function startTimer(onTimeout, template = null) {
-    console.log('Starting shot timer...');
 
     // Clear any existing timer
     stopTimer();
@@ -51,7 +50,6 @@ export function startTimer(onTimeout, template = null) {
  * Stops the timer
  */
 export function stopTimer() {
-    console.log('Stopping shot timer');
 
     if (timerInterval) {
         clearInterval(timerInterval);
@@ -91,7 +89,6 @@ export function setStatusMessage(message) {
  * Handles timer reaching 0
  */
 function handleTimeout() {
-    console.log('Shot timer expired!');
     stopTimer();
 
     if (onTimeoutCallback) {

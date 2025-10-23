@@ -23,7 +23,6 @@ export function initialize() {
     RWS.setOnGameStateUpdateCallback(handleGameStateUpdate); // For more general state updates
     RWS.setOnGameStartCallback(handleGameStart); // When the server signals the game can begin
 
-    console.log('GameStateSynchronizer initialized and listening for game events.');
 }
 
 /**
@@ -32,13 +31,11 @@ export function initialize() {
  *                            The exact structure depends on what the server sends.
  */
 function handlePlayerShot(shotData) {
-    console.log('Received shot data from player:', shotData.playerId, shotData);
     const { playerId, inputs, ballPath } = shotData; // Example structure
 
     if (playerId === sessionManager.localPlayerId) {
         // This was our own shot, server is just confirming or echoing.
         // We might have already simulated it locally for responsiveness.
-        console.log('Received confirmation of local player shot.');
         return;
     }
 
@@ -57,7 +54,6 @@ function handlePlayerShot(shotData) {
     // 3. Update the visual representation of that player's ball.
     //    updatePlayerBallOnMap(playerId, ballPath); // Or use player.ballState after simulation
 
-    console.log(`Simulating shot for player ${playerId}`);
 
     if (onRemotePlayerShotCallback) {
         onRemotePlayerShotCallback(shotData);
@@ -69,7 +65,6 @@ function handlePlayerShot(shotData) {
  * @param {object} turnData - Data about the turn change (e.g., { nextPlayerId, timeLimit }).
  */
 function handleTurnChange(turnData) {
-    console.log('Received turn change:', turnData);
     const { nextPlayerId } = turnData;
 
     // Update local game state to reflect whose turn it is.
@@ -82,12 +77,10 @@ function handleTurnChange(turnData) {
     // setCurrentPlayerTurnUI(nextPlayerId);
 
     if (nextPlayerId === sessionManager.localPlayerId) {
-        console.log("It's our turn!");
         if (onLocalPlayerTurnCallback) {
             onLocalPlayerTurnCallback();
         }
     } else {
-        console.log(`It's player ${nextPlayerId}'s turn.`);
     }
 }
 
@@ -97,7 +90,6 @@ function handleTurnChange(turnData) {
  * @param {object} gameStateData - The updated game state information.
  */
 function handleGameStateUpdate(gameStateData) {
-    console.log('Received game state update:', gameStateData);
     // Example: Updating scores
     if (gameStateData.scores) {
         // Update scores for each player locally
@@ -115,7 +107,6 @@ function handleGameStateUpdate(gameStateData) {
  * @param {object} gameStartData - Data related to game start (e.g., initial player order, course data if not already loaded).
  */
 function handleGameStart(gameStartData) {
-    console.log('Game start signal received:', gameStartData);
     // Perform any setup needed to start the game locally
     // e.g., load the first hole, set initial player turns based on server data.
     // if (gameStartData.currentPlayerId) {

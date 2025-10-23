@@ -50,14 +50,12 @@ export function startBackswing() {
 
     // Block second shot in multiplayer CTF mode
     if (multiplayerManager.hasLocalPlayerShot()) {
-        console.log('Cannot start backswing: Player has already taken their shot in CTF mode');
         updateStatus('You have already taken your shot!');
         return;
     }
 
     const shotType = getCurrentShotType();
 
-    console.log(`Action: ${shotType}: Starting backswing`);
     setGameState('backswing');
     setBackswingStartTime(performance.now());
     updateStatus(`${shotType.charAt(0).toUpperCase() + shotType.slice(1)} Backswing...`);
@@ -75,7 +73,6 @@ export function endBackswing() {
     if (state !== 'backswing') return;
     const shotType = getCurrentShotType();
 
-    console.log(`Action: ${shotType}: Ending backswing`);
     setBackswingEndTime(performance.now()); // This also calculates backswingDuration in state.js
     const duration = getBackswingDuration(); // Get the calculated duration
 
@@ -87,12 +84,10 @@ export function endBackswing() {
         // Decide next state based on whether 'j' was pressed during backswing
         if (getHipInitiationTime()) {
             startDownswingPhase(); // Hips already initiated, go straight to downswing waiting
-            console.log(`Action: Full Swing: Backswing ended. Hips initiated. Duration: ${duration?.toFixed(0)} ms. Waiting for a, d, i.`);
         } else {
             // Hips not initiated yet, pause at the top
             setGameState('backswingPausedAtTop');
             updateStatus("Paused at Top... Press 'j' to start downswing");
-            console.log(`Action: Full Swing: Backswing ended. Hips NOT initiated. Duration: ${duration?.toFixed(0)} ms. Paused.`);
         }
         updateDebugTimingInfo(getDebugTimingData()); // Update debug display
     } else if (shotType === 'chip') {
@@ -100,7 +95,6 @@ export function endBackswing() {
         setGameState('chipDownswingWaiting');
         setDownswingPhaseStartTime(performance.now()); // Start chip downswing phase NOW
         updateStatus('Chip: Press a (rotate), then i (hit)');
-        console.log(`Action: Chip: Backswing ended. Duration: ${duration?.toFixed(0)} ms. Starting downswing phase. Waiting for a, i.`);
         // Start chip timing bar animation
         startChipDownswingAnimation();
         // updateDebugTimingInfo(getDebugTimingData()); // Need chip-specific debug info
@@ -109,7 +103,6 @@ export function endBackswing() {
         setGameState('puttDownswingWaiting');
         setDownswingPhaseStartTime(performance.now()); // Start putt downswing phase NOW (W release)
         updateStatus('Putt: Press i (hit)');
-        console.log(`Action: Putt: Backswing ended. Duration: ${duration?.toFixed(0)} ms. Starting downswing phase. Waiting for i.`);
         // Start putt downswing timing bar animation
         startPuttDownswingAnimation(); // Animation module handles duration check
     }
@@ -119,7 +112,6 @@ export function recordRotationInitiation() {
     const state = getGameState();
     if (state === 'backswing' && !getRotationInitiationTime()) {
         setRotationInitiationTime(performance.now());
-        console.log("Action: Recorded early rotation ('a')");
     }
 }
 
@@ -128,7 +120,6 @@ export function recordHipInitiation() {
     if ((state === 'backswing' || state === 'backswingPausedAtTop') && !getHipInitiationTime()) {
         const time = performance.now();
         setHipInitiationTime(time);
-        console.log(`Action: Recorded 'j' (Hips) at ${time.toFixed(0)}ms. State: ${state}`);
         // UI updates (status, marker) are handled directly in inputHandler for now
     }
 }
@@ -142,7 +133,6 @@ export function startDownswingPhase() {
         updateStatus('Downswing: Press a, d, i...');
         setDownswingPhaseStartTime(performance.now()); // Set common downswing start time
         startFullDownswingAnimation();
-        console.log("Action: Started Full Swing Downswing Phase.");
     }
     // Add logic for chip/putt if needed, though their downswing starts on 'w' release
 }
@@ -216,7 +206,6 @@ export function triggerFullSwingCalc() {
     if (shotType === 'full' && state === 'downswingWaiting') {
         // Check if all required keys are pressed
         if (getArmsStartTime() && getWristsStartTime() && (getHipInitiationTime() || getRotationStartTime())) {
-            console.log("Action: Triggering full swing calculation from key presses.");
             regularShotSound.play().catch(e => console.error("Error playing regular shot sound:", e));
             calculateFullSwingShot(); // Call the calculation function directly
         } else {
@@ -236,7 +225,6 @@ export function triggerChipCalc() {
         if (getChipWristsStartTime()) {
              // Stop the chip animation loop (if not already stopped by timeout)
             stopChipDownswingAnimation();
-            console.log("Action: Triggering chip calculation from key presses.");
             chipShotSound.play().catch(e => console.error("Error playing chip shot sound:", e));
             setGameState('calculatingChip'); // Set state BEFORE calling calculation
             calculateChipShot(); // Call the calculation function directly
@@ -254,7 +242,6 @@ export function triggerPuttCalc() {
         // Check if hit key is pressed
         if (getPuttHitTime()) {
              // Animation loop is stopped in recordPuttKey
-            console.log("Action: Triggering putt calculation from key press.");
             puttShotSound.play().catch(e => console.error("Error playing putt shot sound:", e));
             setGameState('calculatingPutt'); // Set state BEFORE calling calculation
             calculatePuttShot(); // Call the calculation function directly
@@ -268,7 +255,6 @@ export function triggerPuttCalc() {
 // --- Reset Function ---
 // This function performs a FULL reset, including visual ball position. Used for range mode, etc.
 export function resetSwing() {
-    console.log("Action: Initiating FULL swing reset (including visuals).");
 
     const currentMode = getCurrentGameMode();
     if (currentMode === 'play-hole' && getHoleJustCompleted()) {
@@ -284,14 +270,12 @@ export function resetSwing() {
 // This function resets only the logic/timing for the next shot, keeping the ball visually where it is. Used for playHole mode.
 // It also updates the camera position based on the new ball location and current camera mode.
 export function prepareNextShot() {
-    console.log("Action: Preparing next shot (resetting variables only).");
     stopAllAnimations(); // Stop any running animations
     removeTrajectoryLine(); // Remove the visual trajectory line
     resetStaticCameraZoom(); // Reset the static camera zoom level
 
     resetSwingVariablesOnly(); // Calls the variable-only reset in state.js
-    resetUIForNewShot(); // Reset timing bars and other relevant UI elements
-    updateStatus("Ready for next shot..."); // Update status explicitly
+    resetUIForNewShot(); // Reset timing bars and other relevant UI elements (includes setting status to 'Ready')
 
     // --- Update Camera Position, Aim, and Flag Visibility for PlayHole Mode ---
     const currentMode = getCurrentGameMode();
@@ -314,7 +298,6 @@ export function prepareNextShot() {
             isBunker = (surface === 'BUNKER');
             isOnGreen = (surface === 'GREEN' && !isBunker); // Only on green if not also in a bunker for this logic
             
-            console.log(`Action: Next shot surface check - Surface: ${surface}, isBunker: ${isBunker}, isOnGreen (for flag/scale): ${isOnGreen}`);
             setFlagstickVisibility(!isOnGreen); // Hide if on green (and not bunker), show otherwise
         } else {
             setFlagstickVisibility(true); // Default to visible if info missing
@@ -333,14 +316,12 @@ export function prepareNextShot() {
             // Convert to degrees (0-360 or -180 to 180, doesn't matter as long as consistent)
             angleDeg = angleRad * (180 / Math.PI); // Assign calculated angle
             setShotDirectionAngle(angleDeg);
-            console.log(`Action: Setting default aim angle to hole: ${angleDeg.toFixed(1)} degrees`);
         } else {
             setShotDirectionAngle(0); // Default to 0 if positions are missing
             console.warn("Action: Could not get ball/target position for default aim. Setting angle to 0.");
         }
 
         // The aim angle set above will be automatically used by the camera setting functions
-        console.log(`Action: Updating camera for next shot. BallPos: (${ballPos?.x.toFixed(1)}, ${ballPos?.z.toFixed(1)}), CamMode: ${activeCamMode}, ShotType: ${shotType}`);
 
         if (ballPos && targetPos) { // Ensure we have positions before setting camera
             const distance = ballPos.distanceTo(targetPos);
@@ -352,7 +333,6 @@ export function prepareNextShot() {
                 setInitialFollowCameraLookingAtTarget(ballPos, targetPos);
             } else if (activeCamMode === CameraMode.REVERSE_ANGLE || activeCamMode === CameraMode.GREEN_FOCUS) {
                 // If reverse or green view, switch back to the standard 'hole' static view
-                console.log(`Action: Switching from ${activeCamMode} to static hole view.`);
                  // *** FIX 3: Pass the calculated angleDeg ***
                 setCameraBehindBallLookingAtTarget(ballPos, targetPos, distance, angleDeg);
             }

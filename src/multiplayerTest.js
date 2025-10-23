@@ -5,7 +5,6 @@ import { playerManager } from './playerManager.js';
 import { modal } from './ui/modal.js';
 
 export function initMultiplayerUI() {
-    console.log('Initializing multiplayer UI...');
 
     // Initialize the multiplayer manager
     multiplayerManager.init();
@@ -22,7 +21,6 @@ export function initMultiplayerUI() {
             const response = await fetch(`${baseUrl}/health`);
             const data = await response.json();
             updateStatus(`✅ Connected! Active sessions: ${data.activeSessions}`);
-            console.log('Server health:', data);
         } catch (error) {
             updateStatus('❌ Connection failed: ' + error.message);
             console.error('Connection test failed:', error);
@@ -63,7 +61,6 @@ function updateStatus(message) {
     if (statusDiv) {
         statusDiv.textContent = message;
     }
-    console.log('Status:', message);
 }
 
 // Game Type Modal Functions

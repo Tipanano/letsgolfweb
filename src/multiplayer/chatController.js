@@ -13,7 +13,6 @@ let onNewMessageCallback = null; // Callback for when a new message arrives for 
  */
 export function initialize() {
     RWS.setOnChatMessageCallback(handleIncomingChatMessage);
-    console.log('ChatController initializeddd.');
 }
 
 /**
@@ -22,7 +21,6 @@ export function initialize() {
  *                            The structure depends on what the server sends.
  */
 function handleIncomingChatMessage(chatData) {
-    console.log('Chat message received:', chatData);
 
     // Process the chat message (e.g., format it, add sender info)
     const { senderId, senderDisplayName, message, timestamp } = chatData; // Example structure
@@ -55,7 +53,6 @@ export function sendLocalChatMessage(text) {
     }
 
     RWS.sendChatMessage(text);
-    console.log('Chat message sent:', text);
 
     // Optionally, display the user's own message in their UI immediately
     // This provides instant feedback. The server might also echo it back.

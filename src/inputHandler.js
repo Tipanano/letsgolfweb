@@ -35,7 +35,6 @@ export function handleKeyDown(event) {
     const currentShotType = getCurrentShotType();
     // const swingSpeed = GameLogic.getSwingSpeed(); // Moved swingSpeed retrieval into handleFullSwingKeyDown
 
-    console.log(`inputHandler keydown: Key='${event.key}', State='${gameState}', ShotType='${currentShotType}'`);
 
     // --- Camera Controls (Mode-dependent for '1') ---
     if (event.key === '1') {
@@ -105,7 +104,6 @@ export function handleKeyDown(event) {
             // Adjust the RELATIVE angle
             setRelativeShotDirectionAngle(currentAngle - increment);
             applyAimAngleToCamera(); // Update camera view (using direct import)
-            console.log(`Aim Left: New Relative Angle = ${getShotDirectionAngle().toFixed(1)}`);
             return;
         } else if (event.key === 'ArrowRight') {
             event.preventDefault();
@@ -117,7 +115,6 @@ export function handleKeyDown(event) {
             // Adjust the RELATIVE angle
             setRelativeShotDirectionAngle(currentAngle + increment);
             applyAimAngleToCamera(); // Update camera view (using direct import)
-            console.log(`Aim Right: New Relative Angle = ${getShotDirectionAngle().toFixed(1)}`);
             return;
         }
         // --- Aim Reset to Hole (Only when ready and in play-hole mode) ---
@@ -154,7 +151,6 @@ export function handleKeyDown(event) {
             // Update the camera view
             applyAimAngleToCamera();
 
-            console.log(`Aim Reset (H): Angle set to ${angleDegrees.toFixed(1)} degrees`);
             return; // Consume event
         }
     }
@@ -163,6 +159,7 @@ export function handleKeyDown(event) {
     if (event.key === 'n' && gameState === 'result') {
         handleResetKey();
         return; // Consume event
+    } else if (event.key === 'n') {
     }
 
     // --- Shot Type Specific Logic ---
@@ -180,7 +177,6 @@ export function handleKeyUp(event) {
     const gameState = GameLogic.getGameState();
     const currentShotType = GameLogic.getCurrentShotType();
 
-    console.log(`inputHandler keyup: Key='${event.key}', State='${gameState}', ShotType='${currentShotType}'`);
 
     // --- Shot Type Specific Logic ---
     if (currentShotType === 'full') {
@@ -197,13 +193,10 @@ export function handleKeyUp(event) {
 
 function handleResetKey() {
     const currentMode = getCurrentGameMode();
-    console.log(`InputHandler: 'n' pressed in result state. Mode: ${currentMode}`);
     if (currentMode === 'play-hole') {
         if (getHoleJustCompleted()) {
-            console.log("InputHandler: Hole just completed, performing full reset to tee.");
             GameLogic.resetSwing(); // This will trigger prepareForTeeShotAfterHoleOut
         } else {
-            console.log("InputHandler: Preparing next shot for playHole mode (not after hole-out).");
             prepareNextShot();
         }
     } else if (currentMode === 'closest-to-flag') {
@@ -215,10 +208,8 @@ function handleResetKey() {
             Visuals.switchToTargetView(targetDistanceMeters);
             Visuals.showBallAtAddress();
         });
-        console.log("InputHandler: Performing reset for CTF mode.");
     } else {
         GameLogic.resetSwing(); // Full reset for other modes (e.g., range)
-        console.log("InputHandler: Performing full reset for other mode.");
     }
 }
 
@@ -240,7 +231,6 @@ function handleFullSwingKeyDown(event, gameState) {
     // Capture 'a' during backswing (early rotation)
     if (event.key === 'a' && gameState === 'backswing' && !GameLogic.getRotationInitiationTime()) {
          GameLogic.recordRotationInitiation(); // Call action function
-         console.log("InputHandler: Recorded early rotation ('a')");
     }
 
     // Capture 'j' (Hip Initiation)
@@ -268,7 +258,6 @@ function handleFullSwingKeyDown(event, gameState) {
         // If paused at top, pressing 'j' starts the downswing phase immediately
         if (gameState === 'backswingPausedAtTop') {
              GameLogic.startDownswingPhase(); // New action function needed
-             console.log("InputHandler: Transitioning from Paused to DownswingWaiting due to 'j' press.");
              // updateDebugTimingInfo(GameLogic.getDebugTimingData()); // Update debug UI
         }
     }
@@ -293,7 +282,6 @@ function handleFullSwingKeyDown(event, gameState) {
                 SwingArc.markKeyPressOnArc('d', downswingProgress);
             }
             keyRecorded = true;
-            console.log(`InputHandler: Recorded 'd' (Arms) at offset: ${offset?.toFixed(0)} ms`);
         } else if (event.key === 'i' && !GameLogic.getWristsStartTime()) {
             GameLogic.recordDownswingKey('wrists', timeNow); // New action function
             if (offset !== null) {
@@ -305,7 +293,6 @@ function handleFullSwingKeyDown(event, gameState) {
                 SwingArc.markKeyPressOnArc('i', downswingProgress);
             }
             keyRecorded = true;
-            console.log(`InputHandler: Recorded 'i' (Wrists) at offset: ${offset?.toFixed(0)} ms`);
         } else if (event.key === 'a' && !GameLogic.getRotationStartTime() && !GameLogic.getRotationInitiationTime()) {
             GameLogic.recordDownswingKey('rotation', timeNow); // New action function
             if (offset !== null) {
@@ -317,7 +304,6 @@ function handleFullSwingKeyDown(event, gameState) {
                 SwingArc.markKeyPressOnArc('a', downswingProgress);
             }
             keyRecorded = true;
-            console.log(`InputHandler: Recorded 'a' (Rotation) post-backswing at offset: ${offset?.toFixed(0)} ms`);
         }
 
         if (keyRecorded) {
@@ -357,7 +343,6 @@ function handleChipKeyDown(event, gameState) {
             const downswingProgress = Math.min(1.0, offset / chipDownswingDuration);
             SwingArc.markKeyPressOnArc('a', downswingProgress);
             updateStatus('Chip: Rotation...'); // Update UI
-            console.log(`InputHandler: Recorded Chip 'a' (Rotation) at offset ${offset.toFixed(0)} ms`);
             // updateDebugTimingInfo(...); // Chip debug needed
         }
         // Chip uses 'i' for hit/wrists, must be after 'a'
@@ -369,7 +354,6 @@ function handleChipKeyDown(event, gameState) {
             const chipDownswingDuration = Math.max(backswingDuration * 1.5, 1000);
             const downswingProgress = Math.min(1.0, offset / chipDownswingDuration);
             SwingArc.markKeyPressOnArc('i', downswingProgress);
-            console.log(`InputHandler: Recorded Chip 'i' (Hit) at offset ${offset.toFixed(0)} ms`);
             // updateDebugTimingInfo(...);
             GameLogic.triggerChipCalc(); // Trigger calculation
         }
@@ -399,7 +383,6 @@ function handlePuttKeyDown(event, gameState) {
             const PUTT_VISUAL_DURATION_MS = 1500;
             const downswingProgress = Math.min(1.0, offset / PUTT_VISUAL_DURATION_MS);
             SwingArc.markKeyPressOnArc('i', downswingProgress);
-            console.log(`InputHandler: Recorded Putt 'i' (Hit) at offset ${offset.toFixed(0)} ms`);
             GameLogic.triggerPuttCalc(); // Trigger calculation
         }
     }

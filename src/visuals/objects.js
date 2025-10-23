@@ -41,7 +41,6 @@ export function createTeeMesh(size = 'large') {
     teeMesh.visible = false; // Start hidden
     teeMesh.userData.size = size; // Store size for reference
 
-    console.log(`${size} tee mesh created.`);
     return teeMesh;
 }
 

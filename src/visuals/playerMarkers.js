@@ -13,7 +13,6 @@ const playerMarkers = new Map(); // playerId -> { mesh, label, position }
  */
 export function initMarkers(sceneRef) {
     scene = sceneRef;
-    console.log('Player marker system initialized');
 }
 
 /**
@@ -108,7 +107,6 @@ export function setPlayerMarker(playerId, playerName, position, distanceYards, c
         color: color
     });
 
-    console.log(`✓ Added marker for ${playerName} at (${position.x.toFixed(1)}, ${position.z.toFixed(1)})`);
 }
 
 /**
@@ -134,7 +132,6 @@ export function clearAllMarkers() {
     playerMarkers.forEach((_, playerId) => {
         removePlayerMarker(playerId);
     });
-    console.log('All player markers cleared');
 }
 
 /**

@@ -61,12 +61,10 @@ export function setTargetDistance(distanceMeters) {
 // Set hole configuration (from server in multiplayer, or generated locally)
 export function setHoleConfig(holeConfig) {
     currentHoleConfig = holeConfig;
-    console.log('CTF: Hole config set:', holeConfig);
 }
 
 // Creates the 3D objects for the target view
 function createTargetElements() {
-    console.log(`createTargetElements called. targetGroup exists: ${!!targetGroup}`);
     if (targetGroup) {
         // Already created, maybe just update position/visibility
         console.warn("targetGroup already exists, returning early without recreating!");
@@ -74,7 +72,6 @@ function createTargetElements() {
         return;
     }
 
-    console.log("Creating new target elements for distance:", targetDistanceMeters, "meters");
     targetGroup = new THREE.Group();
     const targetZ = targetDistanceMeters; // Target distance in meters
 
@@ -255,7 +252,6 @@ function createTargetElements() {
     // Water is rendered below fairway (matches playHole mode - fairway wins visually and in lie detection)
     if (currentHoleConfig?.waterHazard) {
         const water = currentHoleConfig.waterHazard;
-        console.log('CTF: Rendering water hazard:', water);
 
         let waterGeometry;
 
@@ -305,14 +301,10 @@ function createTargetElements() {
         );
         waterMesh.receiveShadow = true;
         targetGroup.add(waterMesh);
-        console.log(`Water hazard added at (${water.center.x.toFixed(1)}, ${water.center.z.toFixed(1)}), type=${water.type}, Y=${Y_OFFSET_WATER}`);
     }
 
     // Add the whole group to the main scene
     scene.add(targetGroup);
-    console.log(`Target elements created/updated at Z = ${targetZ.toFixed(1)}m`);
-    console.log(`✅ Target group added to scene. Children count: ${targetGroup.children.length}`);
-    console.log(`📦 Scene now has ${scene.children.length} children total`);
 
     // Generate and render obstacles
     generateObstacles(targetZ, fairwayWidth);
@@ -324,7 +316,6 @@ function generateObstacles(targetZ, fairwayWidth) {
 
     // Check if obstacles are provided by server (multiplayer)
     if (currentHoleConfig?.obstacles) {
-        console.log(`Using ${currentHoleConfig.obstacles.length} obstacles from server config`);
         // Use server-provided obstacles
         currentHoleConfig.obstacles.forEach(obstacleData => {
             const obstacle = createObstacle(obstacleData.type, obstacleData.size, obstacleData.x, obstacleData.z);
@@ -332,7 +323,6 @@ function generateObstacles(targetZ, fairwayWidth) {
         });
     } else {
         // Generate obstacles locally (single player)
-        console.log('Generating obstacles locally (single player mode)');
 
         const greenWidthMeters = currentHoleConfig?.greenWidthMeters || 18;
         const greenDepthMeters = currentHoleConfig?.greenDepthMeters || 14;
@@ -375,7 +365,6 @@ function generateObstacles(targetZ, fairwayWidth) {
 
     // Render obstacles
     renderObstacles(scene, currentObstacles);
-    console.log(`Rendered ${currentObstacles.length} obstacles, green offset: ${currentHoleConfig?.greenOffsetMeters || 0}m`);
 }
 
 // Export obstacles for physics calculations
@@ -386,13 +375,11 @@ export function getObstacles() {
 // Shows the target elements (creates if needed)
 export function drawTargetView() {
     if (!scene) return;
-    console.log("Drawing Target View (3D) for distance:", targetDistanceMeters);
 
     // Generate hole config if not already set (single-player mode)
     if (!currentHoleConfig) {
         const distanceMeters = targetDistanceMeters; // Already in meters
         currentHoleConfig = generateCTFHoleConfig(distanceMeters);
-        console.log('CTF: Generated local hole config:', currentHoleConfig);
     }
 
     if (!targetGroup) {
@@ -401,7 +388,6 @@ export function drawTargetView() {
         // Target elements already exist for this hole - just ensure visible
         // Positions were set correctly when created based on currentHoleConfig, don't reposition
         targetGroup.visible = true;
-        console.log(`Target elements already exist for distance ${targetDistanceMeters.toFixed(1)}m`);
     }
     // TODO: Adjust camera for target view?
     // CoreVisuals.setCameraForTargetView(targetDistanceMeters);
@@ -447,7 +433,6 @@ export function removeTargetElements() {
         greenMesh = null;
         flagstickMesh = null;
         flagMesh = null;
-        console.log("Target elements removed and disposed.");
      }
      // Remove landing markers
      landingMarkers.forEach(marker => {
@@ -465,7 +450,6 @@ export function removeTargetElements() {
 
 export function animateShotLanding(shotData) {
     if (!scene) return;
-    console.log("TargetView (3D): Animating shot landing", shotData);
 
     // Use the trajectory end point for landing position
     if (!shotData.trajectory || shotData.trajectory.length === 0) {
@@ -488,7 +472,6 @@ export function animateShotLanding(shotData) {
     //scene.add(landingMarker);
     //landingMarkers.push(landingMarker); // Keep track to remove later
 
-    //console.log(`TargetView (3D): Added landing marker at (${landingPos.x.toFixed(1)}, ${landingPos.y.toFixed(1)}, ${landingPos.z.toFixed(1)})`);
 
     // TODO: Add actual animation later if desired (e.g., marker fades in/out)
 }
@@ -510,7 +493,6 @@ export function resetView() {
         targetGroup.visible = true;
     }
 
-    console.log("TargetView (3D): Reset complete (landing markers removed, hole unchanged).");
 }
 
 // Clear the current hole config to force regeneration of a new hole
@@ -553,7 +535,6 @@ export function clearHoleConfig() {
     }
     currentObstacles = [];
 
-    console.log("TargetView: Hole config and visual elements cleared, will regenerate on next draw");
 }
 
 // Duplicate setScene removed. The correct one is defined near the top.

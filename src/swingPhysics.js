@@ -148,7 +148,6 @@ function calculatePotentialCHS(backswingDuration, swingSpeed, clubBaseSpeed) {
         const overswingProgress = clamp((backswingDuration - scaledMaxDuration) / overswingWindow, 0, 1);
         const bonusMultiplier = 1 + (overswingProgress * OVERSWING_PCHS_BONUS_FACTOR);
         powerFactor *= bonusMultiplier;
-        console.log(`Overswing Bonus Applied: Progress=${overswingProgress.toFixed(2)}, Multiplier=${bonusMultiplier.toFixed(2)}`);
     }
 
     // Base PCHS calculation
@@ -156,7 +155,6 @@ function calculatePotentialCHS(backswingDuration, swingSpeed, clubBaseSpeed) {
 
     let potentialCHS = clubBaseSpeed * powerFactor * modifiedSwingSpeedFactor; // Apply slider speed last
 
-    console.log(`PCHS Calc: Duration=${backswingDuration.toFixed(0)}, Ideal=${scaledIdealDuration.toFixed(0)}, Factor=${powerFactor.toFixed(2)}, Base=${clubBaseSpeed}, PCHS=${potentialCHS.toFixed(1)}, swingSpeed=${swingSpeed}`);    
     return potentialCHS;
 }
 
@@ -178,7 +176,6 @@ function calculateActualCHS(potentialCHS, transitionDev, armsDev, rotationDev, b
     }
     // If potentialCHS >= PCHS_THRESHOLD_FOR_FULL_PENALTY, penaltyScaleFactor remains 1.0
 
-    console.log(`ACHS Calc: PCHS=${potentialCHS.toFixed(1)}, PenaltyScaleFactor=${penaltyScaleFactor.toFixed(2)}`);
 
     // Transition Efficiency: Perfect timing = 1.0, max loss at edge of sensitivity window
     // Use the scaledTransitionSensitivity passed in.
@@ -200,15 +197,12 @@ function calculateActualCHS(potentialCHS, transitionDev, armsDev, rotationDev, b
         const overswingWindow = 500 / swingSpeed; // Window beyond max duration for full penalty
         const overswingProgress = clamp((backswingDuration - scaledMaxDuration) / overswingWindow, 0, 1);
         overswingPenaltyFactor = 1.0 - (overswingProgress * OVERSWING_DIFFICULTY_PENALTY);
-        console.log(`Overswing Difficulty Penalty Applied: Progress=${overswingProgress.toFixed(2)}, PenaltyFactor=${overswingPenaltyFactor.toFixed(2)}`);
     } else {
-         console.log(`Overswing Difficulty Penalty Applied: Not applicable (Duration ${backswingDuration?.toFixed(0)} <= Scaled Max ${scaledMaxDuration.toFixed(0)})`);
     }
 
 
     // Final ACHS
     const actualCHS = potentialCHS * transitionEfficiency * sequenceEfficiency * overswingPenaltyFactor;
-    console.log(`ACHS Calc: PCHS=${potentialCHS.toFixed(1)}, TransEff=${transitionEfficiency.toFixed(2)}, SeqEff=${sequenceEfficiency.toFixed(2)}, OverPenalty=${overswingPenaltyFactor.toFixed(2)}, ACHS=${actualCHS.toFixed(1)}`);
     return actualCHS;
 }
 
@@ -217,7 +211,6 @@ function calculateActualCHS(potentialCHS, transitionDev, armsDev, rotationDev, b
  * relative timing (arms vs rotation) and absolute timing (average deviation).
  */
 function calculateClubPathAngle(armsDev, rotationDev, swingSpeed) {
-    console.log(`Path Calc: ArmsDev=${armsDev.toFixed(0)}, RotationDev=${rotationDev.toFixed(0)}`);
     // Relative Timing: Arms late ('d' after 'a') = negative path (out-to-in)
     //const relativeDev = armsDev - rotationDev; // Positive = arms later than rotation
     const relativeDev = rotationDev - armsDev; // Positive = arms later than rotation
@@ -239,7 +232,6 @@ function calculateClubPathAngle(armsDev, rotationDev, swingSpeed) {
     const finalPath = pathFromRelative + (pathFromRelative === 0 ? 0 : Math.sign(pathFromRelative) * pathShiftFromAbsolute);
     // Clamp final path? Maybe not needed if inputs are clamped.
 
-    console.log(`Path Calc: RelDev=${relativeDev.toFixed(0)}, PathRel=${pathFromRelative.toFixed(1)}, AbsAvgDev=${absoluteAvgDev.toFixed(0)}, PathAbsShift=${pathShiftFromAbsolute.toFixed(1)}, FinalPath=${finalPath.toFixed(1)}`);
     return finalPath; // Degrees (negative = out-to-in, positive = in-to-out)
 }
 
@@ -253,7 +245,6 @@ function calculateFaceAngleRelativeToPath(wristsDev, swingSpeed) {
     const scaledWristSensitivity = WRIST_TIMING_FACE_SENSITIVITY / (10 / swingSpeed); // Degrees per ms deviation, scaled
     const faceAngle = clamp(wristsDev * scaledWristSensitivity, -MAX_FACE_ANGLE_CHANGE, MAX_FACE_ANGLE_CHANGE);
 
-    console.log(`Face>Path Calc: WristsDev=${wristsDev.toFixed(0)}, FaceAngle=${faceAngle.toFixed(1)}`);
     return faceAngle; // Degrees (negative = closed, positive = open)
 }
 
@@ -271,7 +262,6 @@ function calculateDynamicLoft(baseLoft, wristsDev, attackAngle, swingSpeed) {
     // Combine base loft and change from wrists. AoA influence is complex, handle in spin/launch.
     const dynamicLoft = baseLoft + loftChange;
 
-    console.log(`DynLoft Calc: Base=${baseLoft}, WristsDev=${wristsDev.toFixed(0)}, LoftChange=${loftChange.toFixed(1)}, DynLoft=${dynamicLoft.toFixed(1)}`);
     return dynamicLoft;
 }
 
@@ -289,19 +279,16 @@ function calculateAttackAngle(baseAoA, ballPositionFactor, currentSurface) {
 
     // Apply cap if not on tee and AoA bonus is positive
     // Convert surface to lowercase for comparison
-    console.log(`AoA Calc: BallPosFactor=${ballPositionFactor.toFixed(2)}, Surface=${currentSurface}`);
     const MAX_NON_TEE_AOA_BONUS = 1.0; // Max positive AoA bonus when not on tee
     if (currentSurface.toLowerCase() !== 'tee' && aoaFromBallPos > 0) {
         aoaFromBallPos = Math.min(aoaFromBallPos, MAX_NON_TEE_AOA_BONUS);
        if (baseAoA > 0) {
             baseAoA = 0
        }
-        console.log(`AoA Calc: Capping non-tee AoA bonus to ${MAX_NON_TEE_AOA_BONUS}`);
     }
 
     const attackAngle = baseAoA + aoaFromBallPos;
 
-    console.log(`AoA Calc: Base=${baseAoA}, BallPosFactor=${ballPositionFactor.toFixed(2)}, Surface=${currentSurface}, AoAChange=${aoaFromBallPos.toFixed(1)}, FinalAoA=${attackAngle.toFixed(1)}`);
     return attackAngle;
 }
 
@@ -344,7 +331,6 @@ function calculateSmashFactor(baseSmash, strikeQuality, currentSurface) {
     // Special handling for fat shots from bunker
     if (strikeQuality === "Fat" && currentSurface.toUpperCase() === 'BUNKER') {
         penalty = BUNKER_FAT_STRIKE_SMASH_PENALTY;
-        console.log(`Smash Calc: Applying BUNKER Fat penalty: ${penalty.toFixed(2)}`);
     } else {
         // Standard penalties
         switch (strikeQuality) {
@@ -356,7 +342,6 @@ function calculateSmashFactor(baseSmash, strikeQuality, currentSurface) {
         }
     }
     const smash = baseSmash * (1 - penalty);
-    console.log(`Smash Calc: Base=${baseSmash}, Strike=${strikeQuality}, Surface=${currentSurface}, Penalty=${penalty.toFixed(2)}, FinalSmash=${smash.toFixed(2)}`);
     return smash;
 }
 
@@ -372,7 +357,6 @@ function calculateBallSpeed(actualCHS, smashFactor) {
 function calculateLaunchAngle(dynamicLoft, attackAngle) {
     // Blend dynamic loft (75%) and attack angle (25%)
     const launchAngle = dynamicLoft * 0.7 + attackAngle * 1;
-    console.log(`Launch Calc: DynLoft=${dynamicLoft.toFixed(1)}, AoA=${attackAngle.toFixed(1)}, BlendLaunch=${launchAngle.toFixed(1)}`);
     // Add clamping based on club type later if needed (e.g., min/max launch)
     return launchAngle;
 }
@@ -396,7 +380,6 @@ function calculateSpinAxis(faceAngleRelativeToPath, dynamicLoft) {
     let tiltAngleDeg = tiltAngleRad * 180 / Math.PI;
     tiltAngleDeg *= SPIN_AXIS_SENSITIVITY; // Apply sensitivity tuning factor
 
-    console.log(`SpinAxis Calc: FaceToPath=${faceAngleRelativeToPath.toFixed(1)}, DynLoft=${dynamicLoft.toFixed(1)}, Tilt=${tiltAngleDeg.toFixed(1)}`);
     return tiltAngleDeg; // Degrees
 }
 
@@ -454,7 +437,6 @@ function calculateBackSpin(dynamicLoft, actualCHS, attackAngle, strikeQuality, c
     // Special handling for fat shots from bunker
     if (strikeQuality === "Fat" && currentSurface.toUpperCase() === 'BUNKER') {
         strikeMod = BUNKER_FAT_STRIKE_SPIN_MOD;
-        console.log(`BackSpin Calc: Applying BUNKER Fat strike modifier: ${strikeMod.toFixed(2)}`);
     } else {
         // Standard modifiers
         switch (strikeQuality) {
@@ -469,7 +451,6 @@ function calculateBackSpin(dynamicLoft, actualCHS, attackAngle, strikeQuality, c
     // Clamp backspin to reasonable limits
     backSpin = clamp(backSpin, 500, 12000);
 
-    console.log(`BackSpin Calc: StaticLoft=${staticClubLoft.toFixed(1)}, SpeedFactorMultiplier=${speedFactorMultiplier.toFixed(2)}, DynamicSpeedFactor=${dynamicSpeedFactor.toFixed(1)}, DynLoft=${dynamicLoft.toFixed(1)}, ACHS=${actualCHS.toFixed(1)}, AoA=${attackAngle.toFixed(1)}, BaseSpin=${baseSpin.toFixed(0)}, Strike=${strikeQuality}, Surface=${currentSurface}, Mod=${strikeMod.toFixed(2)}, FinalSpin=${backSpin.toFixed(0)}`); // Added strikeMod for logging
     return backSpin;
 }
 
@@ -504,7 +485,6 @@ function calculateSideSpin(faceAngleRelativeToPath, actualCHS, dynamicLoft, stri
 
     totalSideSpin = clamp(totalSideSpin, -5000, 5000);
 
-    console.log(`SideSpin Calc (New): FaceToPath=${faceAngleRelativeToPath.toFixed(1)}, ACHS=${actualCHS.toFixed(1)}, DynLoft=${dynamicLoft.toFixed(1)}, BaseSS=${baseSideSpin.toFixed(0)}, SpeedCont=${speedContribution.toFixed(0)}, LoftDamp=${loftDampening.toFixed(2)}, TotalSS=${totalSideSpin.toFixed(0)}`);
     return totalSideSpin;
 }
 
@@ -530,8 +510,6 @@ function calculateSideSpin(faceAngleRelativeToPath, actualCHS, dynamicLoft, stri
  * @returns {object} An object containing calculated impact parameters.
  */
 export function calculateImpactPhysics(timingInputs, club, swingSpeed, ballPositionFactor, currentSurface) {
-    console.log("--- Calculating Impact Physics ---");
-    console.log("Inputs:", timingInputs, club.name, swingSpeed, ballPositionFactor, `Surface: ${currentSurface}`);
 
     // Calculate Deviations (relative to downswing start)
     const rotationTime = timingInputs.rotationStartTime ?? timingInputs.rotationInitiationTime; // Use whichever 'a' press happened
@@ -562,8 +540,6 @@ export function calculateImpactPhysics(timingInputs, club, swingSpeed, ballPosit
     // Ensure sensitivity is not zero if durationScalingFactor is very small.
     const finalScaledTransitionSensitivity = Math.max(50, scaledTransitionSensitivity); // Min sensitivity window, e.g. 50ms
 
-    console.log(`Deviations: Trans=${transitionDev.toFixed(0)} (Ideal J Time: ${idealTransitionPressTime.toFixed(0)} based on Actual BS End: ${actualBackswingReleaseTimestamp.toFixed(0)}, ScaledOffset: ${scaledIdealTransitionOffset.toFixed(0)}), Rot=${rotationDev.toFixed(0)}, Arms=${armsDev.toFixed(0)}, Wrists=${wristsDev.toFixed(0)}`);
-    console.log(`Transition Params: durationScalingFactor=${durationScalingFactor.toFixed(2)}, finalScaledTransitionSensitivity=${finalScaledTransitionSensitivity.toFixed(0)}`);
 
     // --- Calculate Core Parameters ---
     const potentialCHS = calculatePotentialCHS(timingInputs.backswingDuration, swingSpeed, club.basePotentialSpeed);
@@ -602,13 +578,11 @@ export function calculateImpactPhysics(timingInputs, club, swingSpeed, ballPosit
     const flightMod = surfaceProps?.flightModification;
 
     if (flightMod) {
-        console.log("Applying surface flight modifications:", flightMod);
         // Velocity Reduction (Apply to Ball Speed)
         let velReduction = flightMod.velocityReduction || 0;
         if (Array.isArray(velReduction)) {
             const [min, max] = velReduction;
             velReduction = min + Math.random() * (max - min);
-            console.log(`Randomized Velocity Reduction: ${velReduction.toFixed(3)} (Range: [${min}, ${max}])`);
         }
         ballSpeed *= (1 - velReduction);
 
@@ -617,7 +591,6 @@ export function calculateImpactPhysics(timingInputs, club, swingSpeed, ballPosit
         if (Array.isArray(spinReduction)) {
             const [min, max] = spinReduction;
             spinReduction = min + Math.random() * (max - min);
-            console.log(`Randomized Spin Reduction: ${spinReduction.toFixed(3)} (Range: [${min}, ${max}])`);
         }
         backSpin *= (1 - spinReduction);
         // Also apply to side spin? Let's assume yes for now.
@@ -627,7 +600,6 @@ export function calculateImpactPhysics(timingInputs, club, swingSpeed, ballPosit
         const launchChange = flightMod.launchAngleChange || 0;
         launchAngle += launchChange;
 
-        console.log(`Post-Surface Mod: BallSpeed=${ballSpeed.toFixed(1)}, BackSpin=${backSpin.toFixed(0)}, LaunchAngle=${launchAngle.toFixed(1)}`);
     }
 
     // --- Calculate Side Spin (New Method) ---
@@ -664,13 +636,11 @@ export function calculateImpactPhysics(timingInputs, club, swingSpeed, ballPosit
          }
 
          sideSpin *= (1 - spinReductionFactorForSideSpin);
-         console.log(`Post-Surface Mod SideSpin: ${sideSpin.toFixed(0)} (ReductionFactor: ${spinReductionFactorForSideSpin.toFixed(3)})`);
     }
 
     // The old spinAxisTilt calculation might still be useful if you want to visualize it,
     // but it's no longer the direct source of sideSpin RPM.
     const spinAxisTilt = calculateSpinAxis(faceAngleRelPath, dynamicLoft); // Keep for informational/visual purposes if needed
-    // console.log(`SpinAxis Tilt (Informational): ${spinAxisTilt.toFixed(1)} deg`);
 
 
     // --- Assemble Result Object ---
@@ -685,7 +655,6 @@ export function calculateImpactPhysics(timingInputs, club, swingSpeed, ballPosit
         idealJWindowWidthOnBackswing = 50 / swingSpeed; // Base width 50ms, scaled by swingSpeed
         idealJWindowStartOnBackswing = idealJPressCenterMs_from_backswingStart - (idealJWindowWidthOnBackswing / 2);
 
-        console.log(`Physics: Ideal J Window for UI - Center: ${idealJPressCenterMs_from_backswingStart.toFixed(0)}ms, Start: ${idealJWindowStartOnBackswing.toFixed(0)}ms, Width: ${idealJWindowWidthOnBackswing.toFixed(0)}ms (from backswing start)`);
     } else {
         console.warn("Physics: Could not calculate ideal J window for UI due to invalid backswingDuration or swingSpeed.");
     }
@@ -747,8 +716,6 @@ export function calculateImpactPhysics(timingInputs, club, swingSpeed, ballPosit
         idealWristsWindowWidth: downswingFeedbackWindowWidth,
     };
 
-    console.log("--- Impact Physics Calculation Complete ---");
-    console.log("Result:", impactResult);
 
     return impactResult;
 }

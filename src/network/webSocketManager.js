@@ -30,27 +30,14 @@ let onGameStateUpdateCallback = null; // For more general game state sync
  * @param {string} authToken - The auth token for authentication.
  */
 export function connect(sessionId, authToken) {
-    console.log('🔌 [WS] connect() called with:', {
-        sessionId,
-        hasAuthToken: !!authToken,
-        socketExists: !!socket,
-        socketConnected: socket?.connected
-    });
-
     // Store session info for reconnections
     currentSessionId = sessionId;
     currentAuthToken = authToken;
-
-    console.log('💾 [WS] Stored session info:', {
-        currentSessionId,
-        hasCurrentAuthToken: !!currentAuthToken
-    });
 
     if (socket && socket.connected) {
         console.warn('⚠️ [WS] Socket.IO is already connected. Rejoining with new session.');
         // If already connected, just rejoin with the new session
         if (currentSessionId) {
-            console.log('📤 [WS] Emitting join-session (already connected):', { sessionId: currentSessionId });
             socket.emit('join-session', { sessionId: currentSessionId, playerId: currentAuthToken });
         } else {
             console.error('❌ [WS] No currentSessionId available!');
@@ -58,7 +45,6 @@ export function connect(sessionId, authToken) {
         return;
     }
 
-    console.log('🆕 [WS] Creating new Socket.IO connection to:', WEBSOCKET_URL);
 
     // Connect to Socket.IO server
     socket = window.io(WEBSOCKET_URL, {
@@ -68,15 +54,8 @@ export function connect(sessionId, authToken) {
     });
 
     socket.on('connect', () => {
-        console.log('✅ [WS] Socket.IO connection established:', socket.id);
-        console.log('📊 [WS] Current state:', {
-            currentSessionId,
-            hasCurrentAuthToken: !!currentAuthToken
-        });
-
         // Join the game session room using stored values (handles reconnections)
         if (currentSessionId) {
-            console.log('📤 [WS] Emitting join-session:', { sessionId: currentSessionId });
             socket.emit('join-session', { sessionId: currentSessionId, playerId: currentAuthToken });
         } else {
             console.error('❌ [WS] No sessionId available for join-session event');
@@ -89,29 +68,23 @@ export function connect(sessionId, authToken) {
 
     // Listen for specific Socket.IO events from server
     socket.on('player:joined', (data) => {
-        console.log('Player joined:', data);
         if (onPlayerJoinedCallback) onPlayerJoinedCallback(data);
     });
 
     socket.on('player:left', (data) => {
-        console.log('Player left:', data);
         if (onPlayerLeftCallback) onPlayerLeftCallback(data);
     });
 
     socket.on('shot:received', (data) => {
-        console.log('Shot received:', data);
         if (onPlayerShotCallback) onPlayerShotCallback(data);
     });
 
     socket.on('turn:changed', (data) => {
-        console.log('Turn changed:', data);
         if (onTurnChangeCallback) onTurnChangeCallback(data);
     });
 
     socket.on('game:stateUpdate', (data) => {
-        console.log('🔵 WebSocket received game:stateUpdate event:', data);
         if (onGameStateUpdateCallback) {
-            console.log('✅ Calling onGameStateUpdateCallback');
             onGameStateUpdateCallback(data);
         } else {
             console.warn('⚠️ No onGameStateUpdateCallback registered!');
@@ -119,19 +92,16 @@ export function connect(sessionId, authToken) {
     });
 
     socket.on('game:started', (data) => {
-        console.log('Game started:', data);
         if (onGameStartCallback) onGameStartCallback(data);
     });
 
     socket.on('game:finished', (data) => {
-        console.log('🏁 Game finished:', data);
         if (customEventCallbacks['game:finished']) {
             customEventCallbacks['game:finished'](data);
         }
     });
 
     socket.on('chat:message', (data) => {
-        console.log('Chat message:', data);
         if (onChatMessageCallback) onChatMessageCallback(data);
     });
 
@@ -141,7 +111,6 @@ export function connect(sessionId, authToken) {
     });
 
     socket.on('disconnect', (reason) => {
-        console.log('Socket.IO disconnected:', reason);
         if (onCloseCallback) {
             onCloseCallback(reason);
         }
@@ -149,7 +118,6 @@ export function connect(sessionId, authToken) {
 
     // Listen for player:readyStatus event
     socket.on('player:readyStatus', (data) => {
-        console.log('Player ready status:', data);
         if (customEventCallbacks['player:readyStatus']) {
             customEventCallbacks['player:readyStatus'](data);
         }
@@ -157,7 +125,6 @@ export function connect(sessionId, authToken) {
 
     // Listen for game:canStart event
     socket.on('game:canStart', (data) => {
-        console.log('Game can start:', data);
         if (customEventCallbacks['game:canStart']) {
             customEventCallbacks['game:canStart'](data);
         }
@@ -165,7 +132,6 @@ export function connect(sessionId, authToken) {
 
     // Listen for escrow:created event (wagering games)
     socket.on('escrow:created', (data) => {
-        console.log('💰 Escrow created:', data);
         if (customEventCallbacks['escrow:created']) {
             customEventCallbacks['escrow:created'](data);
         }
@@ -173,7 +139,6 @@ export function connect(sessionId, authToken) {
 
     // Listen for payment:status event (wagering games)
     socket.on('payment:status', (data) => {
-        console.log('💰 Payment status update:', data);
         if (customEventCallbacks['payment:status']) {
             customEventCallbacks['payment:status'](data);
         }
@@ -181,7 +146,6 @@ export function connect(sessionId, authToken) {
 
     // Listen for payment:complete event (all players paid)
     socket.on('payment:complete', (data) => {
-        console.log('✅ All payments complete:', data);
         if (customEventCallbacks['payment:complete']) {
             customEventCallbacks['payment:complete'](data);
         }
@@ -189,7 +153,6 @@ export function connect(sessionId, authToken) {
 
     // Listen for game:cancelled event (host left)
     socket.on('game:cancelled', (data) => {
-        console.log('❌ Game cancelled:', data);
         if (customEventCallbacks['game:cancelled']) {
             customEventCallbacks['game:cancelled'](data);
         }
@@ -197,7 +160,6 @@ export function connect(sessionId, authToken) {
 
     // Listen for game:resetToLobby event (play again flow)
     socket.on('game:resetToLobby', (data) => {
-        console.log('🔄 Game reset to lobby:', data);
         if (customEventCallbacks['game:resetToLobby']) {
             customEventCallbacks['game:resetToLobby'](data);
         }

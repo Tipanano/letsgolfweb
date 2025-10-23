@@ -58,20 +58,17 @@ export function setGameState(newState) {
 }
 
 export function setShotDirectionAngle(angle) {
-    console.log('set direction angle:', angle);
     // Clamp the angle if needed, or let it wrap? For now, let it be any value.
     // This function now sets the ABSOLUTE target line angle.
     // The relative adjustment (shotDirectionAngle) is handled separately or defaults to 0.
     currentTargetLineAngle = angle;
     shotDirectionAngle = 0; // Reset relative adjustment when target changes
-    console.log(`Logic State: Target Line Angle set to: ${angle.toFixed(1)} degrees. Relative angle reset to 0.`);
 }
 
 // Function to set the RELATIVE adjustment angle
 export function setRelativeShotDirectionAngle(relativeAngle) {
     // Clamp or normalize as needed
     shotDirectionAngle = relativeAngle;
-    console.log(`Logic State: Relative Shot Direction Angle set to: ${relativeAngle.toFixed(1)} degrees`);
 }
 
 
@@ -143,7 +140,6 @@ export function setDownswingPhaseStartTime(time) {
 export function setTemperature(temp) {
     temperature = temp;
     // Optionally, update UI if temp is displayed live
-    // console.log(`Logic State: Temperature set to: ${temp}°C`); // Reduce logging noise
 }
 
 // Sets the *current* wind conditions. Called frequently by the dynamic wind simulation.
@@ -164,14 +160,12 @@ export function initializeGameLogic() {
 
     // Initial swing speed setup is handled by UI calling setSwingSpeed
     resetSwingState(); // Call the local reset function
-    console.log("Game Logic State Initialized.");
 }
 
 // Function for main.js to register its handler
 export function registerShotCompletionCallback(callback) {
     if (typeof callback === 'function') {
         onShotCompleteCallback = callback;
-        console.log("Shot completion callback registered.");
     } else {
         console.error("Attempted to register invalid shot completion callback.");
     }
@@ -181,12 +175,10 @@ export function registerShotCompletionCallback(callback) {
 export function setSwingSpeed(percentage) {
     swingSpeed = percentage / 100;
     setupTimingBarWindows(swingSpeed); // Update UI windows when speed changes
-    console.log(`Logic State: Swing Speed set to: ${percentage}% (Multiplier: ${swingSpeed.toFixed(2)})`);
 }
 
 export function setSelectedClub(clubKey) {
     selectedClub = clubs[clubKey];
-    console.log(`Logic State: Club set to: ${selectedClub.name} (Key: ${clubKey})`);
 
     // Auto-set shot type based on club selection
     if (clubKey === 'PT') {
@@ -214,7 +206,6 @@ export function setSelectedClub(clubKey) {
 export function setShotType(type) {
     if (currentShotType === type) return; // No change
 
-    console.log(`Logic State: Shot Type set to: ${type}`);
     currentShotType = type;
 
     // Enable/disable swing speed slider based on type
@@ -297,13 +288,11 @@ export function resetSwingState() { // Added 'export' keyword here
         // getCurrentBallPosition and getCurrentLie from playHole will now reflect the tee.
         ballPosForVisuals = playHole.getCurrentBallPosition(); 
         lieForVisuals = playHole.getCurrentLie();
-        console.log("State: Resetting visuals for play-hole mode. Pos:", ballPosForVisuals, "Lie:", lieForVisuals);
     }
     // For other modes (range, CTF), visuals.resetVisuals() defaults to tee/origin.
     
     visuals.resetVisuals(ballPosForVisuals, lieForVisuals); // Reset visuals (e.g., ball position, tee)
     resetStaticCameraZoom(); // Reset the static camera zoom level
-    console.log("Logic State: Full swing state reset (including visuals and zoom).");
 }
 
 // Resets only the core swing timing/state variables and animation IDs
@@ -334,7 +323,6 @@ export function resetSwingVariablesOnly() { // Added 'export' keyword here
     // currentTargetLineAngle = 0;
 
     // NOTE: This version does NOT reset UI or Visuals
-    console.log("Logic State: Swing variables reset.");
 }
 
 

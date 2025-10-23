@@ -26,7 +26,6 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club, 
     // --- Get Environment Conditions at Start of Shot ---
     let currentWind = getWind(); // { speed, direction }
     const currentTemperature = getTemperature(); // degrees C
-    console.log(`Sim: Conditions - Temp: ${currentTemperature}°C, Wind: ${currentWind.speed.toFixed(1)}m/s @ ${currentWind.direction}°`);
 
     //currentWind.speed = 0 // Temporarily disable wind for testing
 
@@ -70,7 +69,6 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club, 
     const specificGasConstant = 287.05; // J/(kg·K) for dry air
     const temperatureKelvin = currentTemperature + 273.15;
     const airDensity = pressure / (specificGasConstant * temperatureKelvin);
-    console.log(`Sim: Calculated Air Density=${airDensity.toFixed(3)} kg/m^3`);
     // const airDensity = 1.225; // kg/m^3 (standard air density) - REPLACED
     const ballArea = Math.PI * (0.04267 / 2) * (0.04267 / 2); // Cross-sectional area of golf ball (m^2)
     const ballMass = 0.04593; // kg (standard golf ball mass)
@@ -88,9 +86,6 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club, 
     const MIN_AIR_SPIN_EFFECT_RPM = 50; // Spin below this has no effect (avoids tiny calculations)
     // --- End Constants ---
 
-    console.log("Sim: Starting step-by-step simulation...");
-    console.log(`Sim: Initial Vel: (${velocity.x.toFixed(2)}, ${velocity.y.toFixed(2)}, ${velocity.z.toFixed(2)}) m/s`);
-    console.log(`Sim: Spin Vec (RPM): (${spinVec.x.toFixed(0)}, ${spinVec.y.toFixed(0)}, ${spinVec.z.toFixed(0)})`);
 
     // Convert wind speed (m/s) and direction (degrees from North) to a velocity vector
     // Wind direction is where it comes FROM. So a 90deg (East) wind blows West (-X).
@@ -100,7 +95,6 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club, 
         y: 0, // Assume horizontal wind
         z: -currentWind.speed * Math.cos(windAngleRad)  // Negative cos for Z component
     };
-    console.log(`Sim: WindVel Vector = (${windVel.x.toFixed(2)}, ${windVel.y.toFixed(2)}, ${windVel.z.toFixed(2)}) m/s`);
 
     // Convert spin from RPM to rad/s - Use 'let' to allow decay
     // Assuming side spin is around Y axis, back spin around X axis relative to path
@@ -110,7 +104,6 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club, 
         y: (spinVec.y || 0) * (2 * Math.PI / 60), // Sidespin around Y
         z: (spinVec.z || 0) * (2 * Math.PI / 60)  // Rifle spin? (Assume 0 for now)
     };
-     console.log(`Sim: Initial Spin rad/s: (${spinRadPerSec.x.toFixed(2)}, ${spinRadPerSec.y.toFixed(2)}, ${spinRadPerSec.z.toFixed(2)})`);
 
 
      while (position.y > 0.01 || time === 0) { // Loop until ball is near/below ground (allow at least one step)
@@ -166,7 +159,6 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club, 
         effectiveCd = Math.max(MINIMUM_EFFECTIVE_CD, effectiveCd); // Clamp to minimum
         
         // For debugging:
-        //console.log(`CurrentBackspinRPM: ${currentBackspinRPM.toFixed(0)}, SpinInducedDragReduction: ${spinInducedDragReduction.toFixed(6)}, effectiveCd: ${effectiveCd.toFixed(4)}`);
 
         // --- Pre-calculate drag force factor for THIS step using effectiveCd ---
         const currentDragForceFactor = -0.5 * airDensity * ballArea * effectiveCd / ballMass;
@@ -252,7 +244,6 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club, 
             if (obstacleResult.collided) {
                 velocity.x = obstacleResult.velocityX;
                 velocity.z = obstacleResult.velocityZ;
-                console.log(`Ball hit ${obstacleResult.obstacle.type} (${obstacleResult.obstacle.size}) at height ${position.y.toFixed(1)}m!`);
             }
         }
 
@@ -276,8 +267,6 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club, 
         lastVelocityBeforeLanding = { ...velocity };
     }
 
-    console.log(`Sim: Simulation finished. Time: ${time.toFixed(2)}s, Steps: ${trajectoryPoints.length}`);
-    console.log(`let's see the trajectory points:`, trajectoryPoints.map(p => `(${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)})`).join(", "));
     const landingPosition = trajectoryPoints.length > 1 ? trajectoryPoints[trajectoryPoints.length - 1] : initialPos;
 
     // Calculate landing angle
@@ -287,14 +276,12 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club, 
     if (horizontalVelMag > 0.01) {
         landingAngleRadians = Math.atan2(Math.abs(finalVel.y), horizontalVelMag);
     }
-    console.log(`Sim: Final Velocity (y): ${finalVel.y.toFixed(2)}, Horizontal Vel: ${horizontalVelMag.toFixed(2)}, Landing Angle: ${(landingAngleRadians * 180 / Math.PI).toFixed(1)} deg`);
 
 
     // Calculate carry based on X/Z distance between initialPos and landingPosition
     const dx = landingPosition.x - initialPos.x;
     const dz = landingPosition.z - initialPos.z;
     const carryDistanceMeters = Math.sqrt(dx*dx + dz*dz);
-    console.log(`Sim: Carry Distance (m): ${carryDistanceMeters.toFixed(2)} (dx=${dx.toFixed(2)}, dz=${dz.toFixed(2)})`);
 
     return {
         landingPosition: landingPosition,
@@ -337,13 +324,6 @@ const SPIN_COR_FIRMNESS_FACTOR = 1.2; // Multiplier for firm surfaces (green res
  * @returns {object} Final state after bounces: {position: THREE.Vector3, velocity: THREE.Vector3, spin: {x, y, z} rad/s, bouncePoints: []}
  */
 export function simulateBouncePhase(landingPosition, landingVelocity, landingAngleRadians, spinRadPerSec, surfaceType, startTime = 0, holeLayout = null) {
-    console.log("\n========== BOUNCE PHASE START ==========");
-    console.log(`Landing Position: (${landingPosition.x.toFixed(2)}, ${landingPosition.y.toFixed(2)}, ${landingPosition.z.toFixed(2)})`);
-    console.log(`Landing Velocity: (${landingVelocity.x.toFixed(2)}, ${landingVelocity.y.toFixed(2)}, ${landingVelocity.z.toFixed(2)}) m/s`);
-    console.log(`Landing Angle: ${(landingAngleRadians * 180 / Math.PI).toFixed(1)}°`);
-    console.log(`Spin (rad/s): (${spinRadPerSec.x.toFixed(2)}, ${spinRadPerSec.y.toFixed(2)}, ${spinRadPerSec.z.toFixed(2)})`);
-    console.log(`Surface: ${surfaceType}`);
-    console.log(`Start time: ${startTime.toFixed(2)}s`);
 
     // Store initial landing angle for scrub calculations
     const initialLandingAngleRadians = landingAngleRadians;
@@ -354,8 +334,6 @@ export function simulateBouncePhase(landingPosition, landingVelocity, landingAng
 
     // Check for special value -1.0 (water/penalty area): stop all physics immediately
     if (initialCoR < 0) {
-        console.log("⚠️ Ball landed in penalty area (water/OOB), stopping all physics immediately");
-        console.log("========== BOUNCE PHASE END (PENALTY) ==========\n");
         return {
             position: new THREE.Vector3(landingPosition.x, landingPosition.y, landingPosition.z),
             velocity: new THREE.Vector3(0, 0, 0),
@@ -393,7 +371,6 @@ export function simulateBouncePhase(landingPosition, landingVelocity, landingAng
                 if (detectedSurface) {
                     currentSurfaceType = detectedSurface;
                     if (bounceCount > 1 && detectedSurface !== surfaceType) {
-                        console.log(`🔄 Surface changed: ${surfaceType} → ${currentSurfaceType}`);
                     }
                 }
             }
@@ -406,12 +383,6 @@ export function simulateBouncePhase(landingPosition, landingVelocity, landingAng
             const horizontalSpeed = Math.sqrt(velocity.x**2 + velocity.z**2);
             const backspinRPM = Math.abs(currentSpin.x) * (60 / (2 * Math.PI));
 
-            console.log(`\n--- Bounce #${bounceCount} ---`);
-            console.log(`Surface: ${currentSurfaceType}`);
-            console.log(`Impact Position: (${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)})`);
-            console.log(`Impact Velocity: (${velocity.x.toFixed(2)}, ${velocity.y.toFixed(2)}, ${velocity.z.toFixed(2)}) m/s`);
-            console.log(`Impact Speed: ${impactSpeed.toFixed(2)} m/s, Horizontal: ${horizontalSpeed.toFixed(2)} m/s`);
-            console.log(`Backspin: ${backspinRPM.toFixed(0)} RPM`);
 
             // 1. Calculate spin-dependent CoR (backspin "grabs" surface, reducing bounce)
             // Higher backspin + firmer surface = more grip = lower bounce
@@ -421,13 +392,11 @@ export function simulateBouncePhase(landingPosition, landingVelocity, landingAng
             const spinCoRReduction = spinGripRatio * firmnessFactor * MAX_SPIN_COR_REDUCTION;
             const effectiveCoR = baseCoR * (1 - spinCoRReduction);
 
-            console.log(`CoR Calc: Base=${baseCoR.toFixed(2)}, SpinGrip=${spinGripRatio.toFixed(2)}, Firmness=${firmnessFactor.toFixed(2)}, Reduction=${(spinCoRReduction*100).toFixed(1)}%, Effective=${effectiveCoR.toFixed(2)}`);
 
             // 2. Apply effective coefficient of restitution to vertical velocity
             const oldVerticalVel = velocity.y;
             velocity.y = -velocity.y * effectiveCoR;
 
-            console.log(`Vertical velocity: ${oldVerticalVel.toFixed(2)} → ${velocity.y.toFixed(2)} m/s (CoR: ${effectiveCoR.toFixed(2)})`);
 
             // 3. Horizontal velocity scrub from ground contact friction (scales with backspin AND landing angle)
             // More backspin = more friction = more scrub
@@ -460,7 +429,6 @@ export function simulateBouncePhase(landingPosition, landingVelocity, landingAng
                     scrubLog += ` + angle ${(angleScrubMultiplier * ANGLE_ENHANCED_SCRUB_FACTOR * 100).toFixed(1)}%`;
                 }
                 scrubLog += `)`;
-                console.log(scrubLog);
             }
 
             // 3. Spin affects horizontal velocity on bounce (grip effect)
@@ -475,13 +443,11 @@ export function simulateBouncePhase(landingPosition, landingVelocity, landingAng
                 velocity.z += horizontalDir.y * spinEffect;
 
                 const newHorizontalSpeed = Math.sqrt(velocity.x**2 + velocity.z**2);
-                console.log(`Spin effect on velocity: ${spinEffect.toFixed(3)} m/s (${backspinRPM.toFixed(0)} RPM), Horizontal speed: ${horizontalSpeed.toFixed(2)} → ${newHorizontalSpeed.toFixed(2)} m/s`);
 
                 // Check if ball reversed direction due to extreme backspin
                 const newHorizontalDir = new THREE.Vector2(velocity.x, velocity.z).normalize();
                 const directionDot = horizontalDir.dot(newHorizontalDir);
                 if (directionDot < 0) {
-                    console.log(`*** BALL REVERSED DIRECTION due to high backspin! ***`);
                 }
             }
 
@@ -490,15 +456,12 @@ export function simulateBouncePhase(landingPosition, landingVelocity, landingAng
             const spinReductionFactor = 0.7 + (surfaceProps?.friction || 0.1) * 0.05; // Softer surfaces reduce spin more
             currentSpin.x *= spinReductionFactor;
             currentSpin.y *= spinReductionFactor;
-            console.log(`Spin reduction: ${(spinReductionFactor * 100).toFixed(0)}%, New backspin: ${(Math.abs(currentSpin.x) * 60 / (2 * Math.PI)).toFixed(0)} RPM`);
 
             // Calculate expected bounce height
             const expectedHeight = (velocity.y ** 2) / (2 * gravity);
-            console.log(`Expected bounce height: ${(expectedHeight * 100).toFixed(1)} cm`);
 
             // Check if bounce is too small to continue
             if (expectedHeight < MIN_BOUNCE_HEIGHT || velocity.y < 0.3) {
-                console.log(`Bounce too small (${(expectedHeight * 100).toFixed(1)} cm < ${(MIN_BOUNCE_HEIGHT * 100).toFixed(1)} cm threshold). Transitioning to roll.`);
                 break;
             }
 
@@ -531,7 +494,6 @@ export function simulateBouncePhase(landingPosition, landingVelocity, landingAng
             if (position.y <= groundY) {
                 position.y = groundY;
                 inAir = false;
-                console.log(`Airtime: ${(airTime * 1000).toFixed(0)} ms`);
                 // Continue to next impact
             }
 
@@ -546,7 +508,6 @@ export function simulateBouncePhase(landingPosition, landingVelocity, landingAng
         // Safety: check if ball is basically stopped
         const currentSpeed = Math.sqrt(velocity.x**2 + velocity.y**2 + velocity.z**2);
         if (currentSpeed < MIN_ROLL_SPEED && !inAir) {
-            console.log(`Ball speed too low (${currentSpeed.toFixed(3)} m/s). Ending bounce phase.`);
             break;
         }
     }
@@ -555,15 +516,6 @@ export function simulateBouncePhase(landingPosition, landingVelocity, landingAng
         console.warn(`Reached maximum bounces (${MAX_BOUNCES})`);
     }
 
-    console.log(`\n========== BOUNCE PHASE END ==========`);
-    console.log(`Total bounces: ${bounceCount}`);
-    console.log(`Bounce duration: ${(time - startTime).toFixed(2)}s`);
-    console.log(`Final Position: (${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)})`);
-    console.log(`Final Velocity: (${velocity.x.toFixed(2)}, ${velocity.y.toFixed(2)}, ${velocity.z.toFixed(2)}) m/s`);
-    console.log(`Final Spin: ${(Math.abs(currentSpin.x) * 60 / (2 * Math.PI)).toFixed(0)} RPM backspin`);
-    console.log(`Bounce trajectory points: ${bouncePoints.length}`);
-    console.log(`End time: ${time.toFixed(2)}s`);
-    console.log("======================================\n");
 
     return {
         position: position,
@@ -608,19 +560,12 @@ const SURFACE_CHECK_DISTANCE = 0.25; // meters - Check surface every 25cm
  * @returns {object} Result containing finalPosition (THREE.Vector3), isHoledOut (boolean), and rollTrajectoryPoints (array of THREE.Vector3).
  */
 export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType, initialBackspinRPM = 0, initialSideSpinRPM = 0, startTime = 0, holeLayout = null) {
-    console.log("\n========== ROLL PHASE START ==========");
-    console.log(`Surface: ${surfaceType}`);
-    console.log(`Initial Position: (${initialPosition.x.toFixed(2)}, ${initialPosition.y.toFixed(2)}, ${initialPosition.z.toFixed(2)})`);
-    console.log(`Initial Velocity: (${initialVelocity.x.toFixed(2)}, ${initialVelocity.y.toFixed(2)}, ${initialVelocity.z.toFixed(2)}) m/s`);
-    console.log(`Initial Backspin: ${initialBackspinRPM.toFixed(0)} RPM, Sidespin: ${initialSideSpinRPM.toFixed(0)} RPM`);
-    console.log(`Start time: ${startTime.toFixed(2)}s`);
 
     let position = initialPosition.clone();
     let velocity = initialVelocity.clone();
     // Store initial horizontal velocity direction for backspin force
     const initialHorizontalVelocityDir = velocity.clone().setY(0).normalize();
     const initialSpeed = Math.sqrt(velocity.x**2 + velocity.z**2);
-    console.log(`Initial horizontal speed: ${initialSpeed.toFixed(2)} m/s`);
 
     // Ensure ball starts on the ground with correct lie offset for roll simulation
     position.y = getBallYPositionForSurface(surfaceType);
@@ -656,12 +601,6 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
     // Calculate base friction deceleration magnitude
     const frictionDecelerationMagnitude = effectiveFrictionCoefficient * gravity;
 
-    console.log("\n--- Roll Physics Setup ---");
-    console.log(`Surface: ${surfaceType}, Spin Response: ${surfaceSpinResponse.toFixed(2)}x`);
-    console.log(`Base friction coefficient: ${baseFrictionCoefficient.toFixed(4)}`);
-    console.log(`Friction deceleration: ${frictionDecelerationMagnitude.toFixed(3)} m/s²`);
-    console.log(`Backspin accel factor: ${(currentBackspinRPM * effectiveBackspinAccelFactor).toFixed(4)} m/s² (Base: ${BASE_BACKSPIN_ACCELERATION_FACTOR}, Response: ${surfaceSpinResponse.toFixed(2)}x)`);
-    console.log(`Sidespin accel factor: ${(Math.abs(currentSideSpinRPM) * SIDESPIN_ACCELERATION_FACTOR).toFixed(4)} m/s²`);
 
     let time = startTime; // Start from end of bounce time
     const dt = GROUND_FRICTION_TIME_STEP;
@@ -683,7 +622,6 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
     // Sample logging every 0.5 seconds
     let nextLogTime = 0.5;
 
-    console.log("\n--- Roll Simulation ---");
 
     while (true) {
         const speed = velocity.length(); // Current speed (horizontal only as y=0)
@@ -691,7 +629,6 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
         // Periodic logging (adjust for startTime offset)
         if (time >= (startTime + nextLogTime) && speed > MIN_ROLL_SPEED) {
             const distRolled = totalDistanceRolled;
-            console.log(`[t=${time.toFixed(1)}s] Speed: ${speed.toFixed(2)} m/s, Distance rolled: ${distRolled.toFixed(1)}m, Backspin: ${currentBackspinRPM.toFixed(0)} RPM`);
             nextLogTime += 0.5;
         }
 
@@ -703,12 +640,9 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
             const dz = position.z - holePosition.z;
             const distanceToHoleCenter = Math.sqrt(dx*dx + dz*dz);
 
-            console.log('Sim (Roll): Distance to hole center:', distanceToHoleCenter.toFixed(3), 'm');
 
-            console.log('hole out min dist:', (HOLE_RADIUS_METERS).toFixed(3), 'm');
             // Check capture condition
             if (distanceToHoleCenter < HOLE_RADIUS_METERS && speed < MAX_HOLE_ENTRY_SPEED) {
-                console.log(`Sim (Roll): HOLE IN! Dist=${distanceToHoleCenter.toFixed(3)}, Speed=${speed.toFixed(2)}`);
                 isHoledOut = true;
                 position.set(holePosition.x, BALL_RADIUS / 2, holePosition.z); // Center ball in hole, slightly sunk
                 velocity.set(0, 0, 0); // Stop the ball
@@ -719,7 +653,6 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
 
         // --- Stop Check ---
         if (speed < MIN_ROLL_SPEED) {
-            console.log(`Sim (Roll): Ball stopped at speed ${speed.toFixed(3)} m/s after ${time.toFixed(2)}s`);
             velocity.set(0, 0, 0); // Ensure velocity is zeroed out
             break; // Exit simulation loop
         }
@@ -784,7 +717,6 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
             const stoppingDecelerationAmount = totalOpposingDecelMagnitude * dt;
 
             if (speed <= stoppingDecelerationAmount) {
-                console.log(`Sim (Roll): Stopping ball. Speed (${speed.toFixed(3)}) <= Total Opposing Decel Amount (${stoppingDecelerationAmount.toFixed(3)})`);
                 shouldStop = true;
             }
         } else {
@@ -814,7 +746,6 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
         if (distanceSinceLastSurfaceCheck >= SURFACE_CHECK_DISTANCE && holeLayout) {
             const detectedSurface = getSurfaceTypeAtPoint({ x: position.x, z: position.z }, holeLayout);
             if (detectedSurface && detectedSurface !== currentSurfaceType) {
-                console.log(`🔄 Surface changed during roll: ${currentSurfaceType} → ${detectedSurface} at (${position.x.toFixed(2)}, ${position.z.toFixed(2)})`);
                 currentSurfaceType = detectedSurface;
 
                 // Update friction coefficients
@@ -822,7 +753,6 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
                 currentFrictionCoefficient = newSurfaceProps?.friction || 0.1;
                 currentFrictionDecelerationMagnitude = currentFrictionCoefficient * gravity;
 
-                console.log(`New friction: ${currentFrictionCoefficient.toFixed(4)} (decel: ${currentFrictionDecelerationMagnitude.toFixed(3)} m/s²)`);
             }
             distanceSinceLastSurfaceCheck = 0; // Reset distance counter
         }
@@ -845,18 +775,14 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
 
     // --- Apply Ball Lie Offset based on final surface ---
     if (!isHoledOut && surfaceProps && typeof surfaceProps.ballLieOffset === 'number') {
-        console.log('BALL LIE OFFESET STUFF are we doing this at all???')
         if (surfaceProps.ballLieOffset === -1) { // Special case for water
-            console.log("Sim (Roll): Ball ended in water, setting Y low.");
             // Set Y significantly below typical surface height, e.g., based on water surface height
             position.y = (surfaceProps.height ?? 0) - BALL_RADIUS * 2; // Example: below water surface
         } else {
             const finalY = BALL_RADIUS + surfaceProps.ballLieOffset;
-            console.log(`Sim (Roll): Applying lie offset. Surface: ${surfaceType}, Offset: ${surfaceProps.ballLieOffset.toFixed(3)}, Final Y: ${finalY.toFixed(3)}`);
             position.y = finalY;
         }
     } else if (isHoledOut) {
-        console.log("Sim (Roll): Ball holed out, skipping lie offset.");
     } else {
         console.warn(`Sim (Roll): Could not apply lie offset. HoledOut=${isHoledOut}, SurfaceProps=${!!surfaceProps}, Offset=${surfaceProps?.ballLieOffset}`);
         // Keep position.y as BALL_RADIUS if offset couldn't be applied and not holed out
@@ -867,11 +793,9 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
     let finalAdjustedY = BALL_RADIUS; // Default to standard radius height
     if (!isHoledOut && surfaceProps && typeof surfaceProps.ballLieOffset === 'number') {
         if (surfaceProps.ballLieOffset === -1) { // Special case for water
-            console.log("Sim (Roll): Ball ended in water, setting Y low.");
             finalAdjustedY = (surfaceProps.height ?? 0) - BALL_RADIUS * 2; // Example: below water surface
         } else {
             finalAdjustedY = BALL_RADIUS + surfaceProps.ballLieOffset;
-            console.log(`Sim (Roll): Applying lie offset. Surface: ${surfaceType}, Offset: ${surfaceProps.ballLieOffset.toFixed(3)}, Final Y: ${finalAdjustedY.toFixed(3)}`);
         }
         position.y = finalAdjustedY; // Update the final position vector
 
@@ -881,7 +805,6 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
         }
 
     } else if (isHoledOut) {
-        console.log("Sim (Roll): Ball holed out, using hole depth Y.");
         finalAdjustedY = position.y; // Use the Y position set during hole-in check
          // Update the last trajectory point for hole-in as well
          if (rollTrajectoryPoints.length > 0) {
@@ -897,33 +820,13 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
     }
 
     // --- Final Logging Before Return ---
-    console.log("--- Sim (Roll) Final State ---");
-    console.log(`Surface Type: ${surfaceType}`);
-    console.log(`Surface Props:`, surfaceProps);
-    console.log(`Ball Radius: ${BALL_RADIUS.toFixed(3)}`);
-    console.log(`Calculated Lie Offset: ${surfaceProps?.ballLieOffset?.toFixed(3) ?? 'N/A'}`);
-    console.log(`Final Adjusted Y: ${finalAdjustedY.toFixed(3)}`);
-    console.log(`Final Position Vec: (${position.x.toFixed(3)}, ${position.y.toFixed(3)}, ${position.z.toFixed(3)})`);
     if (rollTrajectoryPoints.length > 0) {
-        console.log(`Last Trajectory Point Y: ${rollTrajectoryPoints[rollTrajectoryPoints.length - 1].y.toFixed(3)}`);
     } else {
-        console.log(`Last Trajectory Point Y: N/A (No roll points)`);
     }
-    console.log("-----------------------------");
 
 
     const rollDuration = time - startTime;
 
-    console.log("\n========== ROLL PHASE END ==========");
-    console.log(`Roll duration: ${rollDuration.toFixed(2)}s (${steps} steps)`);
-    console.log(`Total distance rolled: ${totalDistanceRolled.toFixed(2)}m`);
-    console.log(`Average roll speed: ${(totalDistanceRolled / rollDuration).toFixed(2)} m/s`);
-    console.log(`Initial speed: ${initialSpeed.toFixed(2)} m/s → Final speed: 0.00 m/s`);
-    console.log(`Final backspin: ${currentBackspinRPM.toFixed(0)} RPM (started at ${initialBackspinRPM.toFixed(0)} RPM)`);
-    console.log(`Holed out: ${isHoledOut}`);
-    console.log(`Final Position: (${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)})`);
-    console.log(`End time: ${time.toFixed(2)}s`);
-    console.log("======================================\n");
 
     return {
         finalPosition: position, // Position now includes the lie offset adjustment

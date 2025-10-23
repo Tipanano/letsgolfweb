@@ -80,7 +80,6 @@ function rotatePointAroundPivot(point, pivot, angleDegrees) {
 
 
 export function initCoreVisuals(canvasElement) {
-    console.log("Initializing core visuals on canvas:", canvasElement);
 
     // 1. Scene
     scene = new THREE.Scene();
@@ -90,7 +89,6 @@ export function initCoreVisuals(canvasElement) {
 
     // 2. Camera (Default - Range View)
     const aspectRatio = canvasElement.clientWidth / canvasElement.clientHeight;
-    console.log(`📷 Initial camera setup: aspect=${aspectRatio.toFixed(2)} (${canvasElement.clientWidth}/${canvasElement.clientHeight})`);
     camera = new THREE.PerspectiveCamera(60, aspectRatio, 0.1, 1000);
     // Slightly higher default position for range view
     camera.position.set(0, 18, -25); // Default: Range view position
@@ -100,11 +98,8 @@ export function initCoreVisuals(canvasElement) {
     activeCameraMode = CameraMode.STATIC; // Set initial mode
 
     // 3. Renderer
-    console.log(`🎨 Initial renderer setup: canvas.clientWidth=${canvasElement.clientWidth}, canvas.clientHeight=${canvasElement.clientHeight}`);
-    console.log(`🎨 Canvas element: width=${canvasElement.width}, height=${canvasElement.height}, style.width=${canvasElement.style.width}, style.height=${canvasElement.style.height}`);
     renderer = new THREE.WebGLRenderer({ canvas: canvasElement, antialias: true });
     renderer.setSize(canvasElement.clientWidth, canvasElement.clientHeight);
-    console.log(`🎨 Renderer size set to: ${canvasElement.clientWidth}x${canvasElement.clientHeight}`);
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.shadowMap.enabled = true;
 
@@ -155,7 +150,6 @@ export function initCoreVisuals(canvasElement) {
     // Start render loop
     animate();
 
-    console.log("Core Three.js scene initialized.");
 
     // Return essential elements needed by other modules
     return { scene, camera, renderer, ball };
@@ -171,13 +165,6 @@ export function onWindowResize() {
     const newWidth = rect.width;
     const newHeight = rect.height;
 
-    console.log(`🔍 onWindowResize: Canvas getBoundingClientRect() width=${newWidth}, height=${newHeight}`);
-    console.log(`🔍 Canvas element properties: width=${canvas.width}, height=${canvas.height}`);
-    console.log(`🔍 Canvas client size: clientWidth=${canvas.clientWidth}, clientHeight=${canvas.clientHeight}`);
-    console.log(`🔍 Canvas style: width=${canvas.style.width}, height=${canvas.style.height}`);
-    console.log(`🔍 Canvas offsetWidth=${canvas.offsetWidth}, offsetHeight=${canvas.offsetHeight}`);
-    console.log(`🔍 Renderer current size:`, renderer.getSize(new THREE.Vector2()));
-    console.log(`🔍 Camera current aspect: ${camera.aspect}`);
 
     if (newHeight === 0) {
         console.warn("onWindowResize: Canvas clientHeight is 0, skipping update to prevent NaN aspect ratio.");
@@ -186,19 +173,15 @@ export function onWindowResize() {
 
     camera.aspect = newWidth / newHeight;
     camera.updateProjectionMatrix();
-    console.log(`✅ onWindowResize: Camera aspect updated to ${camera.aspect.toFixed(2)}`);
 
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(newWidth, newHeight, false);
-    console.log(`✅ onWindowResize: Renderer size set to ${newWidth}x${newHeight}, pixelRatio: ${window.devicePixelRatio}`);
-    console.log(`✅ Renderer new size after setSize:`, renderer.getSize(new THREE.Vector2()));
 
     // Explicitly render the scene with the updated camera and renderer size
     // Determine which camera is active for rendering (main or measurement view)
     const activeRenderCamera = MeasurementView.isViewActive() && MeasurementView.getCamera() ? MeasurementView.getCamera() : camera;
     if (scene && activeRenderCamera) { // Ensure scene and an active camera exist
         renderer.render(scene, activeRenderCamera);
-        console.log("Rendered scene in onWindowResize");
     }
 }
 
@@ -261,12 +244,10 @@ function animate(timestamp) {
         // Check if animation is complete (current time >= total duration)
         if (currentTime >= ballAnimationDuration / 1000) {
             isBallAnimating = false;
-            console.log("Ball animation finished.");
 
             let trueFinalBallPosition;
             if (currentIsHoledOut && currentHoledOutPosition) {
                 trueFinalBallPosition = currentHoledOutPosition;
-                console.log("CoreVisuals: Snapping ball to holed out position:", trueFinalBallPosition);
             } else if (currentTrajectoryPoints.length > 0) {
                 trueFinalBallPosition = currentTrajectoryPoints[currentTrajectoryPoints.length - 1];
             }
@@ -286,7 +267,6 @@ function animate(timestamp) {
             }
              // Execute the callback if it exists
              if (currentAnimationCallback) {
-                 console.log("Executing animation completion callback.");
                  currentAnimationCallback();
                  currentAnimationCallback = null; // Clear callback after execution
              }
@@ -298,7 +278,6 @@ function animate(timestamp) {
     if (activeRenderCamera) { // Ensure there's a camera to render with
         // Add occasional debug logging
         if (Math.random() < 0.001) { // Log ~once per second at 60fps
-            console.log(`🎬 Rendering: scene children=${scene.children.length}, camera pos=(${camera.position.x.toFixed(1)}, ${camera.position.y.toFixed(1)}, ${camera.position.z.toFixed(1)})`);
         }
         renderer.render(scene, activeRenderCamera);
     } else {
@@ -361,7 +340,6 @@ export function applyAimAngleToCamera() {
     if (!camera) return;
     // Calculate the total absolute aim angle for camera rotation
     const totalAimAngle = getCurrentTargetLineAngle() + getShotDirectionAngle();
-    console.log(`Visuals: Applying total aim angle ${totalAimAngle.toFixed(1)} (Target: ${getCurrentTargetLineAngle().toFixed(1)}, Relative: ${getShotDirectionAngle().toFixed(1)}) to camera mode ${activeCameraMode}, static view: ${currentStaticView}`);
 
     if (activeCameraMode === CameraMode.STATIC) {
         // Re-apply the current static view using its dedicated setter function.
@@ -394,7 +372,6 @@ export function applyAimAngleToCamera() {
                 const ballPos = getPlayHoleBallPosition();
                 const targetPos = getFlagPosition();
                 // --- DEBUG LOGGING ---
-                console.log(`applyAimAngleToCamera (case 'hole'): ballPos=`, ballPos, `targetPos=`, targetPos);
                 // --- END DEBUG LOGGING ---
                 if (ballPos && targetPos) {
                     const ballPosVec3 = ballPos instanceof THREE.Vector3 ? ballPos : new THREE.Vector3(ballPos.x, ballPos.y, ballPos.z);
@@ -456,7 +433,6 @@ export function removeTrajectoryLine() {
         trajectoryLine.geometry.dispose();
         trajectoryLine.material.dispose();
         trajectoryLine = null;
-        console.log("Trajectory line removed.");
     }
 }
 
@@ -469,7 +445,6 @@ export function showBallAtAddress(position = null, surfaceType = null) {
     const ballPos = position
         ? new THREE.Vector3(position.x, position.y, position.z)
         : new THREE.Vector3(0, 0, 0); // Default if position is null (Y will be calculated below)
-    console.log(`>>> ballPos created: (${ballPos.x.toFixed(2)}, ${ballPos.y.toFixed(2)}, ${ballPos.z.toFixed(2)}) from position:`, position); // ADDED LOG
 
     // Determine surface type. Use provided type, otherwise default to 'TEE'
     // If a specific position was given, we should ideally determine the surface there,
@@ -499,11 +474,9 @@ export function showBallAtAddress(position = null, surfaceType = null) {
             activeTee.visible = true;
             inactiveTee.visible = false;
 
-            console.log(`Showing ${useLargeTee ? 'large' : 'small'} tee for ${clubType}, ball lifted by ${teeHeightOffset}m`);
         } else {
             teeMesh.visible = false;
             smallTeeMesh.visible = false;
-            // console.log("Hiding tee."); // Reduce console noise
         }
     }
 
@@ -512,31 +485,25 @@ export function showBallAtAddress(position = null, surfaceType = null) {
     const surfaceProps = typeof getSurfaceProperties === 'function' ? getSurfaceProperties(currentSurface) : null;
     if (surfaceProps && typeof surfaceProps.ballLieOffset === 'number' && surfaceProps.ballLieOffset !== -1) { // Check if getSurfaceProperties exists
         ballPos.y = BALL_RADIUS + surfaceProps.ballLieOffset + teeHeightOffset;
-        console.log(`showBallAtAddress: Surface=${currentSurface}, Offset=${surfaceProps.ballLieOffset.toFixed(3)}, TeeHeight=${teeHeightOffset.toFixed(3)}, Setting ball Y to ${ballPos.y.toFixed(3)}`);
     } else {
         // Default Y if no surface info or water
         ballPos.y = BALL_RADIUS + teeHeightOffset;
-         console.log(`showBallAtAddress: No valid surface/offset for ${currentSurface}, setting ball Y to default ${ballPos.y.toFixed(3)} with tee height ${teeHeightOffset.toFixed(3)}`);
     }
 
-    console.log(`>>> PRE-COPY ballPos: (${ballPos.x.toFixed(2)}, ${ballPos.y.toFixed(2)}, ${ballPos.z.toFixed(2)})`); // ADDED LOG
     ball.position.copy(ballPos);
     ball.visible = true;
-    console.log(`Showing ball at address position: (${ballPos.x.toFixed(2)}, ${ballPos.y.toFixed(2)}, ${ballPos.z.toFixed(2)}) on surface: ${currentSurface}`);
 }
 
 // Function to hide the ball and tee
 export function hideBall() {
     if (ball) {
         ball.visible = false;
-        console.log("Hiding ball.");
     }
     if (teeMesh) {
         teeMesh.visible = false;
     }
     if (smallTeeMesh) {
         smallTeeMesh.visible = false;
-        // console.log("Hiding tee."); // Reduce console noise
     }
 }
 
@@ -550,7 +517,6 @@ export function startBallAnimation(points, duration, onCompleteCallback = null, 
     currentHoledOutPosition = holedOutPosition ? new THREE.Vector3(holedOutPosition.x, holedOutPosition.y, holedOutPosition.z) : null;
 
     if (currentIsHoledOut) {
-        console.log("CoreVisuals: Ball is holed out. Final position:", currentHoledOutPosition);
     }
 
     // Remove previous line if it exists
@@ -562,27 +528,22 @@ export function startBallAnimation(points, duration, onCompleteCallback = null, 
     }
 
     if (points && points.length > 0) {
-        //console.log("Received trajectory points for animation 2:", points);
 
         // Verify timestamps are present
         const firstTime = points[0].time;
         const lastTime = points[points.length - 1].time;
-        console.log(`Animation timestamps: First=${firstTime !== undefined ? firstTime.toFixed(2) : 'MISSING'}s, Last=${lastTime !== undefined ? lastTime.toFixed(2) : 'MISSING'}s, Points=${points.length}`);
 
         const geometry = new THREE.BufferGeometry().setFromPoints(points);
         const material = new THREE.LineBasicMaterial({ color: trajectoryColor, linewidth: 3 });
         trajectoryLine = new THREE.Line(geometry, material);
         trajectoryLine.geometry.setDrawRange(0, 0);
         scene.add(trajectoryLine);
-        console.log("Trajectory line added to scene (initially hidden).");
 
         ballAnimationDuration = duration;
-        console.log(`Setting ball animation duration to: ${ballAnimationDuration.toFixed(0)} ms`);
 
         currentTrajectoryPoints = points; // Store Vector3 points with timestamps
         isBallAnimating = true;
         ballAnimationStartTime = performance.now();
-        console.log("Starting ball animation...");
     } else {
         console.warn("No trajectory data received for animation.");
     }
@@ -590,7 +551,6 @@ export function startBallAnimation(points, duration, onCompleteCallback = null, 
 
 
 export function resetCoreVisuals() {
-    console.log("Resetting core visuals");
      if (!scene) return; // Guard against uninitialized scene
 
     // Remove trajectory line if it exists
@@ -599,7 +559,6 @@ export function resetCoreVisuals() {
         trajectoryLine.geometry.dispose();
         trajectoryLine.material.dispose();
         trajectoryLine = null;
-        console.log("Trajectory line removed.");
     }
     // Stop any ongoing animation and reset state
     isBallAnimating = false;
@@ -624,13 +583,11 @@ export function setActiveCameraMode(mode) {
     }
 
     activeCameraMode = mode;
-    console.log(`Camera mode set to: ${activeCameraMode}`);
 
     // If switching TO follow ball, set the camera position relative to the current ball position,
     // UNLESS it was just pre-positioned by setInitialFollowCameraLookingAtTarget (indicated by currentStaticView === 'hole')
     if (mode === CameraMode.FOLLOW_BALL && camera && ball) {
         if (currentStaticView !== 'hole') { // Check if not pre-positioned for hole view
-            console.log("Setting default initial follow ball camera position.");
             // Use snapFollowCameraToBall to ensure consistent aiming logic
             snapFollowCameraToBall(ball.position);
             // const targetPosition = new THREE.Vector3().copy(ball.position).add(new THREE.Vector3(0, 3, -6)); // Default offset from ball
@@ -638,7 +595,6 @@ export function setActiveCameraMode(mode) {
             // camera.position.copy(targetPosition); // Snap position
             // camera.lookAt(lookAtPosition);      // Snap lookAt
         } else {
-             console.log("Skipping default follow ball setup; using pre-positioned hole view.");
              // Reset currentStaticView so subsequent static camera calls work correctly
              // Or maybe we don't need to? Let's leave it for now. If static view '1' breaks after using '2', we might need to reset it here.
         }
@@ -653,7 +609,6 @@ export function setActiveCameraMode(mode) {
 // This is called by visuals.js when switching to static mode.
 export function applyStaticCameraView(viewType = null) {
     const viewToApply = viewType || currentStaticView; // Use provided type or the stored one
-    console.log(`Applying static camera view: ${viewToApply}`);
     activeCameraMode = CameraMode.STATIC; // Ensure mode is static
 
     // Calculate the total angle to apply for the static view
@@ -728,7 +683,6 @@ export function resetCameraPosition(angleToUse = 0) { // Accept angle parameter
     camera.lookAt(rotatedLookAt);
     currentStaticView = 'range'; // Update stored static view type
     // staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // REMOVED: Don't reset zoom on aim/view change
-    console.log(`Static camera set to: Range View (Angle: ${angleToUse.toFixed(1)})`);
     updateStaticCameraView(); // Apply existing zoom level to new view
 }
 
@@ -760,9 +714,6 @@ export function setCameraForTargetView(targetZ = 150, angleToUse = 0) { // Accep
     camera.lookAt(rotatedLookAt);
     currentStaticView = 'target'; // Update stored static view type
     // staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // REMOVED: Don't reset zoom on aim/view change
-    console.log(`Static camera set to: Target View (Z=${targetZ.toFixed(1)}, Angle: ${angleToUse.toFixed(1)})`);
-    console.log(`🎥 Camera position: (${camera.position.x.toFixed(1)}, ${camera.position.y.toFixed(1)}, ${camera.position.z.toFixed(1)})`);
-    console.log(`🎥 Camera lookAt: (${rotatedLookAt.x.toFixed(1)}, ${rotatedLookAt.y.toFixed(1)}, ${rotatedLookAt.z.toFixed(1)})`);
     updateStaticCameraView(); // Apply existing zoom level to new view
 }
 
@@ -788,7 +739,6 @@ export function setCameraForChipView(angleToUse = 0) { // Accept angle parameter
     camera.lookAt(rotatedLookAt);
     currentStaticView = 'chip'; // Update stored static view type
     // staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // REMOVED: Don't reset zoom on aim/view change
-    console.log(`Static camera set to: Chip View (Angle: ${angleToUse.toFixed(1)})`);
     updateStaticCameraView(); // Apply existing zoom level to new view
 }
 
@@ -814,7 +764,6 @@ export function setCameraForPuttView(angleToUse = 0) { // Accept angle parameter
     camera.lookAt(rotatedLookAt);
     currentStaticView = 'putt'; // Update stored static view type
     // staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // REMOVED: Don't reset zoom on aim/view change
-    console.log(`Static camera set to: Putt View (Angle: ${angleToUse.toFixed(1)})`);
     updateStaticCameraView(); // Apply existing zoom level to new view
 }
 
@@ -841,7 +790,6 @@ export function setCameraForHoleTeeView(holeLengthYards = 400, angleToUse = 0) {
     camera.lookAt(rotatedLookAt);
     currentStaticView = 'tee'; // Update stored static view type
     // staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // REMOVED: Don't reset zoom on aim/view change
-    console.log(`Static camera set to: Hole Tee View (Angle: ${angleToUse.toFixed(1)}, looking towards Z=${(holeLengthMeters * 0.6).toFixed(1)})`);
     updateStaticCameraView(); // Apply existing zoom level to new view
 }
 
@@ -890,7 +838,6 @@ export function setCameraBehindBallLookingAtTarget(ballPosition, targetPosition,
     const distanceBehind = THREE.MathUtils.lerp(minDistBehind, maxDistBehind, interpFactor);
     const cameraHeight = THREE.MathUtils.lerp(minHeight, maxHeight, interpFactor);
     const rangeLabel = distanceToTarget <= 10 ? 'Putt' : distanceToTarget <= 30 ? 'Short Chip' : distanceToTarget <= 60 ? 'Long Chip' : 'Full';
-    console.log(`Distance: ${distanceToTarget.toFixed(1)}m, Range: ${rangeLabel}, DistBehind: ${distanceBehind.toFixed(1)}, Height: ${cameraHeight.toFixed(1)}`);
 
     // --- Calculate Base Position and LookAt (Relative to Pivot at 0 degrees) ---
     // Assume 0 degrees means looking down positive Z axis from behind the ball
@@ -912,7 +859,6 @@ export function setCameraBehindBallLookingAtTarget(ballPosition, targetPosition,
     setActiveCameraMode(CameraMode.STATIC); // Ensure mode is static
     // staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // REMOVED: Don't reset zoom on aim/view change
 
-    console.log(`Static camera set to: Hole View (Angle: ${angleToUse.toFixed(1)}, behind ball at ${ballPosition.z.toFixed(1)}, looking towards ${targetPosition.z.toFixed(1)})`);
     updateStaticCameraView(); // Apply existing zoom level to new view
 }
 
@@ -947,7 +893,6 @@ export function setInitialFollowCameraLookingAtTarget(ballPosition, targetPositi
     currentStaticView = 'hole'; // Set flag to indicate pre-positioning
 
     // DO NOT change activeCameraMode here, let the calling function do that
-    console.log(`Initial follow camera position set (Angle: ${angleToUse.toFixed(1)}) behind ball at ${ballPosition.z.toFixed(1)}, looking towards ${rotatedLookAt.z.toFixed(1)})`);
 }
 
 // Sets camera for Reverse Angle view - Aiming likely not applicable here
@@ -963,7 +908,6 @@ export function setCameraReverseAngle(targetPosition) {
     camera.position.set(positionX, cameraHeight, positionZ + offsetBehind);
     camera.lookAt(positionX, 0, 0); // Look towards the green center line, not just centerline
     setActiveCameraMode(CameraMode.REVERSE_ANGLE); // Set the mode
-    console.log(`Camera set to: Reverse Angle at (${positionX.toFixed(1)}, ${(positionZ + offsetBehind).toFixed(1)}) looking at (${positionX.toFixed(1)}, 0, 0)`);
 }
 
 // Sets camera for Green Focus view - Aiming likely not applicable here
@@ -980,7 +924,6 @@ export function setCameraGreenFocus(greenCenter, greenRadius) {
     );
     camera.lookAt(greenCenter); // Look at the center of the green
     setActiveCameraMode(CameraMode.GREEN_FOCUS); // Set the mode
-    console.log(`Camera set to: Green Focus (looking at ${greenCenter.z.toFixed(1)})`);
 }
 
 // Sets camera to a static view behind a specific target position, mimicking chip/putt/range views
@@ -1027,7 +970,6 @@ export function setCameraBehindBall(targetPosition, viewType = 'range') { // Kee
     setActiveCameraMode(CameraMode.STATIC); // Ensure mode is static
     // staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // REMOVED: Don't reset zoom on aim/view change
 
-    console.log(`Static camera set behind ball (Total Angle: ${totalAimAngle.toFixed(1)}) at (${targetPosVec3.x.toFixed(1)}, ${targetPosVec3.z.toFixed(1)}) with view type: ${currentStaticView}`);
     updateStaticCameraView(); // Apply existing zoom level to new view
 }
 
@@ -1044,7 +986,6 @@ export function snapFollowCameraToBall(targetPosition) { // Keep original signat
 
     const pivot = targetPosVec3.clone(); // Pivot around the target position - Use Vector3
 
-    console.log(`Snapping follow ball camera position (Total Angle: ${totalAimAngle.toFixed(1)}).`);
     const baseOffset = new THREE.Vector3(0, 3, -6); // Standard follow offset
     // Rotate the offset using the total angle (keep negation for reversed controls)
     const rotatedOffset = baseOffset.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(-totalAimAngle));
@@ -1176,7 +1117,6 @@ function updateStaticCameraView() {
     camera.position.copy(rotatedCamPos);
     camera.lookAt(rotatedLookAt);
 
-    // console.log(`Static View Update: DistLevel=${staticCameraDistanceLevel.toFixed(2)}, HeightLevel=${staticCameraHeightLevel.toFixed(2)}, Dist=${targetDist.toFixed(1)}, Height=${targetHeight.toFixed(1)}`);
 }
 
 // --- New functions to adjust height and distance independently ---
@@ -1184,14 +1124,12 @@ export function adjustStaticCameraHeight(delta) {
     if (!camera || activeCameraMode !== CameraMode.STATIC) return;
     staticCameraHeightLevel = Math.max(STATIC_ZOOM_MIN_LEVEL, Math.min(STATIC_ZOOM_MAX_LEVEL, staticCameraHeightLevel + delta));
     updateStaticCameraView();
-    console.log(`Static Camera Height Level: ${staticCameraHeightLevel.toFixed(2)}`);
 }
 
 export function adjustStaticCameraDistance(delta) {
     if (!camera || activeCameraMode !== CameraMode.STATIC) return;
     staticCameraDistanceLevel = Math.max(STATIC_ZOOM_MIN_LEVEL, Math.min(STATIC_ZOOM_MAX_LEVEL, staticCameraDistanceLevel + delta));
     updateStaticCameraView();
-    console.log(`Static Camera Distance Level: ${staticCameraDistanceLevel.toFixed(2)}`);
 }
 
 // --- Zoom Functions (Modified to control height for static, FOV for others) ---
@@ -1204,7 +1142,6 @@ export function zoomCameraIn() { // Corresponds to '+' key, will adjust height U
         // Original FOV zoom for non-static modes
         camera.fov = Math.max(MIN_FOV, FOV_ZOOM_STEP);
         camera.updateProjectionMatrix();
-        console.log(`FOV Zoom In: FOV = ${camera.fov}`);
     }
 }
 
@@ -1217,7 +1154,6 @@ export function zoomCameraOut() { // Corresponds to '-' key, will adjust height 
         // Original FOV zoom for non-static modes
         camera.fov = Math.min(MAX_FOV, camera.fov + FOV_ZOOM_STEP);
         camera.updateProjectionMatrix();
-        console.log(`FOV Zoom Out: FOV = ${camera.fov}`);
     }
 }
 
@@ -1225,7 +1161,6 @@ export function zoomCameraOut() { // Corresponds to '-' key, will adjust height 
 export function resetStaticCameraZoom() {
     staticCameraHeightLevel = DEFAULT_STATIC_ZOOM_LEVEL; // Reset new levels
     staticCameraDistanceLevel = DEFAULT_STATIC_ZOOM_LEVEL; // Reset new levels
-    console.log("Static camera height and distance levels reset to default.");
     // Optionally, call updateStaticCameraView() here if the camera should
     // immediately reflect the reset zoom level visually. Let's add it for consistency.
     updateStaticCameraView();
@@ -1264,6 +1199,5 @@ export function setBallScale(enlarged) {
     if (ball) {
         const targetScale = enlarged ? BALL_SCALE_VECTOR_ENLARGED : BALL_SCALE_VECTOR_NORMAL;
         ball.scale.copy(targetScale);
-        console.log(`Ball scale set to: ${enlarged ? 'Enlarged' : 'Normal'} (${targetScale.x})`);
     }
 }

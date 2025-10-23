@@ -6,7 +6,7 @@ import * as HoleVisuals from './visuals/holeView.js'; // Import the new hole vie
 import * as MeasurementView from './visuals/measurementView.js'; // Import the new measurement view module
 import * as PlayerMarkers from './visuals/playerMarkers.js'; // Import player marker system
 import { getCurrentShotType } from './gameLogic.js'; // Import shot type getter
-import { setShotDirectionAngle, getCurrentTargetLineAngle, getShotDirectionAngle } from './gameLogic/state.js'; // Import state setter for angle
+import { setShotDirectionAngle, getCurrentTargetLineAngle, getShotDirectionAngle, setGameState } from './gameLogic/state.js'; // Import state setter for angle and game state
 import { getCurrentGameMode } from './main.js'; // Import game mode getter
 import { YARDS_TO_METERS } from './utils/unitConversions.js'; // Import conversion constant
 import * as multiplayerManager from './multiplayerManager.js'; // Import multiplayer manager
@@ -32,7 +32,6 @@ let currentVisualMode = VISUAL_MODES.NONE;
 let lastHoleLayout = null; // Store the last hole layout for redrawing
 
 export function initVisuals(canvasElement) {
-    console.log("Initializing main visuals module (assuming 3D)...");
     coreCanvas = canvasElement;
     coreCanvasWidth = canvasElement.width;
     coreCanvasHeight = canvasElement.height;
@@ -65,7 +64,6 @@ export function initVisuals(canvasElement) {
     MeasurementView.init(coreInitResult.renderer, coreScene, coreCanvas, courseObjectsForRaycasting);
 
 
-    console.log("Main visuals module initialized.");
 
     // Explicitly initialize Range visuals and set camera for initial load
     RangeVisuals.initRangeVisuals(coreScene); // Create range-specific elements
@@ -78,7 +76,6 @@ export function initVisuals(canvasElement) {
 // --- View Switching ---
 
 function unloadCurrentView() {
-    console.log(`Unloading view: ${currentVisualMode}`);
     MeasurementView.deactivate(); // Always deactivate measurement view when switching
 
     if (currentVisualMode === VISUAL_MODES.RANGE) {
@@ -101,10 +98,8 @@ export function switchToRangeView(initialScene = null) {
     if (currentVisualMode === VISUAL_MODES.RANGE && !initialScene && !MeasurementView.isViewActive()) return; // Already in range view (unless it's the initial call or measurement was active)
 
     unloadCurrentView(); // Unload previous view first (removes target elements etc.)
-    console.log("Switching to Range View...");
     currentVisualMode = VISUAL_MODES.RANGE;
     TargetVisuals.hideTargetElements(); // Ensure target elements are hidden
-    console.log("[visuals.js] switchToRangeView: Using scene:", sceneToUse);
     RangeVisuals.initRangeVisuals(sceneToUse); // Add/show range elements
     CoreVisuals.applyStaticCameraView('range'); // Set camera to static range view
     CoreVisuals.showBallAtAddress(); // Ensure ball is visible
@@ -113,12 +108,10 @@ export function switchToRangeView(initialScene = null) {
 // Clear the current CTF hole config to force regeneration
 export function clearTargetViewConfig() {
     TargetVisuals.clearHoleConfig();
-    console.log("Visuals: Cleared target view hole config");
 }
 
 // Accept scene as optional parameter for initial call (though less likely needed here)
 export function switchToTargetView(targetDistanceMeters, initialScene = null) {
-    console.log(`🔵 switchToTargetView called: targetDistanceMeters=${targetDistanceMeters}, currentVisualMode=${currentVisualMode}`);
     const sceneToUse = initialScene || coreScene; // Use passed scene if available, else module scope
      if (!sceneToUse) {
         console.error("switchToTargetView: Scene is not available!");
@@ -127,29 +120,23 @@ export function switchToTargetView(targetDistanceMeters, initialScene = null) {
 
     // Corrected Check: If already in target mode (and not the initial call), update and return.
     if (currentVisualMode === VISUAL_MODES.TARGET && !initialScene && !MeasurementView.isViewActive()) {
-         console.log("Already in Target View, updating distance...");
          TargetVisuals.setTargetDistance(targetDistanceMeters);
          TargetVisuals.drawTargetView(); // Redraw with new distance
          // IMPORTANT: Also update the camera with the new distance!
-         console.log(`🎯 Early return path: targetDistanceMeters=${targetDistanceMeters}`);
          CoreVisuals.setCameraForTargetView(targetDistanceMeters);
          return;
     }
 
     // If not already in target mode, proceed with switching:
     unloadCurrentView(); // Unload previous view first (removes range elements etc.)
-    console.log("Switching to Target View...");
     currentVisualMode = VISUAL_MODES.TARGET;
     currentTargetDistanceYards = targetDistanceMeters; // Store for reverse camera (misnomer: actually stores meters now)
     RangeVisuals.removeRangeVisuals(sceneToUse); // Remove range specific elements
     TargetVisuals.setTargetDistance(targetDistanceMeters);
     TargetVisuals.drawTargetView(); // Create/show target elements
     // Set the camera specifically for the target view
-    console.log(`🎯 switchToTargetView: targetDistanceMeters=${targetDistanceMeters}`);
     CoreVisuals.setCameraForTargetView(targetDistanceMeters); // Set the static target view
-    console.log(`🎯 After setCameraForTargetView, before applyStaticCameraView`);
     CoreVisuals.applyStaticCameraView('target'); // Ensure mode is static and view is applied
-    console.log(`🎯 After applyStaticCameraView`);
     //CoreVisuals.hideBall(); // Hide the ball at address in target view? Or reposition?
 }
 
@@ -165,7 +152,6 @@ export function switchToHoleView(holeLayout, initialScene = null) {
     // The unloadCurrentView() will handle clearing the previous hole's visuals.
 
     unloadCurrentView();
-    console.log("Switching to Hole View...");
     currentVisualMode = VISUAL_MODES.HOLE;
     lastHoleLayout = holeLayout; // Store for potential redraw
     RangeVisuals.removeRangeVisuals(sceneToUse); // Ensure range is gone
@@ -200,7 +186,6 @@ export function animateBallFlight(shotData) {
         return vec;
     });
 
-    //console.log('the points for drawing the ball flight:', points);
 
     // Calculate animation duration (convert seconds to ms)
     // Ensure duration is positive, default to 1500 if timeOfFlight is zero or negative
@@ -213,7 +198,6 @@ export function animateBallFlight(shotData) {
 // Reset visuals - Resets core elements and the current view
 // Accepts an optional position to place the ball at and the current lie.
 export function resetVisuals(position = null, lie = null) {
-    console.log(`Resetting visuals for mode: ${currentVisualMode}. Position provided:`, position, "Lie:", lie);
     // CoreVisuals.resetCoreVisuals(); // Don't call this as it resets ball to default
 
     // Manually replicate parts of resetCoreVisuals needed:
@@ -222,10 +206,8 @@ export function resetVisuals(position = null, lie = null) {
 
     // Reset ball position: Use provided position and lie if available, otherwise default.
     if (position) {
-        console.log(">>> CONDITION PASSED: Resetting ball position using provided coordinates:", position, "and lie:", lie);
         CoreVisuals.showBallAtAddress(position, lie); // Pass the position and lie
     } else {
-        console.log(">>> CONDITION FAILED: Resetting ball position to default (null). Position was:", position, "Lie:", lie);
         CoreVisuals.showBallAtAddress(null, lie || 'TEE'); // Pass null for position, default to TEE if lie is also null
     }
 
@@ -246,10 +228,8 @@ export function resetVisuals(position = null, lie = null) {
         // After deactivating measurement view, we likely want to go to a default static view.
         switchToStaticCamera();
     } else if (currentCameraMode === CoreVisuals.CameraMode.REVERSE_ANGLE || currentCameraMode === CoreVisuals.CameraMode.GREEN_FOCUS) {
-        console.log(`Camera was ${currentCameraMode}, resetting to static view.`);
         switchToStaticCamera(); // Reset only if it was reverse or green focus
     } else {
-        console.log(`Camera is ${currentCameraMode}, preserving camera mode.`);
         // Re-apply the current camera mode to reset its position if necessary
         if (currentCameraMode === CoreVisuals.CameraMode.STATIC) {
             switchToStaticCamera(); // Re-apply the correct static view
@@ -261,11 +241,12 @@ export function resetVisuals(position = null, lie = null) {
     }
 }
 
-// Show ball at address - Calls the core function, optionally passing position
-export function showBallAtAddress(position = null) {
-    // We need to determine the surface type here ideally, or assume TEE/Range default
-    // For now, let core handle the default position if null is passed
-    CoreVisuals.showBallAtAddress(position, position ? undefined : 'TEE'); // Pass undefined surface if position is given, let core determine? Or default TEE? Let's default TEE for now.
+// Show ball at address - Calls the core function, optionally passing position and lie
+export function showBallAtAddress(position = null, lie = null) {
+    // Pass both position and lie to core function
+    // Default to 'TEE' only if no position and no lie are provided
+    const surfaceType = lie || (position ? undefined : 'TEE');
+    CoreVisuals.showBallAtAddress(position, surfaceType);
 }
 
 // --- Landing Animation Handling ---
@@ -274,12 +255,10 @@ function handleLandingAnimation(shotData) {
      if (currentVisualMode === VISUAL_MODES.RANGE) {
          // TODO: Implement landing animation/marker for Range view if needed
          // RangeVisuals.animateLanding(shotData); // TODO
-         console.log("Range View: Landing animation placeholder.");
      } else if (currentVisualMode === VISUAL_MODES.TARGET) {
          TargetVisuals.animateShotLanding(shotData); // Now uses 3D
      } else if (currentVisualMode === VISUAL_MODES.HOLE) {
          // TODO: Implement landing marker/animation for Hole view if desired
-         console.log("Hole View: Landing animation placeholder.");
      }
 }
 
@@ -298,19 +277,19 @@ export function animateBallFlightWithLanding(shotData, trajectoryColor = 0xffff0
         vec.time = p.time; // Preserve timestamp
         return vec;
     });
-    //console.log('the points for drawing the ball flight:', points);
     const duration = (shotData.timeOfFlight && shotData.timeOfFlight > 0) ? shotData.timeOfFlight * 1000 : 1500;
 
     // Define the callback function for when the animation finishes
     const onAnimationComplete = () => {
-        console.log("Ball flight animation complete. Handling landing.");
         handleLandingAnimation(shotData);
+
+        // Set game state to 'result' now that animation is complete (allows 'n' key to work)
+        setGameState('result');
 
         // Update overlay "To Flag" distance after animation in CTF mode
         const currentMode = getCurrentGameMode();
         if (currentMode === 'closest-to-flag' && shotData.distanceFromHoleMeters !== undefined) {
             // Update the overlay to show distance from hole instead of target distance
-            console.log(`Updating overlay: distance from hole = ${shotData.distanceFromHoleMeters.toFixed(2)}m`);
             ui.updateVisualOverlayInfo('closest-to-flag', {
                 distToFlag: shotData.distanceFromHoleMeters,
                 lie: shotData.surfaceName || 'Tee'
@@ -322,6 +301,9 @@ export function animateBallFlightWithLanding(shotData, trajectoryColor = 0xffff0
         if (!shotData.isHoledOut) {
             ui.updateStatus('Press (n) for next shot');
         }
+
+        // Show shot summary widget after animation completes
+        ui.showShotSummaryWidget();
 
         // Notify multiplayer manager that ball has stopped, pass shot data
         multiplayerManager.onBallStopped(shotData);
@@ -356,7 +338,6 @@ export function switchToStaticCamera() {
             } else if (currentVisualMode === VISUAL_MODES.HOLE) {
                 // If in HOLE mode and switching to full swing static view,
                 // re-activate the distance-adjusted hole camera instead of applying a generic view.
-                console.log("Switching to static camera for full swing in HOLE mode, re-activating hole view.");
                 activateHoleViewCamera();
                 return; // Exit early as activateHoleViewCamera handles setting the mode/view
             } else {
@@ -366,14 +347,12 @@ export function switchToStaticCamera() {
     }
 
     // Only apply core static view if we didn't handle it specially above (like for HOLE mode)
-    console.log(`Switching to static camera view: ${viewType} (ShotType: ${shotType}, VisualMode: ${currentVisualMode})`);
     CoreVisuals.applyStaticCameraView(viewType);
 }
 
 // Activate the static hole view camera (behind ball, looking at flag/target, distance adjusted)
 export function activateHoleViewCamera() {
     MeasurementView.deactivate(); // Ensure measurement view is off
-    console.log("Activating Hole View Camera (Static, Distance Adjusted)");
     const ballPosition = CoreVisuals.ball?.position; // Get current ball position
     const targetPosition = HoleVisuals.getFlagPosition(); // Get flag position as target
 
@@ -390,7 +369,6 @@ export function activateHoleViewCamera() {
         // Update the game state's target line angle.
         // This sets currentTargetLineAngle to calculatedAngleDeg and shotDirectionAngle to 0.
         setShotDirectionAngle(calculatedAngleDeg); 
-        console.log(`Visuals: Set currentTargetLineAngle to ${calculatedAngleDeg.toFixed(1)} (points at flag) and reset relative aim.`);
 
         // Call the core function, passing the newly set absolute angle (relative is 0 now)
         CoreVisuals.setCameraBehindBallLookingAtTarget(ballPosition, targetPosition, distance, calculatedAngleDeg);
@@ -405,11 +383,9 @@ export function activateHoleViewCamera() {
 // Activate the follow ball camera mode
 export function activateFollowBallCamera() {
     MeasurementView.deactivate(); // Ensure measurement view is off
-    console.log("Activating Follow Ball Camera");
     const currentMode = getCurrentGameMode();
 
     if (currentMode === 'play-hole') {
-        console.log("Setting initial follow camera for play-hole mode.");
         const ballPosition = CoreVisuals.ball?.position;
         const targetPosition = HoleVisuals.getFlagPosition(); // Use flag as initial target
 
@@ -428,7 +404,6 @@ export function activateFollowBallCamera() {
 // Activate the reverse angle camera
 export function activateReverseCamera() {
     MeasurementView.deactivate(); // Ensure measurement view is off
-    console.log("Activating Reverse Angle Camera");
 
     let targetPosition = null;
 
@@ -437,28 +412,23 @@ export function activateReverseCamera() {
         const greenCenter = TargetVisuals.getGreenCenter();
         if (greenCenter) {
             targetPosition = greenCenter;
-            console.log(`Using TARGET green center for reverse camera: X=${greenCenter.x.toFixed(1)}, Z=${greenCenter.z.toFixed(1)}`);
         } else {
             // Fallback: use just the distance (currentTargetDistanceYards is actually in meters now)
             const positionZ = currentTargetDistanceYards > 0 ? currentTargetDistanceYards : 274; // 274m = ~300 yards
             targetPosition = { x: 0, z: positionZ };
-            console.log(`Green center unavailable, using distance: ${positionZ.toFixed(1)}m`);
         }
     } else if (currentVisualMode === VISUAL_MODES.HOLE) {
         // Hole mode: Get green center from hole visuals
         const greenCenter = HoleVisuals.getGreenCenter();
         if (greenCenter) {
             targetPosition = greenCenter;
-            console.log(`Using HOLE green center for reverse camera: X=${greenCenter.x.toFixed(1)}, Z=${greenCenter.z.toFixed(1)}`);
         } else {
             // Fallback to centerline (274m = ~300 yards)
             targetPosition = { x: 0, z: 274 };
-            console.log("Green center unavailable in hole mode, using default.");
         }
     } else {
         // Range mode - use centerline (274m = ~300 yards)
         targetPosition = { x: 0, z: 274 };
-        console.log("Using default 274m (~300 yards) for reverse camera in Range mode.");
     }
 
     CoreVisuals.setCameraReverseAngle(targetPosition);
@@ -467,17 +437,14 @@ export function activateReverseCamera() {
 // Activate the green focus camera (works in Target and Hole modes)
 export function activateGreenCamera() {
     MeasurementView.deactivate(); // Ensure measurement view is off
-    console.log("Attempting to activate Green Focus Camera");
 
     let greenCenter = null;
     let greenRadius = null;
 
     if (currentVisualMode === VISUAL_MODES.TARGET) {
-        console.log("Getting green data from TargetVisuals");
         greenCenter = TargetVisuals.getGreenCenter();
         greenRadius = TargetVisuals.getGreenRadius();
     } else if (currentVisualMode === VISUAL_MODES.HOLE) {
-        console.log("Getting green data from HoleVisuals");
         greenCenter = HoleVisuals.getGreenCenter();
         greenRadius = HoleVisuals.getGreenRadius();
     } else {
@@ -486,7 +453,6 @@ export function activateGreenCamera() {
     }
 
     if (greenCenter && greenRadius !== null) { // Check radius against null explicitly
-        console.log(`Found green data: Center Z=${greenCenter.z.toFixed(1)}, Radius=${greenRadius.toFixed(1)}`);
         CoreVisuals.setCameraGreenFocus(greenCenter, greenRadius);
     } else {
         console.error(`Could not get green position or radius for mode: ${currentVisualMode}`);
@@ -515,7 +481,6 @@ export function activateMeasurementCamera() {
         return;
     }
 
-    console.log("Activating Measurement Camera...");
     MeasurementView.activate(ballPosition, flagPosition);
     // No need to set currentVisualMode here, as MeasurementView manages its own active state
     // and the main render loop will check MeasurementView.isViewActive()
@@ -525,7 +490,6 @@ export function activateMeasurementCamera() {
 // Set specific camera views, potentially used by modes like playHole
 export function setCameraView(viewType) {
     MeasurementView.deactivate(); // Ensure measurement view is off
-    console.log(`Setting camera view specifically to: ${viewType}`);
     switch (viewType) {
         case 'tee':
             // Use the 'range' camera settings for the tee shot for now
@@ -560,7 +524,6 @@ export const drawHoleLayout = HoleVisuals.drawHoleLayout;
 
 // Function to redraw the current view after resize
 export function redrawCurrentView() {
-    console.log("Redrawing current view:", currentVisualMode);
 
     if (currentVisualMode === VISUAL_MODES.HOLE && lastHoleLayout) {
         // Redraw the hole
@@ -573,6 +536,5 @@ export function redrawCurrentView() {
     } else if (currentVisualMode === VISUAL_MODES.TARGET) {
         // Target view might need regeneration
         // This is more complex as it depends on the target distance
-        console.log("Target view resize - may need manual refresh");
     }
 }

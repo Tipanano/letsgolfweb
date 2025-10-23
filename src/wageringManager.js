@@ -34,7 +34,6 @@ class WageringManager {
     document.getElementById('cancel-wager-btn')?.addEventListener('click', () => this.cancelWager());
     document.getElementById('copy-wager-address-btn')?.addEventListener('click', () => this.copyAddress());
 
-    console.log('Wagering Manager initialized');
   }
 
   /**
@@ -139,7 +138,6 @@ class WageringManager {
       }
 
       const data = await response.json();
-      console.log('✅ Escrow created:', data);
       // Don't show UI here - wait for broadcast
     } catch (error) {
       console.error('Error creating escrow:', error);

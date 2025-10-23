@@ -6,8 +6,6 @@ const Y_OFFSET_FAIRWAY = 0.01;
 const Y_OFFSET_GREEN = 0.02;
 
 export function initRangeVisuals(scene) {
-    console.log("Initializing range visuals...");
-    console.log("[range.js] initRangeVisuals: Received scene parameter:", scene); // ADD LOG
 
     // --- Ground (Rough) ---
     const groundGeometry = new THREE.PlaneGeometry(200, 400); // Width, Length
@@ -17,7 +15,6 @@ export function initRangeVisuals(scene) {
     ground.position.y = Y_OFFSET_GROUND;
     ground.receiveShadow = true;
     scene.add(ground);
-    console.log("Range ground (rough) added.");
 
     // --- Fairway (using ShapeGeometry) ---
     const fairwayLength = 300;
@@ -85,7 +82,6 @@ export function initRangeVisuals(scene) {
 
     fairway.receiveShadow = true;
     scene.add(fairway);
-    console.log("Range fairway (ShapeGeometry) added.");
 
     // --- Greens ---
     const greenMaterial = new THREE.MeshStandardMaterial({ color: 0x006400, side: THREE.DoubleSide }); // Dark green (green)
@@ -98,7 +94,6 @@ export function initRangeVisuals(scene) {
     green1.position.set(0, Y_OFFSET_GREEN, 100); // Position 100 units down range
     green1.receiveShadow = true;
     scene.add(green1);
-    console.log("Range green 1 added at z=100.");
 
     // Green 2 (Further)
     const green2Radius = 15;
@@ -108,7 +103,6 @@ export function initRangeVisuals(scene) {
     green2.position.set(0, Y_OFFSET_GREEN, 200); // Position 200 units down range
     green2.receiveShadow = true;
     scene.add(green2);
-    console.log("Range green 2 added at z=200.");
 
 
     // Add other range elements here later (targets, tee box markers, etc.)
@@ -124,14 +118,12 @@ export function removeRangeVisuals(scene) {
         green1.geometry.dispose();
         green1.material.dispose();
         green1 = null;
-        console.log("Range green 1 removed.");
     }
      if (green2) {
         scene.remove(green2);
         green2.geometry.dispose();
         green2.material.dispose();
         green2 = null;
-        console.log("Range green 2 removed.");
     }
     // Remove Fairway
     if (fairway) {
@@ -139,7 +131,6 @@ export function removeRangeVisuals(scene) {
         fairway.geometry.dispose();
         fairway.material.dispose();
         fairway = null;
-        console.log("Range fairway removed.");
     }
     // Remove Ground
     if (ground) {
@@ -147,7 +138,6 @@ export function removeRangeVisuals(scene) {
         ground.geometry.dispose();
         ground.material.dispose();
         ground = null;
-        console.log("Range ground (rough) removed.");
     }
     // Add removal logic for other range elements here
 }
