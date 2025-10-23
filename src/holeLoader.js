@@ -1,30 +1,18 @@
 // src/holeLoader.js
-// Simplified loader for holes created with the Hole Maker tool
-// These holes have exact vertices already defined, no procedural generation needed
+// Processes hole layout data from the Hole Maker tool
+// Converts control points to vertices and maps surface types
 
 import { SURFACES } from './surfaces.js';
 
 /**
- * Loads a hole layout from a JSON file created by the Hole Maker tool.
- * Unlike holeGenerator.js, this loader expects exact vertices for all shapes.
- * @param {string} [holeNameInput="custom_hole_01"] - The name of the hole file (can be with or without .json extension) to load from the 'holes' directory.
- * @returns {Promise<object|null>} A promise that resolves to an object describing the hole layout, or null on error.
+ * Processes a hole layout object and converts it to a playable format.
+ * Converts control points to vertices, maps surface strings to SURFACES enum, etc.
+ * @param {object} sourceLayout - The raw hole layout data (from localStorage or JSON file)
+ * @returns {object|null} The processed hole layout ready for rendering, or null on error
  */
-export async function loadHoleLayout(holeNameInput = "custom_hole_01") {
-    // Ensure holeName does not have .json extension for internal use and fetching
-    const holeName = holeNameInput.replace(/\.json$/, '');
-
-    let sourceLayout;
-    const filePath = `./holes/${holeName}.json`;
-
-    try {
-        const response = await fetch(filePath);
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status} for ${filePath}`);
-        }
-        sourceLayout = await response.json();
-    } catch (error) {
-        console.error(`Error loading hole data for ${holeName} from ${filePath}:`, error);
+export function processHoleLayout(sourceLayout) {
+    if (!sourceLayout) {
+        console.error('No source layout provided to processHoleLayout');
         return null;
     }
 
