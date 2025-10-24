@@ -375,8 +375,8 @@ function handlePuttKeyDown(event, gameState) {
 
         if (event.key === 'i' && !GameLogic.getPuttHitTime()) {
             GameLogic.recordPuttKey('hit', timeNow); // New action function
-            // Mark on arc visualizer - putts use fixed 1500ms duration (BACKSWING_BAR_MAX_DURATION_MS)
-            const PUTT_VISUAL_DURATION_MS = 1500;
+            // Mark on arc visualizer - putts use fixed 2000ms duration (matches physics and UI)
+            const PUTT_VISUAL_DURATION_MS = 2000;
             const downswingProgress = Math.min(1.0, offset / PUTT_VISUAL_DURATION_MS);
             SwingArc.markKeyPressOnArc('i', downswingProgress);
             GameLogic.triggerPuttCalc(); // Trigger calculation

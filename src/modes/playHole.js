@@ -234,6 +234,25 @@ export function handleShotResult(shotData) {
             totalScore: score,
             position: '1st'
         });
+
+        // Check for tap-in distance (1 foot = 0.3048 meters)
+        const TAP_IN_DISTANCE_METERS = 0.3048;
+        if (currentLie === 'GREEN' && distToFlag <= TAP_IN_DISTANCE_METERS && distToFlag > 0) {
+            // Ball is within tap-in range - offer gimme
+            import('../ui/gameAlert.js').then(module => {
+                module.gameAlert.show(
+                    `Tap-in putt! (${(distToFlag * 3.28084).toFixed(1)}" from hole)\n\nWould you like to hole out?`,
+                    'Hole Out'
+                ).then(() => {
+                    // User accepted - hole it out
+                    shotsTaken++;
+                    score++;
+                    holeJustCompleted = true;
+                    console.log(`TAP-IN! Strokes this hole: ${shotsTaken}. Total round score: ${score}`);
+                    ui.updateStatus(`Hole ${currentHoleIndex + 1} complete! Score: ${shotsTaken}. Press (n) to play again.`);
+                });
+            });
+        }
     }, animationDuration + 200); // Add 200ms buffer
 }
 

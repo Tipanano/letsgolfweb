@@ -330,9 +330,9 @@ const MIN_BOUNCE_HEIGHT = 0.02; // meters - Below this, transition to pure roll
 const MAX_BOUNCES = 8; // Safety limit
 const BOUNCE_TIME_STEP = 0.005; // seconds - Smaller step for accuracy during bounces
 const BASE_HORIZONTAL_SCRUB_FACTOR = 0.15; // Base horizontal velocity loss per bounce (0-1)
-const SPIN_ENHANCED_SCRUB_FACTOR = 0.40; // Additional scrub at max backspin (10000 RPM) - increased for more checking
+const SPIN_ENHANCED_SCRUB_FACTOR = 0.35; // Additional scrub at max backspin (10000 RPM) - tuned for realistic spin checking
 const ANGLE_ENHANCED_SCRUB_FACTOR = 0.35; // Additional scrub for steep landing angles (at 90°)
-const SPIN_TO_VELOCITY_TRANSFER = 0.008; // How backspin converts to horizontal velocity change on bounce - doubled to enable spin-backs
+const SPIN_TO_VELOCITY_TRANSFER = 0.007; // How backspin converts to horizontal velocity change on bounce - tuned for realistic spin-backs
 const MAX_SPIN_COR_REDUCTION = 0.40; // Max % reduction in CoR from high backspin (40% at 10k RPM)
 const SPIN_COR_FIRMNESS_FACTOR = 1.2; // Multiplier for firm surfaces (green responds more to spin than rough)
 
@@ -701,13 +701,22 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
             const dz = position.z - holePosition.z;
             const distanceToHoleCenter = Math.sqrt(dx*dx + dz*dz);
 
-
             // Check capture condition
             if (distanceToHoleCenter < HOLE_RADIUS_METERS && speed < MAX_HOLE_ENTRY_SPEED) {
                 isHoledOut = true;
+                console.log(`\n⛳ HOLED OUT!`);
+                console.log(`   Distance to hole: ${(distanceToHoleCenter * 100).toFixed(2)} cm (max: ${(HOLE_RADIUS_METERS * 100).toFixed(2)} cm)`);
+                console.log(`   Entry speed: ${speed.toFixed(2)} m/s (max: ${MAX_HOLE_ENTRY_SPEED} m/s)`);
                 position.set(holePosition.x, BALL_RADIUS / 2, holePosition.z); // Center ball in hole, slightly sunk
                 velocity.set(0, 0, 0); // Stop the ball
                 break; // Exit simulation loop
+            } else if (distanceToHoleCenter < HOLE_RADIUS_METERS * 2) {
+                // Ball is near the hole but didn't go in - log why
+                const tooFast = speed >= MAX_HOLE_ENTRY_SPEED;
+                const tooFar = distanceToHoleCenter >= HOLE_RADIUS_METERS;
+                console.log(`\n🔴 MISSED HOLE (close!)`);
+                console.log(`   Distance to hole: ${(distanceToHoleCenter * 100).toFixed(2)} cm (need: < ${(HOLE_RADIUS_METERS * 100).toFixed(2)} cm) ${tooFar ? '❌ TOO FAR' : '✓'}`);
+                console.log(`   Entry speed: ${speed.toFixed(2)} m/s (need: < ${MAX_HOLE_ENTRY_SPEED} m/s) ${tooFast ? '❌ TOO FAST' : '✓'}`);
             }
             // TODO: Add lip-out logic here later if desired
         }

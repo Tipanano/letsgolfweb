@@ -427,8 +427,16 @@ function calculateBackSpin(dynamicLoft, actualCHS, attackAngle, strikeQuality, c
 
     const dynamicSpeedFactor = BASE_SPEED_FACTOR * speedFactorMultiplier;
 
+    // Adjust effective loft for strike quality (thin/fat strikes reduce effective loft)
+    let effectiveLoft = dynamicLoft;
+    if (strikeQuality === "Thin") {
+        effectiveLoft *= 0.6; // Thin strike contacts high on ball, significantly reduces effective loft
+    } else if (strikeQuality === "Fat") {
+        effectiveLoft *= 0.7; // Fat strike hits ground first, reduces loft presentation
+    }
+
     let baseSpin = /*1000 +*/
-                   (dynamicLoft * BACKSPIN_LOFT_FACTOR) +
+                   (effectiveLoft * BACKSPIN_LOFT_FACTOR) +
                    (actualCHS * dynamicSpeedFactor) + // Use the new dynamic factor
                    (attackAngle * BACKSPIN_AOA_FACTOR);
 

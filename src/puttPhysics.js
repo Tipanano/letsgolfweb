@@ -17,7 +17,7 @@ const PUTT_TIMING_SIDE_ANGLE_FACTOR = 0.03; // Degrees of horizontal angle chang
 // Strike Quality Thresholds (ms deviation for hit timing) - Simplified for Putt
 const PUTT_PUSH_THRESHOLD_MS = -50; // Early hit -> Push (Right) - relaxed
 const PUTT_PULL_THRESHOLD_MS = 50;  // Late hit -> Pull (Left) - relaxed
-const PUTT_MIN_SPEED = 2.5; // Minimum ball speed for a putt (mph) - ensures short putts move noticeably
+const PUTT_MIN_SPEED = 1.7; // Minimum ball speed for a putt (mph) - ensures short putts move noticeably
 const PUTT_POWER_CURVE = 1.5; // Exponent for power curve (1.5 = gentler than quadratic, still progressive)
 
 /**

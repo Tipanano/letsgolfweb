@@ -33,6 +33,7 @@ import {
 } from '../modes/playHole.js';
 import { getFlagPosition, setFlagstickVisibility } from '../visuals/holeView.js'; // Import flag position getter AND visibility setter
 import { getActiveCameraMode, setCameraBehindBall, snapFollowCameraToBall, CameraMode, removeTrajectoryLine, applyAimAngleToCamera, setCameraBehindBallLookingAtTarget, setInitialFollowCameraLookingAtTarget, setBallScale, resetStaticCameraZoom } from '../visuals/core.js'; // Import camera functions, line removal, aim application, setBallScale, AND resetStaticCameraZoom
+import { resetVisuals } from '../visuals.js'; // Import resetVisuals to update ball position
 import { getSurfaceTypeAtPoint } from '../utils/gameUtils.js'; // Import surface checker
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js'; // Need THREE for Vector3
 import * as multiplayerManager from '../multiplayerManager.js'; // Import multiplayer manager
@@ -307,6 +308,12 @@ export function resetSwing() {
         if (currentLie === 'OUT_OF_BOUNDS') {
             console.log('resetSwing: OOB detected! Moving to former position with penalty');
             moveToFormerPosition(); // Moves ball and adds penalty stroke
+
+            // Update visuals to show ball at former position
+            const ballPos = getPlayHoleBallPosition();
+            const lie = getPlayHoleLie();
+            resetVisuals(ballPos, lie); // Move ball visually to former position
+
             _prepareNextShotAtCurrentPosition(); // Setup camera/aim/UI for next shot
             console.log('resetSwing: OOB handling complete');
             return;

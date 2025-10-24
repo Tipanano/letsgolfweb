@@ -808,13 +808,11 @@ export function setCameraForHoleTeeView(holeLengthYards = 400, angleToUse = 0) {
 }
 
 // Sets camera behind the ball, looking directly at a target, adjusting distance based on proximity
-export function setCameraBehindBallLookingAtTarget(ballPosition, targetPosition, distanceToTarget, angleToUse = 0) { // Accept angle parameter
-    if (!camera || !ballPosition || !targetPosition || distanceToTarget === undefined) return;
-
-    // const aimAngle = getShotDirectionAngle(); // REMOVED - Use parameter
-    const pivot = ballPosition.clone(); // Pivot around the current ball position
-
-    // --- Calculate Distance/Height (Context-aware based on distance to target) ---
+/**
+ * Helper: Calculate camera distance parameters based on distance to target
+ * Shared between setCameraBehindBallLookingAtTarget and updateStaticCameraView
+ */
+function getCameraDistanceParameters(distanceToTarget) {
     let minDistBehind, maxDistBehind, minHeight, maxHeight, maxDist;
 
     if (distanceToTarget <= 10) {
@@ -846,6 +844,18 @@ export function setCameraBehindBallLookingAtTarget(ballPosition, targetPosition,
         minHeight = 12;
         maxHeight = 18;
     }
+
+    return { minDistBehind, maxDistBehind, minHeight, maxHeight, maxDist };
+}
+
+export function setCameraBehindBallLookingAtTarget(ballPosition, targetPosition, distanceToTarget, angleToUse = 0) { // Accept angle parameter
+    if (!camera || !ballPosition || !targetPosition || distanceToTarget === undefined) return;
+
+    // const aimAngle = getShotDirectionAngle(); // REMOVED - Use parameter
+    const pivot = ballPosition.clone(); // Pivot around the current ball position
+
+    // --- Calculate Distance/Height (Context-aware based on distance to target) ---
+    const { minDistBehind, maxDistBehind, minHeight, maxHeight, maxDist } = getCameraDistanceParameters(distanceToTarget);
 
     const clampedDistance = Math.min(distanceToTarget, maxDist);
     const interpFactor = clampedDistance / maxDist;
@@ -1067,11 +1077,8 @@ function updateStaticCameraView() {
             if (ballPos && targetPos) {
                 const ballPosVec3 = ballPos instanceof THREE.Vector3 ? ballPos : new THREE.Vector3(ballPos.x, ballPos.y, ballPos.z);
                 const distanceToTarget = ballPosVec3.distanceTo(targetPos);
-                const maxDist = 50;
-                const minDistBehind = 8;
-                const maxDistBehind = 25;
-                const minHeight = 4;
-                const maxHeight = 18;
+                // Use the same distance calculation as setCameraBehindBallLookingAtTarget
+                const { minDistBehind, maxDistBehind, minHeight, maxHeight, maxDist } = getCameraDistanceParameters(distanceToTarget);
                 const clampedDistance = Math.min(distanceToTarget, maxDist);
                 const interpFactor = clampedDistance / maxDist;
                 const baseDistBehind = THREE.MathUtils.lerp(minDistBehind, maxDistBehind, interpFactor);

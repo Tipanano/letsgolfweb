@@ -182,62 +182,33 @@ export function calculateFullSwingShot() {
         const landingAngleRadians = flightSimulationResult.landingAngleRadians || 0;
         const landingAngleDegrees = landingAngleRadians * 180 / Math.PI;
 
-        // Thresholds for skipping bounce phase (tunable)
-        const SKIP_BOUNCE_ANGLE_THRESHOLD = 20; // degrees - shallow landing goes straight to roll
-        const SKIP_BOUNCE_SPEED_THRESHOLD = 4.0; // m/s - slow landing goes straight to roll
-
-        const shouldSkipBounce = (landingAngleDegrees < SKIP_BOUNCE_ANGLE_THRESHOLD || landingSpeed < SKIP_BOUNCE_SPEED_THRESHOLD);
-
-
+        // Always use full bounce simulation - it handles shallow landings correctly
         let rollStartPosition, rollStartVelocity, rollStartBackspinRPM, rollStartSidespinRPM;
         let bounceTrajectory = [];
         let bounceEndTime = flightSimulationResult.timeOfFlight; // Start with flight time
 
-        if (shouldSkipBounce) {
-            console.log(`\n⏩ SKIPPING BOUNCE (angle: ${landingAngleDegrees.toFixed(1)}°, speed: ${landingSpeed.toFixed(2)} m/s) - Going directly to roll`);
+        // Get spin state from flight simulation
+        const landingSpinRadPerSec = flightSimulationResult.landingSpinRadPerSec || { x: 0, y: 0, z: 0 };
 
-            // Use old logic: apply simple speed reduction factor
-            const landingVelHorizontalMag = Math.sqrt(landingVelocity.x**2 + landingVelocity.z**2);
-            const angleFactor = Math.cos(landingAngleRadians);
-            const surfaceProps = getSurfaceProperties(landingSurfaceType);
-            const surfaceBounceFactor = surfaceProps?.bounce ?? 0.4;
-            const finalRollSpeedFactor = angleFactor * surfaceBounceFactor;
+        // Run bounce simulation (pass flight end time and holeLayout)
+        const bounceResult = simulateBouncePhase(
+            landingPositionObj,
+            landingVelocity,
+            landingAngleRadians,
+            landingSpinRadPerSec,
+            landingSurfaceType,
+            flightSimulationResult.timeOfFlight, // Start bounce time from end of flight
+            currentHoleLayout // Pass holeLayout for dynamic surface detection
+        );
 
-            rollStartPosition = new THREE.Vector3(landingPositionObj.x, landingPositionObj.y, landingPositionObj.z);
-            rollStartVelocity = new THREE.Vector3(
-                landingVelocity.x * finalRollSpeedFactor,
-                0,
-                landingVelocity.z * finalRollSpeedFactor
-            );
-            rollStartBackspinRPM = backSpin;
-            rollStartSidespinRPM = sideSpin;
-
-        } else {
-
-            // Get spin state from flight simulation
-            const landingSpinRadPerSec = flightSimulationResult.landingSpinRadPerSec || { x: 0, y: 0, z: 0 };
-
-            // Run bounce simulation (pass flight end time and holeLayout)
-            const bounceResult = simulateBouncePhase(
-                landingPositionObj,
-                landingVelocity,
-                landingAngleRadians,
-                landingSpinRadPerSec,
-                landingSurfaceType,
-                flightSimulationResult.timeOfFlight, // Start bounce time from end of flight
-                currentHoleLayout // Pass holeLayout for dynamic surface detection
-            );
-
-            // Use bounce results as starting point for roll
-            rollStartPosition = bounceResult.position;
-            rollStartVelocity = bounceResult.velocity;
-            // Convert spin back to RPM for ground roll
-            rollStartBackspinRPM = Math.abs(bounceResult.spin.x) * (60 / (2 * Math.PI));
-            rollStartSidespinRPM = bounceResult.spin.y * (60 / (2 * Math.PI));
-            bounceTrajectory = bounceResult.bouncePoints || [];
-            bounceEndTime = bounceResult.endTime; // Get end time from bounce phase
-
-        }
+        // Use bounce results as starting point for roll
+        rollStartPosition = bounceResult.position;
+        rollStartVelocity = bounceResult.velocity;
+        // Convert spin back to RPM for ground roll
+        rollStartBackspinRPM = Math.abs(bounceResult.spin.x) * (60 / (2 * Math.PI));
+        rollStartSidespinRPM = bounceResult.spin.y * (60 / (2 * Math.PI));
+        bounceTrajectory = bounceResult.bouncePoints || [];
+        bounceEndTime = bounceResult.endTime; // Get end time from bounce phase
 
         // --- Run Ground Roll Simulation (pass bounce end time and holeLayout) ---
         const groundRollResult = simulateGroundRoll(rollStartPosition, rollStartVelocity, landingSurfaceType, rollStartBackspinRPM, rollStartSidespinRPM, bounceEndTime, currentHoleLayout);
@@ -494,62 +465,33 @@ export function calculateChipShot() {
         const landingAngleRadians = flightSimulationResult.landingAngleRadians || 0;
         const landingAngleDegrees = landingAngleRadians * 180 / Math.PI;
 
-        // Thresholds for skipping bounce phase (tunable)
-        const SKIP_BOUNCE_ANGLE_THRESHOLD = 20; // degrees - shallow landing goes straight to roll
-        const SKIP_BOUNCE_SPEED_THRESHOLD = 4.0; // m/s - slow landing goes straight to roll
-
-        const shouldSkipBounce = (landingAngleDegrees < SKIP_BOUNCE_ANGLE_THRESHOLD || landingSpeed < SKIP_BOUNCE_SPEED_THRESHOLD);
-
-
+        // Always use full bounce simulation - it handles shallow landings correctly
         let rollStartPosition, rollStartVelocity, rollStartBackspinRPM, rollStartSidespinRPM;
         let bounceTrajectory = [];
         let bounceEndTime = flightSimulationResult.timeOfFlight; // Start with flight time
 
-        if (shouldSkipBounce) {
-            console.log(`\n⏩ SKIPPING BOUNCE (angle: ${landingAngleDegrees.toFixed(1)}°, speed: ${landingSpeed.toFixed(2)} m/s) - Going directly to roll`);
+        // Get spin state from flight simulation
+        const landingSpinRadPerSec = flightSimulationResult.landingSpinRadPerSec || { x: 0, y: 0, z: 0 };
 
-            // Use old logic: apply simple speed reduction factor
-            const landingVelHorizontalMag = Math.sqrt(landingVelocity.x**2 + landingVelocity.z**2);
-            const angleFactor = Math.cos(landingAngleRadians);
-            const surfaceProps = getSurfaceProperties(landingSurfaceType);
-            const surfaceBounceFactor = surfaceProps?.bounce ?? 0.4;
-            const finalRollSpeedFactor = angleFactor * surfaceBounceFactor;
+        // Run bounce simulation (pass flight end time and holeLayout)
+        const bounceResult = simulateBouncePhase(
+            landingPositionObj,
+            landingVelocity,
+            landingAngleRadians,
+            landingSpinRadPerSec,
+            landingSurfaceType,
+            flightSimulationResult.timeOfFlight, // Start bounce time from end of flight
+            currentHoleLayout // Pass holeLayout for dynamic surface detection
+        );
 
-            rollStartPosition = new THREE.Vector3(landingPositionObj.x, landingPositionObj.y, landingPositionObj.z);
-            rollStartVelocity = new THREE.Vector3(
-                landingVelocity.x * finalRollSpeedFactor,
-                0,
-                landingVelocity.z * finalRollSpeedFactor
-            );
-            rollStartBackspinRPM = backSpin;
-            rollStartSidespinRPM = sideSpin;
-
-        } else {
-
-            // Get spin state from flight simulation
-            const landingSpinRadPerSec = flightSimulationResult.landingSpinRadPerSec || { x: 0, y: 0, z: 0 };
-
-            // Run bounce simulation (pass flight end time and holeLayout)
-            const bounceResult = simulateBouncePhase(
-                landingPositionObj,
-                landingVelocity,
-                landingAngleRadians,
-                landingSpinRadPerSec,
-                landingSurfaceType,
-                flightSimulationResult.timeOfFlight, // Start bounce time from end of flight
-                currentHoleLayout // Pass holeLayout for dynamic surface detection
-            );
-
-            // Use bounce results as starting point for roll
-            rollStartPosition = bounceResult.position;
-            rollStartVelocity = bounceResult.velocity;
-            // Convert spin back to RPM for ground roll
-            rollStartBackspinRPM = Math.abs(bounceResult.spin.x) * (60 / (2 * Math.PI));
-            rollStartSidespinRPM = bounceResult.spin.y * (60 / (2 * Math.PI));
-            bounceTrajectory = bounceResult.bouncePoints || [];
-            bounceEndTime = bounceResult.endTime; // Get end time from bounce phase
-
-        }
+        // Use bounce results as starting point for roll
+        rollStartPosition = bounceResult.position;
+        rollStartVelocity = bounceResult.velocity;
+        // Convert spin back to RPM for ground roll
+        rollStartBackspinRPM = Math.abs(bounceResult.spin.x) * (60 / (2 * Math.PI));
+        rollStartSidespinRPM = bounceResult.spin.y * (60 / (2 * Math.PI));
+        bounceTrajectory = bounceResult.bouncePoints || [];
+        bounceEndTime = bounceResult.endTime; // Get end time from bounce phase
 
         // --- Run Ground Roll Simulation (pass bounce end time and holeLayout) ---
         const groundRollResult = simulateGroundRoll(rollStartPosition, rollStartVelocity, landingSurfaceType, rollStartBackspinRPM, rollStartSidespinRPM, bounceEndTime, currentHoleLayout);

@@ -69,7 +69,7 @@ export const SURFACES = {
     rollOut: 0.35, // Significant drag from grass
     spinResponse: 0.7, // Softer = less spin effect
     flightModification: {
-      spinReduction: [0.05, 0.1], // Range for spin reduction
+      spinReduction: [0.10, 0.20], // Range for spin reduction
       launchAngleChange: 0.5, // Slight increase in launch angle possible
       velocityReduction: [0.05, 0.15] // Range for velocity loss
     },
@@ -89,7 +89,7 @@ export const SURFACES = {
     rollOut: 0.25, // Heavy friction
     spinResponse: 0.5, // Much less spin effect
     flightModification: {
-      spinReduction: [0.1, 0.25], // Range for spin reduction
+      spinReduction: [0.25, 0.45], // Range for spin reduction - grass between club and ball reduces groove engagement
       launchAngleChange: 1.0, // Can affect launch angle more
       velocityReduction: [0.10, 0.25] // Range for velocity loss
     },
@@ -109,7 +109,7 @@ export const SURFACES = {
     rollOut: 0.15, // Ball barely rolls
     spinResponse: 0.3, // Very little spin effect
     flightModification: {
-      spinReduction: [0.20, 0.40], // Range for spin reduction
+      spinReduction: [0.45, 0.65], // Range for spin reduction - heavy grass severely limits groove engagement
       launchAngleChange: 2.0, // Potential for significant launch angle change
       velocityReduction: [0.10, 0.40] // Range for velocity loss
     },
