@@ -39,6 +39,10 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club, 
     const gravity = 9.81;
     let peakHeight = initialPos.y;
 
+    // Flight logging tracking
+    let lastLoggedDistance = 0;
+    const LOG_INTERVAL_METERS = 25;
+
 
     // Get the club-specific effective Cl for backspin
     const club_Cl_backspin_eff = club.clBackspinEff || 0.1; // Use club's value, or a default if undefined
@@ -80,9 +84,9 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club, 
     const club_liftConst_backspin = 0.5 * airDensity * ballArea * club_Cl_backspin_eff / ballMass;
 
 
-    // Air Spin Decay Constants (Tunable)
-    const AIR_BACKSPIN_DECAY_RATE_RPM_PER_SECOND = 500; // RPM per second - Needs tuning!
-    const AIR_SIDESPIN_DECAY_RATE_RPM_PER_SECOND = 400; // RPM per second - Needs tuning!
+    // Air Spin Decay Constants (Percentage-based, realistic)
+    const AIR_BACKSPIN_DECAY_PERCENT_PER_SECOND = 3.5; // 3-4% per second based on real golf ball data
+    const AIR_SIDESPIN_DECAY_PERCENT_PER_SECOND = 4.5; // Slightly faster decay than backspin
     const MIN_AIR_SPIN_EFFECT_RPM = 50; // Spin below this has no effect (avoids tiny calculations)
     // --- End Constants ---
 
@@ -120,23 +124,24 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club, 
             if (absVelMag < 0.01) break; // Stop if absolute velocity is also negligible
         }
 
-        // --- Air Spin Decay ---
-        const decayFactor = dt; // Decay is per second, applied over dt
-        const backspinDecayRad = (AIR_BACKSPIN_DECAY_RATE_RPM_PER_SECOND * (2 * Math.PI / 60)) * decayFactor;
-        const sidespinDecayRad = (AIR_SIDESPIN_DECAY_RATE_RPM_PER_SECOND * (2 * Math.PI / 60)) * decayFactor;
+        // --- Air Spin Decay (Percentage-based) ---
         const minSpinRad = (MIN_AIR_SPIN_EFFECT_RPM * (2 * Math.PI / 60));
 
-        // Decay backspin (spinRadPerSec.x) towards zero
+        // Calculate percentage decay multiplier for this timestep
+        // Decay percentage is per second, so multiply by dt for this small step
+        const backspinDecayMultiplier = 1 - (AIR_BACKSPIN_DECAY_PERCENT_PER_SECOND / 100 * dt);
+        const sidespinDecayMultiplier = 1 - (AIR_SIDESPIN_DECAY_PERCENT_PER_SECOND / 100 * dt);
+
+        // Decay backspin (spinRadPerSec.x) by percentage
         if (Math.abs(spinRadPerSec.x) > minSpinRad) {
-            const decayAmount = Math.min(Math.abs(spinRadPerSec.x), backspinDecayRad);
-            spinRadPerSec.x -= decayAmount * Math.sign(spinRadPerSec.x);
+            spinRadPerSec.x *= backspinDecayMultiplier;
         } else {
             spinRadPerSec.x = 0;
         }
-        // Decay sidespin (spinRadPerSec.y) towards zero
+
+        // Decay sidespin (spinRadPerSec.y) by percentage
         if (Math.abs(spinRadPerSec.y) > minSpinRad) {
-            const decayAmount = Math.min(Math.abs(spinRadPerSec.y), sidespinDecayRad);
-            spinRadPerSec.y -= decayAmount * Math.sign(spinRadPerSec.y);
+            spinRadPerSec.y *= sidespinDecayMultiplier;
         } else {
             spinRadPerSec.y = 0;
         }
@@ -252,6 +257,28 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club, 
             peakHeight = position.y;
         }
 
+        // 6b. Log flight data every 25 meters
+        const horizontalDistance = Math.sqrt(
+            (position.x - initialPos.x) ** 2 +
+            (position.z - initialPos.z) ** 2
+        );
+        if (horizontalDistance - lastLoggedDistance >= LOG_INTERVAL_METERS) {
+            const currentBackspinRPM = Math.abs(spinRadPerSec.x) * (60 / (2 * Math.PI));
+            const currentSidespinRPM = Math.abs(spinRadPerSec.y) * (60 / (2 * Math.PI));
+            const speed = Math.sqrt(velocity.x ** 2 + velocity.y ** 2 + velocity.z ** 2);
+            const horizontalSpeed = Math.sqrt(velocity.x ** 2 + velocity.z ** 2);
+
+            console.log(`\n✈️  FLIGHT @ ${horizontalDistance.toFixed(0)}m:`);
+            console.log(`   Speed: ${speed.toFixed(1)} m/s (H: ${horizontalSpeed.toFixed(1)}, V: ${velocity.y.toFixed(1)})`);
+            console.log(`   Height: ${position.y.toFixed(1)} m`);
+            console.log(`   Backspin: ${currentBackspinRPM.toFixed(0)} rpm`);
+            console.log(`   Sidespin: ${currentSidespinRPM.toFixed(0)} rpm`);
+            console.log(`   Drag Cd: ${effectiveCd.toFixed(4)} (base: ${Cd_base}, reduction: ${spinInducedDragReduction.toFixed(4)})`);
+            console.log(`   Wind effect: ${currentWind.speed.toFixed(1)} m/s from ${currentWind.direction}°`);
+
+            lastLoggedDistance = horizontalDistance;
+        }
+
         // 7. Store Point with timestamp
         trajectoryPoints.push({ ...position, time: time });
 
@@ -303,9 +330,9 @@ const MIN_BOUNCE_HEIGHT = 0.02; // meters - Below this, transition to pure roll
 const MAX_BOUNCES = 8; // Safety limit
 const BOUNCE_TIME_STEP = 0.005; // seconds - Smaller step for accuracy during bounces
 const BASE_HORIZONTAL_SCRUB_FACTOR = 0.15; // Base horizontal velocity loss per bounce (0-1)
-const SPIN_ENHANCED_SCRUB_FACTOR = 0.25; // Additional scrub at max backspin (10000 RPM)
+const SPIN_ENHANCED_SCRUB_FACTOR = 0.40; // Additional scrub at max backspin (10000 RPM) - increased for more checking
 const ANGLE_ENHANCED_SCRUB_FACTOR = 0.35; // Additional scrub for steep landing angles (at 90°)
-const SPIN_TO_VELOCITY_TRANSFER = 0.004; // How backspin converts to horizontal velocity change on bounce (increased from 0.0008)
+const SPIN_TO_VELOCITY_TRANSFER = 0.008; // How backspin converts to horizontal velocity change on bounce - doubled to enable spin-backs
 const MAX_SPIN_COR_REDUCTION = 0.40; // Max % reduction in CoR from high backspin (40% at 10k RPM)
 const SPIN_COR_FIRMNESS_FACTOR = 1.2; // Multiplier for firm surfaces (green responds more to spin than rough)
 
@@ -395,8 +422,15 @@ export function simulateBouncePhase(landingPosition, landingVelocity, landingAng
 
             // 2. Apply effective coefficient of restitution to vertical velocity
             const oldVerticalVel = velocity.y;
+            const oldHorizontalSpeed = horizontalSpeed;
+            const oldBackspinRPM = backspinRPM;
             velocity.y = -velocity.y * effectiveCoR;
 
+            console.log(`\n⚾ BOUNCE #${bounceCount} (${currentSurfaceType}):`);
+            console.log(`   Impact speed: ${impactSpeed.toFixed(2)} m/s (H: ${horizontalSpeed.toFixed(2)}, V: ${Math.abs(oldVerticalVel).toFixed(2)})`);
+            console.log(`   Backspin: ${backspinRPM.toFixed(0)} rpm`);
+            console.log(`   Base CoR: ${baseCoR.toFixed(2)}, Spin reduction: ${(spinCoRReduction * 100).toFixed(1)}%, Effective: ${effectiveCoR.toFixed(2)}`);
+            console.log(`   Vertical vel: ${Math.abs(oldVerticalVel).toFixed(2)} → ${velocity.y.toFixed(2)} m/s`);
 
             // 3. Horizontal velocity scrub from ground contact friction (scales with backspin AND landing angle)
             // More backspin = more friction = more scrub
@@ -454,8 +488,13 @@ export function simulateBouncePhase(landingPosition, landingVelocity, landingAng
             // 4. Ground contact modifies spin
             // High friction surfaces "grab" the ball more, reducing spin faster
             const spinReductionFactor = 0.7 + (surfaceProps?.friction || 0.1) * 0.05; // Softer surfaces reduce spin more
+            const newBackspinRPM = Math.abs(currentSpin.x) * (60 / (2 * Math.PI)) * spinReductionFactor;
             currentSpin.x *= spinReductionFactor;
             currentSpin.y *= spinReductionFactor;
+
+            const newHorizontalSpeed = Math.sqrt(velocity.x**2 + velocity.z**2);
+            console.log(`   Horizontal vel: ${oldHorizontalSpeed.toFixed(2)} → ${newHorizontalSpeed.toFixed(2)} m/s (${((newHorizontalSpeed - oldHorizontalSpeed) / oldHorizontalSpeed * 100).toFixed(1)}%)`);
+            console.log(`   Spin: ${oldBackspinRPM.toFixed(0)} → ${newBackspinRPM.toFixed(0)} rpm (${(spinReductionFactor * 100).toFixed(0)}% retained)`);
 
             // Calculate expected bounce height
             const expectedHeight = (velocity.y ** 2) / (2 * gravity);
@@ -539,7 +578,7 @@ const NEUTRAL_BACKSPIN_RPM = 2500; // RPM at which spin has minimal effect on ro
 const SPIN_FRICTION_FACTOR = 0.00008; // How much friction changes per RPM deviation (Increased, needs tuning!) // KEEPING THIS FOR NOW, might remove later
 
 // --- New Spin Physics Constants (Tunable) ---
-const BASE_BACKSPIN_ACCELERATION_FACTOR = 0.000012; // Base acceleration per RPM (m/s^2 / RPM) - INCREASED from 0.000005
+const BASE_BACKSPIN_ACCELERATION_FACTOR = 0.00005; // Base acceleration per RPM (m/s^2 / RPM) - Increased to enable spin-backs
 const SIDESPIN_ACCELERATION_FACTOR = 0.000004; // Acceleration per RPM (m/s^2 / RPM) - Needs tuning!
 const BACKSPIN_DECAY_RATE_PER_SECOND = 1500; // RPM decay per second - Needs tuning!
 const SIDESPIN_DECAY_RATE_PER_SECOND = 2000; // RPM decay per second - Needs tuning!
@@ -639,7 +678,12 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
 
         // Periodic logging (adjust for startTime offset)
         if (time >= (startTime + nextLogTime) && speed > MIN_ROLL_SPEED) {
-            const distRolled = totalDistanceRolled;
+            console.log(`\n🏃 ROLL @ ${totalDistanceRolled.toFixed(1)}m (${time.toFixed(2)}s):`);
+            console.log(`   Surface: ${currentSurfaceType}`);
+            console.log(`   Speed: ${speed.toFixed(2)} m/s`);
+            console.log(`   Backspin: ${currentBackspinRPM.toFixed(0)} rpm`);
+            console.log(`   Sidespin: ${currentSideSpinRPM.toFixed(0)} rpm`);
+            console.log(`   Friction decel: ${currentFrictionDecelerationMagnitude.toFixed(3)} m/s²`);
             nextLogTime += 0.5;
         }
 

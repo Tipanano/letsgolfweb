@@ -25,6 +25,7 @@ export const SURFACES = {
     color: '#3A9A3A', // A nice green color
     bounce: 0.30, // Firm surface, higher bounce than fairway (reduced slightly)
     rollOut: 0.90, // High roll out (less friction)
+    friction: 0.08, // Low friction for smooth roll (green stimpmeter effect)
     spinResponse: 1.5, // Firm surface = more spin effect
     flightModification: { // Minimal impact on flight from green
       spinReduction: 0.05,
@@ -45,6 +46,7 @@ export const SURFACES = {
     color: '#5DBB5D', // Slightly lighter green
     bounce: 0.18, // Moderate grass absorption
     rollOut: 0.50, // Significantly more friction than green
+    friction: 0.12, // More friction than green
     spinResponse: 1.0, // Baseline
     flightModification: {
       spinReduction: 0.0,

@@ -1,6 +1,6 @@
 import { clubs, defaultPlayerBag } from './clubs.js'; // Import club data and defaultPlayerBag
 import { metersToYards, YARDS_TO_METERS } from './utils/unitConversions.js'; // Import conversion utilities
-import { getWind, getTemperature } from './gameLogic/state.js'; // Import environment state getters (Corrected Path)
+import { getWind, getTemperature, getCurrentShotType } from './gameLogic/state.js'; // Import environment state getters (Corrected Path)
 import { toast } from './ui/toast.js';
 import { modal } from './ui/modal.js';
 import * as playHoleModal from './playHoleModal.js';
@@ -180,13 +180,16 @@ export function updateStatus(text) {
 let selectedClubButton = null;
 let onClubChangeCallback = null; // To store the callback for club changes
 
-export function createClubButtons() {
+export function createClubButtons(gameMode = null) {
     if (!clubButtonsContainer) return;
     clubButtonsContainer.innerHTML = ''; // Clear existing buttons
 
-    // Use the defaultPlayerBag to populate buttons
-    // Later, this could be replaced by a player's custom bag
-    const displayClubKeys = defaultPlayerBag; 
+    // In range mode, show all clubs. Otherwise use the player's bag
+    // gameMode can be passed in, or we check the global getCurrentGameMode if available
+    const currentMode = gameMode || (window.getCurrentGameMode ? window.getCurrentGameMode() : null);
+    const displayClubKeys = (currentMode === 'range')
+        ? Object.keys(clubs).filter(key => key !== 'PT') // All clubs except putter in range
+        : defaultPlayerBag; 
 
     displayClubKeys.forEach(clubKey => {
         const club = clubs[clubKey];
@@ -780,6 +783,10 @@ export function clearClubSelection() {
 
 // Function to hide/show controls based on shot type
 export function setPutterControlsVisibility(isPutter) {
+    // Check current shot type to handle chip mode
+    const currentShotType = getCurrentShotType();
+    const isChipOrPutt = (currentShotType === 'chip' || currentShotType === 'putt');
+
     // Hide shot type selector when putter is selected
     const shotTypeContainer = document.querySelector('.shot-type-selector');
     if (shotTypeContainer) {
@@ -803,10 +810,10 @@ export function setPutterControlsVisibility(isPutter) {
         fsShotTypeBtn.style.display = isPutter ? 'none' : '';
     }
 
-    // Hide fullscreen power button when putter is selected
+    // Hide fullscreen power button when putter is selected OR when shot type is chip/putt
     const fsPowerBtn = document.getElementById('fs-power-btn');
     if (fsPowerBtn) {
-        fsPowerBtn.style.display = isPutter ? 'none' : '';
+        fsPowerBtn.style.display = (isPutter || isChipOrPutt) ? 'none' : '';
     }
 
     // Hide fullscreen stance button when putter is selected
@@ -1424,6 +1431,9 @@ function initFSClubSelection() {
     const fsClubValue = document.getElementById('fs-club-value');
     if (!fsClubGrid || !clubButtonsContainer) return;
 
+    // Clear existing buttons first
+    fsClubGrid.innerHTML = '';
+
     // Copy clubs from main UI
     const mainClubButtons = clubButtonsContainer.querySelectorAll('.club-button');
     mainClubButtons.forEach(btn => {
@@ -1731,15 +1741,6 @@ if (rightFoot) {
 // --- Switch Hole Button ---
 if (switchHoleButton) {
     switchHoleButton.addEventListener('click', () => {
-        // Exit fullscreen mode if active before showing modal
-        if (isFullscreen) {
-            document.body.classList.remove('fullscreen-mode');
-            isFullscreen = false;
-            if (fullscreenToggleBtn) {
-                fullscreenToggleBtn.textContent = 'Fullscreen';
-            }
-        }
-
         // Open the play hole modal to select a different hole
         playHoleModal.showModal(async (holeData) => {
             // Hole selected - reinitialize the game mode with the new hole

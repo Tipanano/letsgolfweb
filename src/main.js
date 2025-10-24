@@ -67,6 +67,7 @@ export async function setGameMode(newMode, initialHoleName = null, targetDistanc
     // Set new mode
     currentMode = newMode;
     ui.setGameModeClass(currentMode); // Update UI (body class, etc.)
+    ui.createClubButtons(currentMode); // Recreate club buttons for new mode (all clubs in range, bag clubs otherwise)
 
     // Initialize visuals system if it hasn't been already
     if (!visualsSystemInitialized && canvas) {

@@ -15,6 +15,7 @@ import {
 import {
     updateStatus, resetUIForNewShot, updateDebugTimingInfo, clearClubSelection, setSelectedClubButton // Import UI functions (resetUIForNewShot is already imported)
 } from '../ui.js';
+import { gameAlert } from '../ui/gameAlert.js';
 // Import calculation functions directly
 import { calculateFullSwingShot, calculateChipShot, calculatePuttShot } from './calculations.js';
 // Import debug data getter directly
@@ -51,7 +52,7 @@ export function startBackswing() {
     // Check if a club is selected
     const selectedClub = getSelectedClub();
     if (!selectedClub) {
-        updateStatus('Select a club first!');
+        gameAlert.show('Please select a club before starting your swing');
         return;
     }
 
