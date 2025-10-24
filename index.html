@@ -239,50 +239,7 @@
                 </div>
             </div>
 
-            <!-- Ball Position Control (Simplified) -->
-            <div id="ball-position-control">
-                <button id="ball-pos-info-btn" class="info-button">i</button>
-                <div class="stance-visual">
-                    <div class="foot" id="left-foot"></div>
-                    <div class="ball-marker" id="ball-marker"></div>
-                    <div class="foot" id="right-foot"></div>
-                </div>
-                <!-- Hidden pop-up for ball position info -->
-                <div id="ball-pos-info-popup" class="info-popup" style="display: none;">
-                    Use the up/down arrow keys or click the feet icons to set ball position in your stance.
-                </div>
-
-                <!-- Swing Speed Control (Vertical) -->
-                <div id="swing-speed-control-vertical" style="margin-top: 15px; text-align: center;">
-                    <button id="swing-speed-info-btn" class="info-button">i</button>
-                    <input type="range" id="swing-speed-slider" name="swing-speed" min="30" max="100" value="90" class="vertical-slider" style="writing-mode: vertical-lr; direction: rtl;">
-                    <div id="swing-speed-value-display" style="margin-top: 5px;"><span id="swing-speed-value">90</span>%</div>
-                     <!-- Hidden pop-up for swing speed info -->
-                    <div id="swing-speed-info-popup" class="info-popup" style="display: none;">
-                        Reducing swing speed makes it easier to make a good swing and good contact with the ball, but also reduces distance.
-                    </div>
-                </div>
-            </div>
-
         </div> <!-- End #main-layout -->
-
-        <!-- NEW Bottom Controls Area -->
-        <div id="bottom-controls">
-            <div> <!-- Club Select -->
-                <label>Club: </label> <!-- Label doesn't need 'for' if it's not directly linked to a single input -->
-                <div id="club-buttons-container">
-                    <!-- Club buttons will be populated by JS -->
-                </div>
-            </div>
-            <div id="shot-type-select"> <!-- Shot Type -->
-                <label>Shot Type: </label>
-                <input type="radio" id="shot-type-regular" name="shot-type" value="full" checked> <!-- Changed id and value to "full" to match existing logic, label changed -->
-                <label for="shot-type-regular">Regular</label>
-                <input type="radio" id="shot-type-chip" name="shot-type" value="chip">
-                <label for="shot-type-chip">Chip</label>
-                <!-- Putt option removed -->
-             </div>
-        </div>
 
         <!-- 3. Timing Bars (Moved below bottom-controls) -->
         <div id="timing-bars">

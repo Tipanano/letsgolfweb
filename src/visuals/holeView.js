@@ -13,6 +13,7 @@ let currentGreenCenter = null; // Store the green center position in meters (Vec
 let currentGreenRadius = null; // Store the green radius in meters (Number)
 let flagstickPoleMesh = null; // Reference to the flagstick pole mesh
 let flagClothMesh = null; // Reference to the flag cloth mesh
+let currentObstacles = []; // Store obstacles for physics calculations
 
 /**
  * Clears any previously drawn hole objects from the scene.
@@ -32,7 +33,8 @@ export function clearHoleLayout() {
     currentFlagPosition = null;
     currentGreenCenter = null;
     currentGreenRadius = null;
-    // Clear obstacles
+    // Clear obstacles from scene and physics array
+    currentObstacles = [];
     clearObstacles(scene);
 }
 
@@ -792,11 +794,26 @@ export function drawHoleLayout(holeLayout) {
     }
 
     // --- Draw Obstacles (Trees/Bushes) ---
+    currentObstacles = []; // Clear existing obstacles
     if (holeLayout.obstacles && Array.isArray(holeLayout.obstacles)) {
 
         // Convert obstacle data from JSON format to full obstacle objects with properties
         const obstaclesWithProps = holeLayout.obstacles.map(obs =>
             createObstacle(obs.type, obs.size, obs.x * scale, obs.z * scale)
+        );
+
+        // Store obstacles for physics calculations
+        currentObstacles = obstaclesWithProps;
+
+        console.log(`🌲 Loaded ${currentObstacles.length} obstacles for collision detection:`,
+            currentObstacles.map(o => ({
+                type: o.type,
+                x: o.x.toFixed(1),
+                z: o.z.toFixed(1),
+                radius: o.radius.toFixed(1),
+                height: o.height.toFixed(1),
+                trunkHeight: o.trunkHeight?.toFixed(1)
+            }))
         );
 
         // Render obstacles to the scene
@@ -849,4 +866,12 @@ export function setFlagstickVisibility(visible) {
  */
 export function getCurrentHoleObjects() {
     return currentHoleObjects;
+}
+
+/**
+ * Returns the array of obstacles for physics calculations
+ * @returns {Array}
+ */
+export function getObstacles() {
+    return currentObstacles;
 }

@@ -25,21 +25,7 @@ const fsResetDataBtn = document.getElementById('fs-reset-data-btn');
 
 // Other UI Elements
 const statusTextDisplay = document.getElementById('status-text-display'); // New top-center status
-const ballPosInfoButton = document.getElementById('ball-pos-info-btn');
-const ballPosInfoPopup = document.getElementById('ball-pos-info-popup');
-const swingSpeedInfoButton = document.getElementById('swing-speed-info-btn');
-const swingSpeedInfoPopup = document.getElementById('swing-speed-info-popup');
-// const statusText = document.getElementById('status-text'); // Old status text, now unused
-const swingSpeedSlider = document.getElementById('swing-speed-slider');
-const swingSpeedValueSpan = document.getElementById('swing-speed-value');
-// const clubSelect = document.getElementById('club-select'); // Replaced by clubButtonsContainer
-const clubButtonsContainer = document.getElementById('club-buttons-container'); // New container for club buttons
 const nextShotButton = document.getElementById('next-shot-button');
-// Shot Type Selector Elements
-const shotTypeRadios = document.querySelectorAll('input[name="shot-type"]'); // Get all radio buttons
-const shotTypeRegular = document.getElementById('shot-type-regular'); // Renamed from shot-type-full
-const shotTypeChip = document.getElementById('shot-type-chip');
-// const shotTypePutt = document.getElementById('shot-type-putt'); // Putt type is implicit with Putter selection
 
 const backswingDurationText = document.getElementById('backswing-duration');
 const rotationStartOffsetText = document.getElementById('rotation-start-offset');
@@ -108,12 +94,6 @@ const summaryMessageSpan = document.getElementById('summary-message');
 const showDetailsButton = document.getElementById('show-details-button');
 
 
-// Ball Position Elements
-const ballPositionControl = document.getElementById('ball-position-control');
-const ballMarker = document.getElementById('ball-marker');
-const leftFoot = document.getElementById('left-foot'); // Added
-const rightFoot = document.getElementById('right-foot'); // Added
-// const ballPositionText = document.getElementById('ball-position-text'); // Removed as element is deleted
 
 // Closest to Flag UI Elements
 const ctfTargetDistanceText = document.getElementById('ctf-target-distance');
@@ -176,51 +156,69 @@ export function updateStatus(text) {
     }
 }
 
-// Store the currently selected club button
-let selectedClubButton = null;
+// Store the currently selected club (for fullscreen controls)
+let selectedClubKey = null;
 let onClubChangeCallback = null; // To store the callback for club changes
 
 export function createClubButtons(gameMode = null) {
-    if (!clubButtonsContainer) return;
-    clubButtonsContainer.innerHTML = ''; // Clear existing buttons
+    // Populate fullscreen club grid inline (can't call initFSClubSelection before it's defined)
+    const fsClubGrid = document.getElementById('fs-club-grid');
+    const fsClubValue = document.getElementById('fs-club-value');
 
-    // In range mode, show all clubs. Otherwise use the player's bag
-    // gameMode can be passed in, or we check the global getCurrentGameMode if available
-    const currentMode = gameMode || (window.getCurrentGameMode ? window.getCurrentGameMode() : null);
-    const displayClubKeys = (currentMode === 'range')
-        ? Object.keys(clubs).filter(key => key !== 'PT') // All clubs except putter in range
-        : defaultPlayerBag; 
+    if (fsClubGrid) {
+        fsClubGrid.innerHTML = '';
 
-    displayClubKeys.forEach(clubKey => {
-        const club = clubs[clubKey];
-        if (!club) {
-            console.warn(`Club with key "${clubKey}" not found in clubs data. Skipping button.`);
-            return;
-        }
-        const button = document.createElement('button');
-        button.classList.add('club-button');
-        button.dataset.clubKey = clubKey;
-        button.textContent = club.name.length > 6 ? clubKey : club.name; // Use key if name is too long
-        
-        button.addEventListener('click', () => {
-            if (selectedClubButton) {
-                selectedClubButton.classList.remove('selected');
-            }
-            button.classList.add('selected');
-            selectedClubButton = button;
-            if (onClubChangeCallback) {
-                onClubChangeCallback(clubKey);
-            }
+        // Get club list based on game mode
+        const currentMode = gameMode || (window.getCurrentGameMode ? window.getCurrentGameMode() : null);
+        const displayClubKeys = (currentMode === 'range')
+            ? Object.keys(clubs).filter(key => key !== 'PT')
+            : defaultPlayerBag;
+
+        displayClubKeys.forEach(clubKey => {
+            const club = clubs[clubKey];
+            if (!club) return;
+
+            const fsBtn = document.createElement('button');
+            fsBtn.className = 'fs-club-btn';
+            fsBtn.textContent = club.name.length > 6 ? clubKey : club.name;
+            fsBtn.dataset.clubKey = clubKey;
+
+            fsBtn.addEventListener('click', () => {
+                // Update selection
+                selectedClubKey = clubKey;
+                fsClubGrid.querySelectorAll('.fs-club-btn').forEach(b => b.classList.remove('selected'));
+                fsBtn.classList.add('selected');
+                if (fsClubValue) fsClubValue.textContent = fsBtn.textContent;
+
+                // Call the club change callback
+                if (onClubChangeCallback) {
+                    onClubChangeCallback(clubKey);
+                }
+
+                closeFSPanels();
+            });
+
+            fsClubGrid.appendChild(fsBtn);
         });
-        clubButtonsContainer.appendChild(button);
-    });
 
-    // Set a default selected club (e.g., 'I7' if it's in the bag, otherwise the first club in the bag)
-    const defaultClubToSelect = displayClubKeys.includes('I7') ? 'I7' : displayClubKeys[0];
-    if (defaultClubToSelect) {
-        const defaultButton = clubButtonsContainer.querySelector(`.club-button[data-club-key="${defaultClubToSelect}"]`);
-        if (defaultButton) {
-            defaultButton.click(); // Simulate a click to select it
+        // Set default club selection
+        const defaultClubToSelect = displayClubKeys.includes('I7') ? 'I7' : displayClubKeys[0];
+        if (defaultClubToSelect) {
+            selectedClubKey = defaultClubToSelect;
+
+            const defaultBtn = fsClubGrid.querySelector(`.fs-club-btn[data-club-key="${defaultClubToSelect}"]`);
+            if (defaultBtn) {
+                defaultBtn.classList.add('selected');
+                if (fsClubValue && clubs[defaultClubToSelect]) {
+                    const club = clubs[defaultClubToSelect];
+                    fsClubValue.textContent = club.name.length > 6 ? defaultClubToSelect : club.name;
+                }
+            }
+
+            // Trigger the callback
+            if (onClubChangeCallback) {
+                onClubChangeCallback(defaultClubToSelect);
+            }
         }
     }
 }
@@ -610,74 +608,70 @@ export function resetUIForNewShot() {
 
 
 // --- Ball Position UI Functions ---
-
-function updateBallPositionDisplay() {
-    // Update text label - REMOVED as element ballPositionText is deleted
-    // ballPositionText.textContent = ballPositionLabels[currentBallPositionIndex];
-
-    // Update visual marker position (vertically)
-    // Calculate percentage based on index (0 to levels-1)
-    // Map index 0 (Far Back) to ~90% top, index 9 (Far Forward) to ~10% top
-    const totalSegments = ballPositionLevels - 1; // 9 segments for 10 positions
-    // Higher index (forward) should result in lower 'top' percentage
-    const positionPercent = 10 + ((totalSegments - currentBallPositionIndex) / totalSegments) * 80; // Map 0-9 to 90%-10%
-    ballMarker.style.top = `${positionPercent}%`;
-}
+// Ball position is now controlled via fullscreen stance panel (fs-stance-panel)
 
 export function adjustBallPosition(delta) {
     const newIndex = currentBallPositionIndex + delta;
-    // Clamp index within bounds [0, ballPositionLevels - 1]
     currentBallPositionIndex = Math.max(0, Math.min(ballPositionLevels - 1, newIndex));
-    updateBallPositionDisplay();
+    // Update fullscreen visual
+    updateFullscreenStancePosition();
 }
 
-// Function to directly set the ball position index (e.g., from club default)
 export function setBallPosition(index) {
-    // Clamp index within bounds [0, ballPositionLevels - 1]
     currentBallPositionIndex = Math.max(0, Math.min(ballPositionLevels - 1, index));
-    updateBallPositionDisplay();
+    // Update fullscreen visual
+    updateFullscreenStancePosition();
 }
 
-// Function to get the current ball position index for game logic
 export function getBallPositionIndex() {
     return currentBallPositionIndex;
 }
 
-// Function to get the total number of ball position levels
 export function getBallPositionLevels() {
     return ballPositionLevels;
 }
 
-// --- Shot Type UI Functions ---
-
-export function getShotType() {
-    for (const radio of shotTypeRadios) {
-        if (radio.checked) {
-            return radio.value; // 'full', 'chip', or 'putt'
-        }
+function updateFullscreenStancePosition() {
+    const fsBallMarker = document.getElementById('fs-ball-marker');
+    if (fsBallMarker) {
+        const totalSegments = ballPositionLevels - 1;
+        const positionPercent = 10 + ((totalSegments - currentBallPositionIndex) / totalSegments) * 80;
+        fsBallMarker.style.top = `${positionPercent}%`;
     }
-    return 'full'; // Default if none checked (shouldn't happen with default)
 }
 
-// Function to programmatically set the checked state of shot type radio buttons
+// --- Shot Type UI Functions ---
+// Shot type is now controlled via fullscreen shot type panel (fs-shot-type-panel)
+
+let currentShotType = 'full'; // Store current shot type
+
+export function getShotType() {
+    return currentShotType;
+}
+
 export function setShotTypeRadio(shotType) {
-    shotTypeRadios.forEach(radio => {
-        if (radio.value === shotType) {
-            radio.checked = true;
+    currentShotType = shotType;
+    // Update fullscreen display
+    const fsShotTypeValue = document.getElementById('fs-shot-type-value');
+    const fsShotTypeBtns = document.querySelectorAll('.fs-shot-type-btn');
+
+    if (fsShotTypeValue) {
+        fsShotTypeValue.textContent = shotType === 'full' ? 'Regular' : 'Chip';
+    }
+
+    fsShotTypeBtns.forEach(btn => {
+        if (btn.dataset.type === shotType) {
+            btn.classList.add('selected');
         } else {
-            radio.checked = false;
+            btn.classList.remove('selected');
         }
     });
 }
 
 export function setSwingSpeedControlState(enabled) {
-    swingSpeedSlider.disabled = !enabled;
-    // Optionally add a class to visually grey out the slider/label when disabled
-    const sliderContainer = swingSpeedSlider.parentElement; // Get the div containing the label/slider/value
-    if (enabled) {
-        sliderContainer.classList.remove('disabled');
-    } else {
-        sliderContainer.classList.add('disabled');
+    const fsPowerSlider = document.getElementById('fs-power-slider');
+    if (fsPowerSlider) {
+        fsPowerSlider.disabled = !enabled;
     }
 }
 
@@ -709,20 +703,10 @@ export function updateTimingBarVisibility(shotType) { // Consider renaming later
     // if (windowJ) windowJ.style.display = isFullSwing ? '' : 'none'; // OLD LOGIC
     // if (windowD) windowD.style.display = isFullSwing ? '' : 'none'; // OLD LOGIC
 
-    // Ball Position Control Visibility: Show for Full & Chip, Hide for Putt
-    if (ballPositionControl) {
-        ballPositionControl.style.display = (isFullSwing || isChip) ? '' : 'none';
-    }
-
-    // Club Buttons Container: Should always be enabled.
-    // The logic for handling Putter selection and shot type is in state.js.
-    if (clubButtonsContainer) {
-        // Ensure buttons are not inadvertently disabled by other logic if classList was used
-        // clubButtonsContainer.classList.remove('disabled'); // Optional: remove if this class was used for disabling
-        // const buttons = clubButtonsContainer.querySelectorAll('.club-button');
-        // buttons.forEach(button => {
-        //     button.disabled = false; // Ensure buttons are enabled
-        // });
+    // Fullscreen stance button visibility
+    const fsStanceBtn = document.getElementById('fs-stance-btn');
+    if (fsStanceBtn) {
+        fsStanceBtn.style.display = (isFullSwing || isChip) ? '' : 'none';
     }
 
     // Ideal Backswing Marker Visibility: Show only for Full swing
@@ -745,36 +729,37 @@ export function updatePuttTimingBar(elapsedTime) {
 
 // Function to programmatically set the selected club button
 export function setSelectedClubButton(clubKey) {
-    if (clubButtonsContainer) {
-        const buttonToSelect = clubButtonsContainer.querySelector(`.club-button[data-club-key="${clubKey}"]`);
-        if (buttonToSelect) {
-            if (selectedClubButton) {
-                selectedClubButton.classList.remove('selected');
+    selectedClubKey = clubKey;
+
+    // Update fullscreen club display
+    const fsClubValue = document.getElementById('fs-club-value');
+    const fsClubGrid = document.getElementById('fs-club-grid');
+
+    if (fsClubValue && clubs[clubKey]) {
+        const club = clubs[clubKey];
+        fsClubValue.textContent = club.name.length > 6 ? clubKey : club.name;
+    }
+
+    if (fsClubGrid) {
+        fsClubGrid.querySelectorAll('.fs-club-btn').forEach(btn => {
+            if (btn.dataset.clubKey === clubKey) {
+                btn.classList.add('selected');
+            } else {
+                btn.classList.remove('selected');
             }
-            buttonToSelect.classList.add('selected');
-            selectedClubButton = buttonToSelect;
-        } else {
-            console.warn(`UI: Club button for key ${clubKey} not found.`);
-        }
-    } else {
-        console.warn("UI: Club buttons container not found, couldn't set selected club.");
+        });
     }
 }
 
 // Function to clear club selection
 export function clearClubSelection() {
-    if (selectedClubButton) {
-        selectedClubButton.classList.remove('selected');
-        selectedClubButton = null;
-    }
+    selectedClubKey = null;
 
-    // Update fullscreen club display
     const fsClubValue = document.getElementById('fs-club-value');
     if (fsClubValue) {
         fsClubValue.textContent = 'Select Club';
     }
 
-    // Clear any fullscreen club button selections
     const fsClubGrid = document.getElementById('fs-club-grid');
     if (fsClubGrid) {
         fsClubGrid.querySelectorAll('.fs-club-btn').forEach(btn => btn.classList.remove('selected'));
@@ -783,26 +768,7 @@ export function clearClubSelection() {
 
 // Function to hide/show controls based on shot type
 export function setPutterControlsVisibility(isPutter) {
-    // Check current shot type to handle chip mode
-    const currentShotType = getCurrentShotType();
     const isChipOrPutt = (currentShotType === 'chip' || currentShotType === 'putt');
-
-    // Hide shot type selector when putter is selected
-    const shotTypeContainer = document.querySelector('.shot-type-selector');
-    if (shotTypeContainer) {
-        shotTypeContainer.style.display = isPutter ? 'none' : '';
-    }
-
-    // Hide swing speed slider when putter is selected
-    const swingSpeedContainer = document.querySelector('#swing-speed-slider')?.parentElement;
-    if (swingSpeedContainer) {
-        swingSpeedContainer.style.display = isPutter ? 'none' : '';
-    }
-
-    // Hide ball position control when putter is selected
-    if (ballPositionControl) {
-        ballPositionControl.style.display = isPutter ? 'none' : '';
-    }
 
     // Hide fullscreen shot type button when putter is selected
     const fsShotTypeBtn = document.getElementById('fs-shot-type-btn');
@@ -827,12 +793,6 @@ export function setPutterControlsVisibility(isPutter) {
 export function updateControlsForShotType(shotType) {
     const isChipOrPutt = (shotType === 'chip' || shotType === 'putt');
 
-    // Hide swing speed slider for chip and putt
-    const swingSpeedContainer = document.querySelector('#swing-speed-slider')?.parentElement;
-    if (swingSpeedContainer) {
-        swingSpeedContainer.style.display = isChipOrPutt ? 'none' : '';
-    }
-
     // Hide fullscreen power button for chip and putt
     const fsPowerBtn = document.getElementById('fs-power-btn');
     if (fsPowerBtn) {
@@ -845,11 +805,8 @@ export function updateControlsForShotType(shotType) {
 // This allows main.js to pass callbacks that interact with gameLogic
 
 export function addSwingSpeedInputListener(callback) {
-    swingSpeedSlider.addEventListener('input', (event) => {
-        const value = parseInt(event.target.value, 10);
-        swingSpeedValueSpan.textContent = value;
-        callback(value); // Pass the percentage value to the callback
-    });
+    // Store callback for use in initFSPowerSlider
+    window._swingSpeedCallback = callback;
 }
 
 // --- Event Listener for Reset Game Data Button ---
@@ -873,29 +830,21 @@ export function addResetGameDataListener() {
 }
 
 export function addClubChangeListener(callback) {
-    // The actual event listeners are on the buttons themselves in createClubButtons.
-    // We just store the callback here to be used by the button click handlers.
     onClubChangeCallback = callback;
 }
 
 export function addShotTypeChangeListener(callback) {
-    shotTypeRadios.forEach(radio => {
-        radio.addEventListener('change', (event) => {
-            if (event.target.checked) {
-                callback(event.target.value); // Pass the selected shot type ('full', 'chip', 'putt')
-            }
-        });
-    });
+    // Fullscreen shot type buttons are initialized in initFSShotTypeSelection
+    // Store the callback for use in that initialization
+    window._shotTypeChangeCallback = callback;
 }
 
-
-// Export function to set the initial display value for the slider text
 export function setInitialSwingSpeedDisplay(percentage) {
-    swingSpeedValueSpan.textContent = percentage;
+    const fsPowerDisplay = document.getElementById('fs-power-display');
+    const fsPowerValue = document.getElementById('fs-power-value');
+    if (fsPowerDisplay) fsPowerDisplay.textContent = `${percentage}%`;
+    if (fsPowerValue) fsPowerValue.textContent = `${percentage}%`;
 }
-
-// Initial setup call for ball position
-updateBallPositionDisplay();
 
 
 // --- Post-Shot Feedback Window Functions ---
@@ -1429,31 +1378,43 @@ if (fsStanceBtn && fsStancePanel) {
 function initFSClubSelection() {
     const fsClubGrid = document.getElementById('fs-club-grid');
     const fsClubValue = document.getElementById('fs-club-value');
-    if (!fsClubGrid || !clubButtonsContainer) return;
+    if (!fsClubGrid) return;
 
     // Clear existing buttons first
     fsClubGrid.innerHTML = '';
 
-    // Copy clubs from main UI
-    const mainClubButtons = clubButtonsContainer.querySelectorAll('.club-button');
-    mainClubButtons.forEach(btn => {
+    // Get club list based on game mode
+    const currentMode = window.getCurrentGameMode ? window.getCurrentGameMode() : null;
+    const displayClubKeys = (currentMode === 'range')
+        ? Object.keys(clubs).filter(key => key !== 'PT')
+        : defaultPlayerBag;
+
+    displayClubKeys.forEach(clubKey => {
+        const club = clubs[clubKey];
+        if (!club) return;
+
         const fsBtn = document.createElement('button');
         fsBtn.className = 'fs-club-btn';
-        fsBtn.textContent = btn.textContent;
-        fsBtn.dataset.club = btn.dataset.club;
+        fsBtn.textContent = club.name.length > 6 ? clubKey : club.name;
+        fsBtn.dataset.clubKey = clubKey;
 
-        if (btn.classList.contains('selected')) {
+        if (selectedClubKey === clubKey) {
             fsBtn.classList.add('selected');
-            if (fsClubValue) fsClubValue.textContent = btn.textContent;
+            if (fsClubValue) fsClubValue.textContent = fsBtn.textContent;
         }
 
         fsBtn.addEventListener('click', () => {
-            // Click the corresponding main button
-            btn.click();
-            // Update FS display
+            // Update selection
+            selectedClubKey = clubKey;
             fsClubGrid.querySelectorAll('.fs-club-btn').forEach(b => b.classList.remove('selected'));
             fsBtn.classList.add('selected');
-            if (fsClubValue) fsClubValue.textContent = btn.textContent;
+            if (fsClubValue) fsClubValue.textContent = fsBtn.textContent;
+
+            // Call the club change callback
+            if (onClubChangeCallback) {
+                onClubChangeCallback(clubKey);
+            }
+
             closeFSPanels();
         });
 
@@ -1465,30 +1426,34 @@ function initFSClubSelection() {
 function initFSShotTypeSelection() {
     const fsShotTypeValue = document.getElementById('fs-shot-type-value');
     const fsShotTypeBtns = document.querySelectorAll('.fs-shot-type-btn');
+    const callback = window._shotTypeChangeCallback;
 
     fsShotTypeBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             const type = btn.dataset.type;
-            // Click corresponding radio button
-            const radio = document.querySelector(`input[name="shot-type"][value="${type}"]`);
-            if (radio) radio.click();
+
+            // Update current shot type
+            currentShotType = type;
 
             // Update display
             fsShotTypeBtns.forEach(b => b.classList.remove('selected'));
             btn.classList.add('selected');
             if (fsShotTypeValue) fsShotTypeValue.textContent = btn.textContent;
+
+            // Call the shot type change callback
+            if (callback) {
+                callback(type);
+            }
+
             closeFSPanels();
         });
     });
 
-    // Set initial selection
-    const selectedRadio = document.querySelector('input[name="shot-type"]:checked');
-    if (selectedRadio) {
-        const matchingBtn = document.querySelector(`.fs-shot-type-btn[data-type="${selectedRadio.value}"]`);
-        if (matchingBtn) {
-            matchingBtn.classList.add('selected');
-            if (fsShotTypeValue) fsShotTypeValue.textContent = matchingBtn.textContent;
-        }
+    // Set initial selection based on currentShotType
+    const matchingBtn = document.querySelector(`.fs-shot-type-btn[data-type="${currentShotType}"]`);
+    if (matchingBtn) {
+        matchingBtn.classList.add('selected');
+        if (fsShotTypeValue) fsShotTypeValue.textContent = matchingBtn.textContent;
     }
 }
 
@@ -1497,25 +1462,28 @@ function initFSPowerSlider() {
     const fsPowerSlider = document.getElementById('fs-power-slider');
     const fsPowerDisplay = document.getElementById('fs-power-display');
     const fsPowerValue = document.getElementById('fs-power-value');
+    const callback = window._swingSpeedCallback;
 
-    if (fsPowerSlider && swingSpeedSlider) {
-        // Sync with main slider
-        fsPowerSlider.value = swingSpeedSlider.value;
-        if (fsPowerDisplay) fsPowerDisplay.textContent = `${fsPowerSlider.value}%`;
-        if (fsPowerValue) fsPowerValue.textContent = `${fsPowerSlider.value}%`;
+    if (fsPowerSlider) {
+        // Set initial value
+        fsPowerSlider.value = 90;
+        if (fsPowerDisplay) fsPowerDisplay.textContent = '90%';
+        if (fsPowerValue) fsPowerValue.textContent = '90%';
+
+        // Call callback with initial value
+        if (callback) {
+            callback(90);
+        }
 
         fsPowerSlider.addEventListener('input', () => {
-            swingSpeedSlider.value = fsPowerSlider.value;
-            swingSpeedSlider.dispatchEvent(new Event('input'));
-            if (fsPowerDisplay) fsPowerDisplay.textContent = `${fsPowerSlider.value}%`;
-            if (fsPowerValue) fsPowerValue.textContent = `${fsPowerSlider.value}%`;
-        });
+            const value = parseInt(fsPowerSlider.value, 10);
+            if (fsPowerDisplay) fsPowerDisplay.textContent = `${value}%`;
+            if (fsPowerValue) fsPowerValue.textContent = `${value}%`;
 
-        // Listen for changes from main slider
-        swingSpeedSlider.addEventListener('input', () => {
-            fsPowerSlider.value = swingSpeedSlider.value;
-            if (fsPowerDisplay) fsPowerDisplay.textContent = `${swingSpeedSlider.value}%`;
-            if (fsPowerValue) fsPowerValue.textContent = `${swingSpeedSlider.value}%`;
+            // Call the swing speed callback
+            if (callback) {
+                callback(value);
+            }
         });
     }
 }
@@ -1528,14 +1496,9 @@ function initFSStanceVisual() {
 
     if (!fsStanceVisual || !fsBallMarker) return;
 
-    // Get the main ball position control elements
-    const mainBallMarker = document.getElementById('ball-marker');
-
     // Sync initial position
-    if (mainBallMarker) {
-        const mainTop = mainBallMarker.style.top || '50%';
-        fsBallMarker.style.top = mainTop;
-    }
+    updateFullscreenStancePosition();
+    updateStanceValueText();
 
     // Make the stance visual clickable
     fsStanceVisual.addEventListener('click', (e) => {
@@ -1543,64 +1506,22 @@ function initFSStanceVisual() {
         const clickY = e.clientY - rect.top;
         const percent = (clickY / rect.height) * 100;
 
-        // Clamp between 10% and 90% (roughly between the feet)
-        const clampedPercent = Math.max(10, Math.min(90, percent));
+        // Convert percent to ball position index
+        // percent 10% = index 9 (Far Forward)
+        // percent 90% = index 0 (Far Back)
+        const totalSegments = ballPositionLevels - 1;
+        const index = Math.round(totalSegments - ((percent - 10) / 80) * totalSegments);
+        const clampedIndex = Math.max(0, Math.min(ballPositionLevels - 1, index));
 
-        // Update fullscreen marker
-        fsBallMarker.style.top = `${clampedPercent}%`;
-
-        // Update main marker (this will trigger the game logic)
-        if (mainBallMarker) {
-            mainBallMarker.style.top = `${clampedPercent}%`;
-
-            // Dispatch a custom event or directly update game state
-            // Try to find and trigger the input handler's ball position change
-            const inputChangeEvent = new Event('ballPositionChange');
-            mainBallMarker.dispatchEvent(inputChangeEvent);
-        }
-
-        // Update display text
-        let positionText = 'Center';
-        if (clampedPercent < 40) {
-            positionText = 'Forward';
-        } else if (clampedPercent > 60) {
-            positionText = 'Back';
-        }
-        if (fsStanceValue) {
-            fsStanceValue.textContent = positionText;
-        }
+        // Update ball position (this will update the visual via updateFullscreenStancePosition)
+        setBallPosition(clampedIndex);
+        updateStanceValueText();
     });
 
-    // Listen for changes from other sources (like the main UI)
-    if (mainBallMarker) {
-        const observer = new MutationObserver(() => {
-            const mainTop = mainBallMarker.style.top;
-            if (fsBallMarker && mainTop) {
-                fsBallMarker.style.top = mainTop;
-
-                // Update text
-                const percent = parseFloat(mainTop);
-                let positionText = 'Center';
-                if (percent < 40) {
-                    positionText = 'Forward';
-                } else if (percent > 60) {
-                    positionText = 'Back';
-                }
-                if (fsStanceValue) {
-                    fsStanceValue.textContent = positionText;
-                }
-            }
-        });
-
-        observer.observe(mainBallMarker, {
-            attributes: true,
-            attributeFilter: ['style']
-        });
-    }
-
-    // Set initial text
-    if (fsStanceValue) {
-        fsStanceValue.textContent = 'Center';
+    function updateStanceValueText() {
+        if (!fsStanceValue) return;
+        const label = ballPositionLabels[currentBallPositionIndex];
+        fsStanceValue.textContent = label;
     }
 }
 
@@ -1617,71 +1538,6 @@ function initFullscreenControls() {
 // showMainMenu();
 
 
-// --- Event Listener for Ball Position Info Button & Pop-up ---
-function hideBallPosInfoPopup() {
-    if (ballPosInfoPopup) {
-        ballPosInfoPopup.style.display = 'none';
-    }
-    document.removeEventListener('click', handleClickOutsideBallPosPopup, true);
-}
-
-function handleClickOutsideBallPosPopup(event) {
-    if (ballPosInfoPopup && ballPosInfoPopup.style.display !== 'none') {
-        if (!ballPosInfoPopup.contains(event.target) && event.target !== ballPosInfoButton) {
-            hideBallPosInfoPopup();
-        }
-    }
-}
-
-if (ballPosInfoButton) {
-    ballPosInfoButton.addEventListener('click', (event) => {
-        event.stopPropagation();
-        if (ballPosInfoPopup) {
-            const isVisible = ballPosInfoPopup.style.display === 'block';
-            if (isVisible) {
-                hideBallPosInfoPopup();
-            } else {
-                ballPosInfoPopup.style.display = 'block';
-                // Add the global click listener when the pop-up is shown
-                document.addEventListener('click', handleClickOutsideBallPosPopup, true);
-            }
-        }
-    });
-}
-
-// --- Event Listener for Swing Speed Info Button & Pop-up ---
-function hideSwingSpeedInfoPopup() {
-    if (swingSpeedInfoPopup) {
-        swingSpeedInfoPopup.style.display = 'none';
-    }
-    document.removeEventListener('click', handleClickOutsideSwingSpeedPopup, true);
-}
-
-function handleClickOutsideSwingSpeedPopup(event) {
-    if (swingSpeedInfoPopup && swingSpeedInfoPopup.style.display !== 'none') {
-        if (!swingSpeedInfoPopup.contains(event.target) && event.target !== swingSpeedInfoButton) {
-            hideSwingSpeedInfoPopup();
-        }
-    }
-}
-
-if (swingSpeedInfoButton) {
-    swingSpeedInfoButton.addEventListener('click', (event) => {
-        event.stopPropagation();
-        if (swingSpeedInfoPopup) {
-            const isVisible = swingSpeedInfoPopup.style.display === 'block';
-            if (isVisible) {
-                hideSwingSpeedInfoPopup();
-            } else {
-                // Hide other popups if open
-                hideBallPosInfoPopup(); 
-                hideShotResultPopup(); // Though less likely to be open simultaneously
-                swingSpeedInfoPopup.style.display = 'block';
-                document.addEventListener('click', handleClickOutsideSwingSpeedPopup, true);
-            }
-        }
-    });
-}
 
 
 // --- Event Listener for Show Details Button & Click-Outside-to-Close for Pop-up ---
@@ -1725,18 +1581,6 @@ export function addNextShotClickListener(callback) {
     });
 }
 
-// --- Event Listeners for Clickable Feet in Ball Position UI ---
-if (leftFoot) {
-    leftFoot.addEventListener('click', () => {
-        adjustBallPosition(1); // Move ball forward (towards lead foot/upper foot)
-    });
-}
-
-if (rightFoot) {
-    rightFoot.addEventListener('click', () => {
-        adjustBallPosition(-1); // Move ball backward (towards trail foot/lower foot)
-    });
-}
 
 // --- Switch Hole Button ---
 if (switchHoleButton) {

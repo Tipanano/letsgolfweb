@@ -669,22 +669,28 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
     let currentFrictionCoefficient = baseFrictionCoefficient;
     let currentFrictionDecelerationMagnitude = frictionDecelerationMagnitude;
 
-    // Sample logging every 0.5 seconds
-    let nextLogTime = 0.5;
-
+    // Sample logging every 0.5 seconds, starting immediately
+    let nextLogTime = startTime; // Start logging immediately
+    let hasLoggedFirst = false;
 
     while (true) {
         const speed = velocity.length(); // Current speed (horizontal only as y=0)
 
-        // Periodic logging (adjust for startTime offset)
-        if (time >= (startTime + nextLogTime) && speed > MIN_ROLL_SPEED) {
+        // Periodic logging - log first immediately, then every 0.5 seconds
+        if (time >= nextLogTime && speed > MIN_ROLL_SPEED) {
             console.log(`\n🏃 ROLL @ ${totalDistanceRolled.toFixed(1)}m (${time.toFixed(2)}s):`);
             console.log(`   Surface: ${currentSurfaceType}`);
             console.log(`   Speed: ${speed.toFixed(2)} m/s`);
             console.log(`   Backspin: ${currentBackspinRPM.toFixed(0)} rpm`);
             console.log(`   Sidespin: ${currentSideSpinRPM.toFixed(0)} rpm`);
             console.log(`   Friction decel: ${currentFrictionDecelerationMagnitude.toFixed(3)} m/s²`);
-            nextLogTime += 0.5;
+
+            if (!hasLoggedFirst) {
+                hasLoggedFirst = true;
+                nextLogTime = startTime + 0.5;
+            } else {
+                nextLogTime += 0.5;
+            }
         }
 
         // --- Hole Interaction Check ---

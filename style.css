@@ -265,36 +265,6 @@ h2 {
 }
 
 
-/* --- Bottom Controls Area (NEW) --- */
-#bottom-controls {
-    background-color: #fff;
-    border: 1px solid #ddd;
-    padding: 15px;
-    margin-top: 15px; /* Space above this control panel */
-    border-radius: 5px;
-    display: flex;
-    flex-wrap: wrap; /* Allow items to wrap on smaller screens */
-    gap: 20px; /* Space between control groups */
-    justify-content: center; /* Center control groups */
-    align-items: center;
-}
-
-#bottom-controls > div { /* Style for each control group */
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-#bottom-controls label {
-    font-size: 0.9em;
-    color: #333;
-}
-
-#bottom-controls input[type="range"],
-#bottom-controls select,
-#bottom-controls input[type="radio"] {
-    margin-right: 5px;
-}
 
 
 /* --- Visual Info Overlay (NEW) --- */
@@ -353,102 +323,6 @@ body.fullscreen-mode #swing-arc-overlay {
     height: calc(100% - 60px);
 }
 
-/* --- Ball Position Control (Simplified) --- */
-#ball-position-control {
-    background-color: transparent; /* No background for the container itself */
-    padding: 10px 0 0 0; /* Padding only at the top if needed, or remove */
-    flex-basis: auto; /* Allow to shrink to content */
-    flex-shrink: 1;
-    display: flex; 
-    flex-direction: column;
-    align-items: center; 
-    position: relative; 
-    margin-left: 10px; /* Give it some space from the visuals container */
-}
-
-.info-button {
-    background-color: #ddd; 
-    color: #333;
-    border: 1px solid #bbb;
-    border-radius: 50%; 
-    width: 24px;
-    height: 24px;
-    font-size: 0.9em;
-    font-weight: bold;
-    line-height: 22px; 
-    text-align: center;
-    cursor: pointer;
-    padding: 0;
-    margin-bottom: 8px; /* Space between button and stance visual */
-}
-
-.info-button:hover {
-    background-color: #ccc;
-}
-
-.info-popup {
-    display: none; 
-    position: absolute;
-    top: 35px; /* Position below the info button */
-    left: 50%;
-    transform: translateX(-50%);
-    background-color: #fff;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    padding: 10px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-    z-index: 100; 
-    width: 200px; /* Adjust as needed */
-    font-size: 0.9em;
-    color: #333;
-    text-align: center;
-}
-
-#swing-speed-control-vertical {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    margin-top: 15px; /* Space above the swing speed control */
-    position: relative; /* For positioning the info popup */
-}
-
-.vertical-slider {
-    /* -webkit-appearance: slider-vertical; */ /* Deprecated */
-    /* appearance: slider-vertical; */ /* Deprecated */
-    /* writing-mode: bt-lr; */ /* For Firefox - will be handled by inline style */
-    width: 8px; /* Adjust width of the track */
-    height: 150px; /* Increased height for the slider */
-    padding: 0 5px; /* Add some padding if needed */
-    margin: 5px 0; /* Margin around the slider */
-}
-
-/* Optional: Style the thumb and track for vertical slider if needed */
-/* These are browser-specific and can be complex */
-/* Example for WebKit */
-.vertical-slider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 20px; /* Width of the thumb */
-    height: 20px; /* Height of the thumb */
-    background: #007bff;
-    cursor: pointer;
-    border-radius: 50%;
-}
-
-.vertical-slider::-moz-range-thumb {
-    width: 20px;
-    height: 20px;
-    background: #007bff;
-    cursor: pointer;
-    border-radius: 50%;
-    border: none;
-}
-
-#swing-speed-value-display {
-    font-size: 0.9em;
-    color: #333;
-    margin-top: 8px;
-}
 
 
 /* --- Multiplayer Scoreboard (Fixed position above game interface) --- */
@@ -463,48 +337,6 @@ body.fullscreen-mode #swing-arc-overlay {
     max-width: 600px; /* Prevent it from getting too wide */
 }
 
-/* --- Bottom Controls Area (NEW) --- */
-#bottom-controls {
-    background-color: #f8f9fa; /* Light background for the panel */
-    border-top: 1px solid #ddd; /* Separator line */
-    padding: 15px;
-    margin-top: 15px;
-    border-radius: 0 0 5px 5px; /* Optional: round bottom corners if game-interface has rounded top */
-    display: flex;
-    flex-wrap: wrap;
-    gap: 15px 25px; /* Row gap and column gap */
-    justify-content: center;
-    align-items: center;
-}
-
-#bottom-controls > div { 
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-#bottom-controls label {
-    font-size: 0.95em;
-    color: #333;
-    margin-bottom: 0; /* Remove bottom margin from labels if any */
-}
-
-#bottom-controls input[type="range"]{
-    vertical-align: middle;
-}
-#bottom-controls select {
-    padding: 5px;
-    border-radius: 4px;
-    border: 1px solid #ccc;
-}
-#bottom-controls input[type="radio"] {
-    margin-right: 3px;
-    vertical-align: middle;
-}
-#bottom-controls #shot-type-select label { /* More specific selector for radio labels */
-    font-size: 0.9em;
-    margin-right: 8px;
-}
 
 
 /* NEW Common class for all overlay text items */
@@ -812,8 +644,6 @@ body.fullscreen-mode #golf-canvas {
     height: 100vh !important;
 }
 
-body.fullscreen-mode #ball-position-control,
-body.fullscreen-mode #bottom-controls,
 body.fullscreen-mode #timing-bars,
 body.fullscreen-mode #closest-to-flag-info,
 body.fullscreen-mode #instructions {
@@ -822,7 +652,7 @@ body.fullscreen-mode #instructions {
 
 /* Fullscreen bottom-right control panel */
 #fullscreen-controls {
-    display: none; /* Hidden by default, only show in fullscreen */
+    display: flex; /* Always show the controls */
     position: fixed;
     top: 220px; /* Position below the overlay-top */
     right: 10px;
@@ -830,10 +660,6 @@ body.fullscreen-mode #instructions {
     gap: 10px;
     flex-direction: column;
     align-items: flex-end;
-}
-
-body.fullscreen-mode #fullscreen-controls {
-    display: flex;
 }
 
 /* Control button showing current selection */
@@ -1189,51 +1015,6 @@ body.fullscreen-mode #fullscreen-toggle-btn {
     background-color: transparent;
 }
 
-/* --- Club Button Styles --- */
-#club-buttons-container {
-    display: flex;
-    flex-wrap: wrap; /* Allow buttons to wrap to the next line */
-    gap: 5px; /* Space between buttons */
-    justify-content: center; /* Center buttons if they don't fill the line */
-    margin-top: 5px; /* Add some space above the buttons */
-}
-
-.club-button {
-    padding: 6px 10px; /* Adjust padding for a smaller button feel */
-    font-size: 0.85em; /* Smaller font size */
-    min-width: 40px; /* Minimum width to ensure text fits or for consistency */
-    text-align: center;
-    border: 1px solid #ccc;
-    background-color: #f0f0f0;
-    color: #333;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background-color 0.2s, border-color 0.2s;
-}
-
-.club-button:hover {
-    background-color: #e0e0e0;
-    border-color: #bbb;
-}
-
-.club-button.selected {
-    background-color: #007bff; /* Blue background for selected club */
-    color: white;
-    border-color: #0056b3;
-}
-
-.club-button:disabled {
-    background-color: #e9ecef;
-    color: #6c757d;
-    cursor: not-allowed;
-    border-color: #ced4da;
-}
-
-#club-buttons-container.disabled .club-button {
-    /* Styles for when the entire container is "disabled" (e.g., during putt) */
-    opacity: 0.6;
-    pointer-events: none;
-}
 
 /* Pop-up for Hole Selection */
 /* .popup class is already styled in index.html for basic centering and appearance */

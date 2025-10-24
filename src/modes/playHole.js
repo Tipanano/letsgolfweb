@@ -62,12 +62,14 @@ export async function initializeMode(holeName) { // Made async, added holeName p
             const { setSwingSpeed } = await import('../gameLogic/state.js');
             setSwingSpeed(defaultSwingSpeed);
 
-            // Update UI slider to match
-            const swingSpeedSlider = document.getElementById('swing-speed-slider');
-            if (swingSpeedSlider) {
-                swingSpeedSlider.value = defaultSwingSpeed;
-                const swingSpeedValue = document.getElementById('swing-speed-value');
-                if (swingSpeedValue) swingSpeedValue.textContent = defaultSwingSpeed;
+            // Update fullscreen power slider to match
+            const fsPowerSlider = document.getElementById('fs-power-slider');
+            if (fsPowerSlider) {
+                fsPowerSlider.value = defaultSwingSpeed;
+                const fsPowerDisplay = document.getElementById('fs-power-display');
+                const fsPowerValue = document.getElementById('fs-power-value');
+                if (fsPowerDisplay) fsPowerDisplay.textContent = `${defaultSwingSpeed}%`;
+                if (fsPowerValue) fsPowerValue.textContent = `${defaultSwingSpeed}%`;
             }
 
             // Clear club selection - player must choose for first shot

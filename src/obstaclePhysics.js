@@ -64,6 +64,7 @@ export function applyObstacleEffect(velocity, collision) {
   } else {
     // Pass through but slow down, maintain direction
     const currentAngle = Math.atan2(velocity.z, velocity.x);
+
     return {
       x: Math.cos(currentAngle) * newSpeed,
       z: Math.sin(currentAngle) * newSpeed

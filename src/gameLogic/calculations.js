@@ -25,8 +25,8 @@ import { clamp, getSurfaceTypeAtPoint } from '../utils/gameUtils.js'; // Import 
 import { getCurrentGameMode } from '../main.js'; // Import mode checker
 import { getCurrentBallPosition as getPlayHoleBallPosition } from '../modes/playHole.js'; // Import position getter
 import { BALL_RADIUS } from '../visuals/core.js'; // Import BALL_RADIUS
-import { getFlagPosition, getGreenCenter, getGreenRadius } from '../visuals/holeView.js'; // For hole/green checks
-import { getObstacles } from '../visuals/targetView.js'; // Import obstacles getter for CTF mode
+import { getFlagPosition, getGreenCenter, getGreenRadius, getObstacles as getHoleObstacles } from '../visuals/holeView.js'; // For hole/green checks
+import { getObstacles as getCTFObstacles } from '../visuals/targetView.js'; // Import obstacles getter for CTF mode
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js'; // For Vector3
 
 // --- Calculation Functions ---
@@ -132,8 +132,13 @@ export function calculateFullSwingShot() {
 
     // --- Run Flight Simulation ---
     // Initial position already determined above
-    // Get obstacles if in CTF mode
-    const obstacles = (currentMode === 'closest-to-flag') ? getObstacles() : [];
+    // Get obstacles (CTF has them in targetView, Play Hole has them in holeView)
+    let obstacles = [];
+    if (currentMode === 'closest-to-flag') {
+        obstacles = getCTFObstacles();
+    } else if (currentMode === 'play-hole') {
+        obstacles = getHoleObstacles();
+    }
     const flightSimulationResult = simulateFlightStepByStep(initialPositionObj, initialVelocityObj, spinVectorRPM, selectedClub, obstacles);
 
     // --- Extract Results from Flight Simulation ---
@@ -189,6 +194,7 @@ export function calculateFullSwingShot() {
         let bounceEndTime = flightSimulationResult.timeOfFlight; // Start with flight time
 
         if (shouldSkipBounce) {
+            console.log(`\n⏩ SKIPPING BOUNCE (angle: ${landingAngleDegrees.toFixed(1)}°, speed: ${landingSpeed.toFixed(2)} m/s) - Going directly to roll`);
 
             // Use old logic: apply simple speed reduction factor
             const landingVelHorizontalMag = Math.sqrt(landingVelocity.x**2 + landingVelocity.z**2);
@@ -436,8 +442,13 @@ export function calculateChipShot() {
 
     // --- Run Flight Simulation ---
     // Initial position already determined above
-    // Get obstacles if in CTF mode
-    const obstacles_chip = (currentMode === 'closest-to-flag') ? getObstacles() : [];
+    // Get obstacles (CTF has them in targetView, Play Hole has them in holeView)
+    let obstacles_chip = [];
+    if (currentMode === 'closest-to-flag') {
+        obstacles_chip = getCTFObstacles();
+    } else if (currentMode === 'play-hole') {
+        obstacles_chip = getHoleObstacles();
+    }
     const flightSimulationResult = simulateFlightStepByStep(initialPositionObj, initialVelocityObj, spinVectorRPM, selectedClub, obstacles_chip);
 
     // --- Extract Results ---
@@ -495,6 +506,7 @@ export function calculateChipShot() {
         let bounceEndTime = flightSimulationResult.timeOfFlight; // Start with flight time
 
         if (shouldSkipBounce) {
+            console.log(`\n⏩ SKIPPING BOUNCE (angle: ${landingAngleDegrees.toFixed(1)}°, speed: ${landingSpeed.toFixed(2)} m/s) - Going directly to roll`);
 
             // Use old logic: apply simple speed reduction factor
             const landingVelHorizontalMag = Math.sqrt(landingVelocity.x**2 + landingVelocity.z**2);

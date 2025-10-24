@@ -129,8 +129,9 @@ ui.updatePlayerDisplay(playerManager.getDisplayName(), playerManager.currentPlay
 // Create the club buttons first
 ui.createClubButtons();
 
-// Get initial values from UI (slider and now-updated club buttons) and set them in logic
-const initialSwingSpeed = parseInt(document.getElementById('swing-speed-slider').value, 10);
+// Get initial values from UI (fullscreen power slider and club buttons) and set them in logic
+const fsPowerSlider = document.getElementById('fs-power-slider');
+const initialSwingSpeed = fsPowerSlider ? parseInt(fsPowerSlider.value, 10) : 90;
 logic.setSwingSpeed(initialSwingSpeed);
 
 // The default club is set by createClubButtons, which also triggers the onClubChangeCallback
