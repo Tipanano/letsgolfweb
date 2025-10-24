@@ -12,6 +12,8 @@ let shotsTaken = 0; // Strokes for the current hole
 let score = 0; // Total strokes for the round
 let currentBallPosition = null;
 let currentLie = 'TEE'; // Default lie
+let formerBallPosition = null; // Previous ball position before last shot (for OOB handling)
+let formerLie = null; // Previous lie before last shot (for OOB handling)
 let holeJustCompleted = false; // Renamed from isHoledOut: true if hole was just finished, awaiting 'n'
 let currentModeActive = false;
 let currentHoleIndex = 0; // For now, always 0, representing the first/current hole
@@ -53,6 +55,8 @@ export async function initializeMode(holeName) { // Made async, added holeName p
             shotsTaken = 0;
             score = 0;
             currentLie = 'TEE';
+            formerBallPosition = null;
+            formerLie = null;
             currentHoleIndex = 0;
 
             localStorage.removeItem('previewHoleData');
@@ -148,6 +152,10 @@ export function handleShotResult(shotData) {
         return;
     }
 
+    // Store previous position and lie before updating (for OOB handling)
+    formerBallPosition = currentBallPosition ? { ...currentBallPosition } : null;
+    formerLie = currentLie;
+
     shotsTaken++;
     score++; // Increment total round score for each shot taken
     console.log(`PlayHole: Handling shot ${shotsTaken} (Total round: ${score}) result:`, shotData);
@@ -181,6 +189,8 @@ export function handleShotResult(shotData) {
         strokesThisHole: shotsTaken, // Strokes for the current attempt (or completed hole)
         totalStrokesRound: score,
         currentLie: currentLie,
+        formerPosition: formerBallPosition, // Previous position before this shot
+        formerLie: formerLie, // Previous lie before this shot
         holeLayoutData: currentHoleLayout,
         holeJustCompletedState: holeJustCompleted // Save this new flag
     });
@@ -231,6 +241,8 @@ export function prepareForTeeShotAfterHoleOut() {
     console.log("PlayHole: Preparing for tee shot after hole out.");
     shotsTaken = 0;
     currentLie = 'TEE';
+    formerBallPosition = null; // Reset when starting from tee
+    formerLie = null; // Reset when starting from tee
     let initialX = 0;
     let initialZ = 0;
     if (currentHoleLayout?.tee?.center) {
@@ -246,6 +258,8 @@ export function prepareForTeeShotAfterHoleOut() {
         strokesThisHole: shotsTaken,
         totalStrokesRound: score, // Total score persists
         currentLie: currentLie,
+        formerPosition: null, // Reset when starting from tee
+        formerLie: null, // Reset when starting from tee
         holeLayoutData: currentHoleLayout,
         holeJustCompletedState: holeJustCompleted
     });
@@ -300,4 +314,12 @@ export function getDisplayShotNumber() {
         return 1; // Next shot will be the 1st from the tee
     }
     return shotsTaken + 1;
+}
+
+export function getFormerBallPosition() {
+    return formerBallPosition ? { ...formerBallPosition } : null;
+}
+
+export function getFormerLie() {
+    return formerLie;
 }

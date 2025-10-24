@@ -9,6 +9,8 @@ const getDefaultState = () => ({
     strokesThisHole: 0,
     totalStrokesRound: 0,
     currentLie: 'TEE', // e.g., 'TEE', 'FAIRWAY', 'ROUGH', 'GREEN', 'BUNKER', 'WATER'
+    formerPosition: null, // { x, y, z } - previous ball position before last shot (for OOB handling)
+    formerLie: null, // Previous lie before last shot (for OOB handling)
     holeLayoutData: null, // Will store the fully processed hole layout
     // Add any other relevant data to persist for playHole mode
 });
