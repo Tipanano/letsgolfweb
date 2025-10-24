@@ -22,11 +22,14 @@ import { calculateFullSwingShot, calculateChipShot, calculatePuttShot } from './
 import { getDebugTimingData } from '../utils/gameUtils.js';
 import { getCurrentGameMode } from '../main.js'; // Import mode checker
 // Import necessary functions from playHole.js
-import { 
-    getCurrentBallPosition as getPlayHoleBallPosition, 
+import {
+    getCurrentBallPosition as getPlayHoleBallPosition,
     getCurrentHoleLayout,
+    getCurrentLie as getPlayHoleLie,
     getHoleJustCompleted,
-    prepareForTeeShotAfterHoleOut
+    prepareForTeeShotAfterHoleOut,
+    returnToTee,
+    moveToFormerPosition
 } from '../modes/playHole.js';
 import { getFlagPosition, setFlagstickVisibility } from '../visuals/holeView.js'; // Import flag position getter AND visibility setter
 import { getActiveCameraMode, setCameraBehindBall, snapFollowCameraToBall, CameraMode, removeTrajectoryLine, applyAimAngleToCamera, setCameraBehindBallLookingAtTarget, setInitialFollowCameraLookingAtTarget, setBallScale, resetStaticCameraZoom } from '../visuals/core.js'; // Import camera functions, line removal, aim application, setBallScale, AND resetStaticCameraZoom
@@ -262,23 +265,77 @@ export function triggerPuttCalc() {
 
 // --- Reset Function ---
 // This function performs a FULL reset, including visual ball position. Used for range mode, etc.
+/**
+ * NEW UNIFIED RESET FUNCTION
+ * Prepares for the next shot based on current game mode and state.
+ * Handles: Range (always tee), CTF (always tee), Play Hole (tee if holed out, else current position)
+ */
 export function resetSwing() {
-
     const currentMode = getCurrentGameMode();
-    if (currentMode === 'play-hole' && getHoleJustCompleted()) {
-        prepareForTeeShotAfterHoleOut();
-        // After preparing, the rest of resetSwing will handle UI and visual updates based on the new tee state.
+
+    stopAllAnimations();
+
+    // RANGE MODE: Always return to tee
+    if (currentMode === 'range') {
+        resetSwingState(); // Full reset with UI and visuals
+        return;
     }
 
-    stopAllAnimations(); // Stop any running animations
-    resetSwingState();   // Calls the full reset in state.js, which includes UI and visual reset.
-    // UI/Visual reset is called within resetSwingState
+    // CLOSEST TO FLAG MODE: Always return to tee
+    if (currentMode === 'closest-to-flag') {
+        resetSwingState(); // Full reset with UI and visuals
+        return;
+    }
+
+    // PLAY HOLE MODE: Complex logic based on ball state
+    if (currentMode === 'play-hole') {
+        const holeJustCompleted = getHoleJustCompleted();
+
+        // Case 1: Holed out - return to tee
+        if (holeJustCompleted) {
+            console.log('resetSwing: Hole completed, returning to tee');
+            returnToTee(); // Updates playHole internal state
+            resetSwingState(); // Full reset with UI and visuals (gets position from playHole)
+            return;
+        }
+
+        // Case 2: Ball in play - check lie and handle accordingly
+        const currentLie = getPlayHoleLie();
+        console.log('resetSwing: Play Hole mode - Current lie:', currentLie);
+
+        // Handle OOB - move to former position with penalty
+        if (currentLie === 'OUT_OF_BOUNDS') {
+            console.log('resetSwing: OOB detected! Moving to former position with penalty');
+            moveToFormerPosition(); // Moves ball and adds penalty stroke
+            _prepareNextShotAtCurrentPosition(); // Setup camera/aim/UI for next shot
+            console.log('resetSwing: OOB handling complete');
+            return;
+        }
+
+        // TODO: Handle hazards - offer drop option (not implemented yet)
+        if (currentLie === 'WATER' || currentLie === 'BUNKER') {
+            // TODO: Implement drop option UI
+            // For now, continue from current position
+            console.log('resetSwing: Hazard detected (' + currentLie + ') - TODO: Implement drop option');
+        }
+
+        // Case 3: Normal shot - continue from current position
+        console.log('resetSwing: Normal shot, continuing from current position');
+        _prepareNextShotAtCurrentPosition();
+        return;
+    }
+
+    // Fallback: just do a full reset
+    resetSwingState();
 }
 
-// This function resets only the logic/timing for the next shot, keeping the ball visually where it is. Used for playHole mode.
-// It also updates the camera position based on the new ball location and current camera mode.
-export function prepareNextShot() {
-    stopAllAnimations(); // Stop any running animations
+/**
+ * PRIVATE HELPER: Prepare for next shot at current ball position (Play Hole mode only)
+ * Resets timing/UI, updates camera, aim, flagstick, and auto-selects putter if on green.
+ * This is called when the ball stays where it landed (not holed out, not returning to tee).
+ * NOTE: stopAllAnimations() is called by the caller (resetSwing)
+ */
+function _prepareNextShotAtCurrentPosition() {
     removeTrajectoryLine(); // Remove the visual trajectory line
     resetStaticCameraZoom(); // Reset the static camera zoom level
 

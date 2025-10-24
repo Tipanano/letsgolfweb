@@ -15,7 +15,6 @@ import {
     showKeyPressMarker,
 } from './ui.js';
 import { getCurrentGameMode } from './main.js'; // Import the function to get the current game mode
-import { prepareNextShot } from './gameLogic/actions.js';
 import { getCurrentBallPosition, getCurrentHoleLayout, getHoleJustCompleted } from './modes/playHole.js'; // Import playHole getters (Adjusted path)
 import { getFlagPosition as getHoleFlagPosition } from './visuals/holeView.js'; // Import flag position getter for hole mode
 import { getFlagPosition as getTargetFlagPosition } from './visuals/targetView.js'; // Import flag position getter for CTF mode
@@ -194,11 +193,8 @@ export function handleKeyUp(event) {
 function handleResetKey() {
     const currentMode = getCurrentGameMode();
     if (currentMode === 'play-hole') {
-        if (getHoleJustCompleted()) {
-            GameLogic.resetSwing(); // This will trigger prepareForTeeShotAfterHoleOut
-        } else {
-            prepareNextShot();
-        }
+        // resetSwing() now handles both holed-out and in-play cases
+        GameLogic.resetSwing();
     } else if (currentMode === 'closest-to-flag') {
         GameLogic.resetSwing(); // Reset ball position and game state
         // Re-initialize CTF mode (same as initial setup in main.js)

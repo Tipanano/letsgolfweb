@@ -92,7 +92,7 @@ export async function initializeMode(holeName) { // Made async, added holeName p
             visuals.resetVisuals(currentBallPosition, currentLie);
 
             // Set shot type based on lie
-            if (currentLie === 'green') {
+            if (currentLie === 'GREEN') {
                 setShotType('putt');
             } else {
                 // For tee or any non-green lie, set to full swing
@@ -213,7 +213,10 @@ export function handleShotResult(shotData) {
     // We'll use a timeout based on animation duration as a fallback
     const animationDuration = (shotData.timeOfFlight || 3) * 1000; // Convert seconds to ms
     setTimeout(() => {
+        console.log(`PlayHole: Updating lie after animation. finalLie from shotData: "${finalLie}"`);
         currentLie = finalLie; // Update lie after animation
+        console.log(`PlayHole: currentLie is now: "${currentLie}"`);
+
 
         const displayBallPos = getCurrentBallPosition();
         const displayLie = getCurrentLie();
@@ -322,4 +325,40 @@ export function getFormerBallPosition() {
 
 export function getFormerLie() {
     return formerLie;
+}
+
+// Move ball back to former position (for OOB handling)
+export function moveToFormerPosition() {
+    if (!currentModeActive) return;
+
+    if (formerBallPosition) {
+        currentBallPosition = { ...formerBallPosition };
+        currentLie = formerLie || 'TEE';
+
+        // Add penalty stroke for OOB
+        shotsTaken++; // Penalty stroke
+        score++;
+
+        console.log(`PlayHole: Ball moved to former position (OOB penalty). Position:`, currentBallPosition, `Lie: ${currentLie}`);
+
+        // Save updated state
+        savePlayHoleState({
+            currentHoleIndex: currentHoleIndex,
+            ballPosition: currentBallPosition,
+            strokesThisHole: shotsTaken,
+            totalStrokesRound: score,
+            currentLie: currentLie,
+            formerPosition: formerBallPosition, // Keep the same former position
+            formerLie: formerLie,
+            holeLayoutData: currentHoleLayout,
+            holeJustCompletedState: holeJustCompleted
+        });
+    } else {
+        console.warn('PlayHole: No former position available for OOB handling');
+    }
+}
+
+// Rename prepareForTeeShotAfterHoleOut to returnToTee for clarity
+export function returnToTee() {
+    prepareForTeeShotAfterHoleOut();
 }

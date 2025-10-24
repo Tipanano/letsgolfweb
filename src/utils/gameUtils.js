@@ -207,7 +207,8 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
         if (isPointInPolygon(point, holeLayout.background.vertices)) {
             // It's within the background polygon but not any specific feature.
             // Use the background's actual surface property (e.g., OUT_OF_BOUNDS or THICK_ROUGH)
-            const backgroundSurfaceName = holeLayout.background.surface?.name?.toUpperCase() || 'OUT_OF_BOUNDS';
+            // Convert surface name to key format (spaces to underscores, uppercase)
+            const backgroundSurfaceName = holeLayout.background.surface?.name?.toUpperCase().replace(/\s+/g, '_') || 'OUT_OF_BOUNDS';
             return backgroundSurfaceName;
         }
     }

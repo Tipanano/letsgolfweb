@@ -192,6 +192,13 @@ export function getSurfaceByName(name) {
   return null; // Or return a default surface like FAIRWAY
 }
 
+// Get display name from surface key (e.g., 'OUT_OF_BOUNDS' -> 'Out of Bounds')
+export function getSurfaceDisplayName(surfaceKey) {
+  if (!surfaceKey) return 'Unknown';
+  const surface = SURFACES[surfaceKey];
+  return surface ? surface.name : surfaceKey; // Fallback to key if not found
+}
+
 // --- New Function to get properties including calculated friction ---
 const FRICTION_SCALING_FACTOR = 2.0; // Tunable factor - converts rollOut to friction coefficient
 
