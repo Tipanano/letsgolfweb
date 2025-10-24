@@ -149,7 +149,8 @@ const overlayTempSpan = document.getElementById('overlay-temp'); // Added for te
 // These might be better managed within gameLogic or passed during initialization
 const DOWNSWING_TIMING_BAR_DURATION_MS = 500;
 const BACKSWING_BAR_MAX_DURATION_MS = 1500;
-const IDEAL_BACKSWING_DURATION_MS = 1000;
+const BACKSWING_BAR_MAX_DURATION_CHIP_PUTT_MS = 2000; // Slower for chips and putts - easier timing
+const IDEAL_BACKSWING_DURATION_MS = 1150; // Match physics (swingPhysics.js)
 const CHIP_DOWNSWING_DURATION_MS = 1500; // Match full swing bar duration visually
 
 // --- Ball Position State ---
@@ -221,8 +222,10 @@ export function createClubButtons() {
     }
 }
 
-export function setupBackswingBar() {
-    const idealPercent = (IDEAL_BACKSWING_DURATION_MS / BACKSWING_BAR_MAX_DURATION_MS) * 100;
+export function setupBackswingBar(shotType = 'full') {
+    // Use appropriate max duration based on shot type
+    const baseDuration = (shotType === 'chip' || shotType === 'putt') ? BACKSWING_BAR_MAX_DURATION_CHIP_PUTT_MS : BACKSWING_BAR_MAX_DURATION_MS;
+    const idealPercent = (IDEAL_BACKSWING_DURATION_MS / baseDuration) * 100;
     idealBackswingMarker.style.left = `${idealPercent}%`;
 }
 
@@ -245,13 +248,15 @@ export function setupTimingBarWindows(swingSpeed) {
 
 }
 
-export function updateBackswingBar(elapsedTime, swingSpeed) {
-    const effectiveBackswingDuration = BACKSWING_BAR_MAX_DURATION_MS / swingSpeed;
+export function updateBackswingBar(elapsedTime, swingSpeed, shotType = 'full') {
+    // Use longer duration for chip/putt (2000ms) to make timing easier
+    const baseDuration = (shotType === 'chip' || shotType === 'putt') ? BACKSWING_BAR_MAX_DURATION_CHIP_PUTT_MS : BACKSWING_BAR_MAX_DURATION_MS;
+    const effectiveBackswingDuration = baseDuration / swingSpeed;
     const progressPercent = Math.min(100, (elapsedTime / effectiveBackswingDuration) * 100);
     progressBackswing.style.width = `${progressPercent}%`;
 
     const idealDurationAdjusted = IDEAL_BACKSWING_DURATION_MS / swingSpeed;
-    const maxDurationAdjusted = BACKSWING_BAR_MAX_DURATION_MS / swingSpeed;
+    const maxDurationAdjusted = baseDuration / swingSpeed;
 
     if (elapsedTime > maxDurationAdjusted) {
         progressBackswing.style.backgroundColor = '#FFA500'; // Orange (was Red #dc3545)
@@ -725,10 +730,11 @@ export function updateTimingBarVisibility(shotType) { // Consider renaming later
 }
 
 // New function specifically for updating the putt downswing timing bar (e.g., progressD)
-// The visual fill rate is constant, based on BACKSWING_BAR_MAX_DURATION_MS.
+// The visual fill rate is constant at 2000ms (matches physics PUTT_VISUAL_DURATION_MS).
 export function updatePuttTimingBar(elapsedTime) {
-    // Use the fixed max duration for consistent visual fill speed
-    const progressPercent = Math.min(100, (elapsedTime / BACKSWING_BAR_MAX_DURATION_MS) * 100);
+    // Use 2000ms duration for easier timing (matches backswing bar duration for consistency)
+    const PUTT_DOWNSWING_DURATION_MS = 2000;
+    const progressPercent = Math.min(100, (elapsedTime / PUTT_DOWNSWING_DURATION_MS) * 100);
     // Update only the bar designated for putt downswing (progressD)
     progressD.style.width = `${progressPercent}%`;
     return progressPercent;
@@ -749,6 +755,81 @@ export function setSelectedClubButton(clubKey) {
         }
     } else {
         console.warn("UI: Club buttons container not found, couldn't set selected club.");
+    }
+}
+
+// Function to clear club selection
+export function clearClubSelection() {
+    if (selectedClubButton) {
+        selectedClubButton.classList.remove('selected');
+        selectedClubButton = null;
+    }
+
+    // Update fullscreen club display
+    const fsClubValue = document.getElementById('fs-club-value');
+    if (fsClubValue) {
+        fsClubValue.textContent = 'Select Club';
+    }
+
+    // Clear any fullscreen club button selections
+    const fsClubGrid = document.getElementById('fs-club-grid');
+    if (fsClubGrid) {
+        fsClubGrid.querySelectorAll('.fs-club-btn').forEach(btn => btn.classList.remove('selected'));
+    }
+}
+
+// Function to hide/show controls based on shot type
+export function setPutterControlsVisibility(isPutter) {
+    // Hide shot type selector when putter is selected
+    const shotTypeContainer = document.querySelector('.shot-type-selector');
+    if (shotTypeContainer) {
+        shotTypeContainer.style.display = isPutter ? 'none' : '';
+    }
+
+    // Hide swing speed slider when putter is selected
+    const swingSpeedContainer = document.querySelector('#swing-speed-slider')?.parentElement;
+    if (swingSpeedContainer) {
+        swingSpeedContainer.style.display = isPutter ? 'none' : '';
+    }
+
+    // Hide ball position control when putter is selected
+    if (ballPositionControl) {
+        ballPositionControl.style.display = isPutter ? 'none' : '';
+    }
+
+    // Hide fullscreen shot type button when putter is selected
+    const fsShotTypeBtn = document.getElementById('fs-shot-type-btn');
+    if (fsShotTypeBtn) {
+        fsShotTypeBtn.style.display = isPutter ? 'none' : '';
+    }
+
+    // Hide fullscreen power button when putter is selected
+    const fsPowerBtn = document.getElementById('fs-power-btn');
+    if (fsPowerBtn) {
+        fsPowerBtn.style.display = isPutter ? 'none' : '';
+    }
+
+    // Hide fullscreen stance button when putter is selected
+    const fsStanceBtn = document.getElementById('fs-stance-btn');
+    if (fsStanceBtn) {
+        fsStanceBtn.style.display = isPutter ? 'none' : '';
+    }
+}
+
+// Function to update control visibility based on shot type
+export function updateControlsForShotType(shotType) {
+    const isChipOrPutt = (shotType === 'chip' || shotType === 'putt');
+
+    // Hide swing speed slider for chip and putt
+    const swingSpeedContainer = document.querySelector('#swing-speed-slider')?.parentElement;
+    if (swingSpeedContainer) {
+        swingSpeedContainer.style.display = isChipOrPutt ? 'none' : '';
+    }
+
+    // Hide fullscreen power button for chip and putt
+    const fsPowerBtn = document.getElementById('fs-power-btn');
+    if (fsPowerBtn) {
+        fsPowerBtn.style.display = isChipOrPutt ? 'none' : '';
     }
 }
 

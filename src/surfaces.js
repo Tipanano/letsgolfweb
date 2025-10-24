@@ -28,7 +28,7 @@ export const SURFACES = {
     },
     height: 0.02, // Visual height
     texturePath: 'assets/textures/green.png', // Added texture path
-    ballLieOffset: 0 // On top
+    ballLieOffset: 0.12 // On top
   },
   FAIRWAY: {
     name: 'Fairway',

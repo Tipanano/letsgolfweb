@@ -6,9 +6,9 @@
  */
 
 // --- Tunable Putt Parameters ---
-const MAX_PUTT_BACKSWING_MS = 1500; // Max backswing duration contributing to putt power
+const MAX_PUTT_BACKSWING_MS = 2000; // Max backswing duration contributing to putt power (matches UI bar duration)
 const PUTT_POWER_FACTOR = 0.015;    // Ball speed (mph?) per ms of backswing (needs tuning)
-const PUTT_VISUAL_DURATION_MS = 1500; // Fixed visual duration for putt downswing bar
+const PUTT_VISUAL_DURATION_MS = 2000; // Fixed visual duration for putt downswing bar (increased for easier timing)
 const PUTT_IDEAL_TIMING_PERCENT = 0.825; // Ideal timing as percentage of visual duration (82.5% = middle of 70-95% zone)
 // Vertical launch angle is fixed at 0 for putts
 // Timing Parameters (relative to downswing start, which is 'w' release)
@@ -45,6 +45,14 @@ export function calculatePuttImpact(backswingDuration, hitOffset) {
     // Ideal timing is at a fixed percentage of the visual bar duration (matches colored zone)
     const idealHitOffset = PUTT_VISUAL_DURATION_MS * PUTT_IDEAL_TIMING_PERCENT; // ~1237ms for 82.5%
     const hitDeviation = effectiveHitOffset - idealHitOffset;
+
+    console.log('\n⛳ PUTT CALCULATION');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log(`⏱️  Timing:`);
+    console.log(`   Backswing Duration: ${backswingDuration?.toFixed(0) || 'N/A'} ms`);
+    console.log(`   Hit Offset ('i'): ${hitOffset?.toFixed(0) || 'MISSED'} ms`);
+    console.log(`   Ideal Hit Offset: ${idealHitOffset.toFixed(0)} ms (${(PUTT_IDEAL_TIMING_PERCENT * 100).toFixed(1)}% of ${PUTT_VISUAL_DURATION_MS}ms bar)`);
+    console.log(`   Hit Deviation: ${hitDeviation.toFixed(0)} ms ${hitDeviation > 0 ? '(LATE ⏩)' : hitDeviation < 0 ? '(EARLY ⏪)' : '(PERFECT ✓)'}`);
 
     // 1. Calculate Base Power/Speed from Backswing Duration
     // Use non-linear curve: short putts easier to control, long putts harder
@@ -83,6 +91,14 @@ export function calculatePuttImpact(backswingDuration, hitOffset) {
     // 5. Calculate Spin (Minimal for putts)
     let backSpin = 50 + actualBallSpeed * 5; // Very low backspin, slightly speed dependent
     let sideSpin = 0; // Assume no side spin imparted by putter face directly (handled by horizontal angle)
+
+    console.log(`\n📊 Results:`);
+    console.log(`   Strike Quality: ${strikeQuality}`);
+    console.log(`   Power: ${(powerPercent * 100).toFixed(1)}% (backswing: ${(backswingPercent * 100).toFixed(1)}% of max)`);
+    console.log(`   Ball Speed: ${actualBallSpeed.toFixed(1)} mph`);
+    console.log(`   Horizontal Angle: ${horizontalLaunchAngle.toFixed(2)}° ${horizontalLaunchAngle > 0 ? '(PUSH →)' : horizontalLaunchAngle < 0 ? '(PULL ←)' : '(STRAIGHT)'}`);
+    console.log(`   Backspin: ${backSpin.toFixed(0)} rpm (minimal)`);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
     // --- Assemble Result Object ---
     const impactResult = {

@@ -1,5 +1,5 @@
 import { clubs } from '../clubs.js';
-import { setupTimingBarWindows, setBallPosition, getBallPositionLevels, setSwingSpeedControlState, updateTimingBarVisibility, setSelectedClubButton, setShotTypeRadio } from '../ui.js'; // Added setShotTypeRadio
+import { setupTimingBarWindows, setBallPosition, getBallPositionLevels, setSwingSpeedControlState, updateTimingBarVisibility, setSelectedClubButton, setShotTypeRadio, setPutterControlsVisibility, updateControlsForShotType, setupBackswingBar } from '../ui.js'; // Added setShotTypeRadio
 // Import resetStaticCameraZoom along with other camera functions if needed, or just visuals module
 import { resetStaticCameraZoom } from '../visuals/core.js'; // Import the new zoom reset function
 import * as visuals from '../visuals.js'; // Import visuals main module
@@ -178,10 +178,20 @@ export function setSwingSpeed(percentage) {
 }
 
 export function setSelectedClub(clubKey) {
+    if (!clubKey) {
+        selectedClub = null;
+        setPutterControlsVisibility(false); // Show all controls when no club selected
+        return;
+    }
+
     selectedClub = clubs[clubKey];
+    const isPutter = (clubKey === 'PT');
+
+    // Hide/show controls based on whether putter is selected
+    setPutterControlsVisibility(isPutter);
 
     // Auto-set shot type based on club selection
-    if (clubKey === 'PT') {
+    if (isPutter) {
         if (currentShotType !== 'putt') {
             setShotType('putt'); // This will also call setSelectedClubButton('PT')
         }
@@ -202,6 +212,12 @@ export function setSelectedClub(clubKey) {
     }
 }
 
+// Function to clear club selection
+export function clearSelectedClub() {
+    selectedClub = null;
+    setPutterControlsVisibility(false); // Show all controls when club is cleared
+}
+
 // New function to set the shot type
 export function setShotType(type) {
     if (currentShotType === type) return; // No change
@@ -214,6 +230,12 @@ export function setShotType(type) {
 
     // Update visibility of timing bars based on shot type
     updateTimingBarVisibility(type);
+
+    // Update control visibility for chip/putt (hide power slider)
+    updateControlsForShotType(type);
+
+    // Update backswing bar ideal marker position based on shot type (chip/putt have longer bar)
+    setupBackswingBar(type);
 
     // Update club selection for putt and UI radio buttons
     setShotTypeRadio(type); // Update UI radio buttons

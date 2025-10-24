@@ -29,10 +29,13 @@ function updateBackswingBarAnimation(timestamp) {
     const speed = getSwingSpeed();
     // Use current swingSpeed for full, assume 1.0 for chip/putt? Or pass explicitly?
     const speedForBar = (shotType === 'full') ? speed : 1.0;
-    updateBackswingBar(elapsedTime, speedForBar); // Call UI update function
+    updateBackswingBar(elapsedTime, speedForBar, shotType); // Call UI update function with shot type
 
     // Update swing arc visualizer
-    const maxDuration = BACKSWING_BAR_MAX_DURATION_MS / speedForBar;
+    // Use different max duration for chip/putt (2000ms) vs full swing (1500ms)
+    const CHIP_PUTT_MAX_DURATION = 2000;
+    const baseDuration = (shotType === 'chip' || shotType === 'putt') ? CHIP_PUTT_MAX_DURATION : BACKSWING_BAR_MAX_DURATION_MS;
+    const maxDuration = baseDuration / speedForBar;
     const progress = Math.min(1.0, elapsedTime / maxDuration);
     const idealDuration = 1000 / speedForBar; // Ideal backswing duration
     const isIdeal = elapsedTime <= idealDuration;

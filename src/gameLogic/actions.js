@@ -1,11 +1,11 @@
 import {
     getGameState, getCurrentShotType, getHipInitiationTime, getRotationInitiationTime,
     getArmsStartTime, getWristsStartTime, getRotationStartTime, getChipRotationStartTime,
-    getChipWristsStartTime, getPuttHitTime, getBackswingDuration,
+    getChipWristsStartTime, getPuttHitTime, getBackswingDuration, getSelectedClub,
     setGameState, setBackswingStartTime, setBackswingEndTime, setRotationInitiationTime,
     setHipInitiationTime, setDownswingPhaseStartTime, setArmsStartTime, setWristsStartTime,
     setRotationStartTime, setChipRotationStartTime, setChipWristsStartTime, setPuttHitTime,
-    resetSwingState, resetSwingVariablesOnly, setShotDirectionAngle // Import both reset functions and angle setter
+    resetSwingState, resetSwingVariablesOnly, setShotDirectionAngle, clearSelectedClub, setSelectedClub // Import both reset functions and angle setter
 } from './state.js';
 import {
     startBackswingAnimation, stopBackswingAnimation, startFullDownswingAnimation,
@@ -13,7 +13,7 @@ import {
     stopPuttDownswingAnimation, stopAllAnimations // Import animation controls
 } from './animations.js';
 import {
-    updateStatus, resetUIForNewShot, updateDebugTimingInfo // Import UI functions (resetUIForNewShot is already imported)
+    updateStatus, resetUIForNewShot, updateDebugTimingInfo, clearClubSelection, setSelectedClubButton // Import UI functions (resetUIForNewShot is already imported)
 } from '../ui.js';
 // Import calculation functions directly
 import { calculateFullSwingShot, calculateChipShot, calculatePuttShot } from './calculations.js';
@@ -47,6 +47,13 @@ puttShotSound.preload = 'auto'; // Preload the sound
 
 export function startBackswing() {
     if (getGameState() !== 'ready') return;
+
+    // Check if a club is selected
+    const selectedClub = getSelectedClub();
+    if (!selectedClub) {
+        updateStatus('Select a club first!');
+        return;
+    }
 
     // Block second shot in multiplayer CTF mode
     if (multiplayerManager.hasLocalPlayerShot()) {
@@ -297,13 +304,24 @@ export function prepareNextShot() {
             const surface = getSurfaceTypeAtPoint({ x: ballPos.x, z: ballPos.z }, layout);
             isBunker = (surface === 'BUNKER');
             isOnGreen = (surface === 'GREEN' && !isBunker); // Only on green if not also in a bunker for this logic
-            
+
             setFlagstickVisibility(!isOnGreen); // Hide if on green (and not bunker), show otherwise
         } else {
             setFlagstickVisibility(true); // Default to visible if info missing
         }
         // Set ball scale based on whether it's on the green (and not a bunker for this specific scaling logic)
         setBallScale(!isOnGreen); // Use enlarged scale if NOT on green (or if in a bunker on the green)
+
+        // --- Auto-select Putter on Green, Clear Club Otherwise ---
+        if (isOnGreen) {
+            // Auto-select putter when on the green
+            setSelectedClub('PT');
+            setSelectedClubButton('PT');
+        } else {
+            // Clear club selection - player must choose club for each shot
+            clearSelectedClub(); // Clear from game state
+            clearClubSelection(); // Clear from UI
+        }
 
         // --- Set Default Aim Angle ---
         let angleDeg = 0; // Initialize angleDeg

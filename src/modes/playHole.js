@@ -70,19 +70,16 @@ export async function initializeMode(holeName) { // Made async, added holeName p
                 if (swingSpeedValue) swingSpeedValue.textContent = defaultSwingSpeed;
             }
 
-            // Set club based on par: Driver for par 4/5, 7-iron for par 3
-            const par = currentHoleLayout.par || 4;
-            const clubToSelect = (par >= 4) ? 'DR' : 'I7';
-            setSelectedClub(clubToSelect);
-            ui.setSelectedClubButton(clubToSelect);
-            console.log(`Par ${par} hole detected, setting club to ${clubToSelect}`);
+            // Clear club selection - player must choose for first shot
+            const { clearSelectedClub } = await import('../gameLogic/state.js');
+            clearSelectedClub();
+            ui.clearClubSelection();
 
-            // Reset ball position to club's default
-            const { clubs } = await import('../clubs.js');
-            const selectedClubData = clubs[clubToSelect];
-            if (selectedClubData && selectedClubData.defaultBallPositionIndex !== undefined) {
-                ui.setBallPosition(selectedClubData.defaultBallPositionIndex);
-            }
+            // Reset ball position to center (default stance)
+            const centerBallPosition = Math.floor(ui.getBallPositionLevels() / 2);
+            ui.setBallPosition(centerBallPosition);
+
+            console.log('New hole - defaults set: power 90%, stance center, club selection cleared');
 
             // Use the exact same flow as normal hole loading (lines 292-334)
             visuals.drawHole(currentHoleLayout);
