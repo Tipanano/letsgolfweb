@@ -1,6 +1,6 @@
 // src/gameLogic/persistentGameState.js
 
-const PLAY_HOLE_STORAGE_KEY = 'letsgolf_playHoleState';
+const PLAY_HOLE_STORAGE_KEY = 'golfishard_playHoleState';
 
 // Default structure for the persistent game state
 const getDefaultState = () => ({

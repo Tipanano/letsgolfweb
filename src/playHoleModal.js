@@ -18,6 +18,9 @@ const tabContents = {
     community: document.getElementById('tab-content-community'),
     yours: document.getElementById('tab-content-yours')
 };
+const officialHolesLoading = document.getElementById('official-holes-loading');
+const officialHolesList = document.getElementById('official-holes-list');
+const officialHolesEmpty = document.getElementById('official-holes-empty');
 const yourHolesLoading = document.getElementById('your-holes-loading');
 const yourHolesList = document.getElementById('your-holes-list');
 const yourHolesEmpty = document.getElementById('your-holes-empty');
@@ -33,8 +36,10 @@ export function showModal(callback) {
     onHoleSelectedCallback = callback;
     modal.style.display = 'flex';
 
-    // If user tab is selected, load holes
-    if (currentTab === 'yours') {
+    // Load holes for the current tab
+    if (currentTab === 'official') {
+        loadOfficialHoles();
+    } else if (currentTab === 'yours') {
         loadUserHoles();
     }
 }
@@ -72,9 +77,45 @@ function switchTab(tabName) {
         tabContents[key].style.display = (key === tabName) ? 'block' : 'none';
     });
 
-    // Load data for "Your Holes" tab
-    if (tabName === 'yours') {
+    // Load data for tabs
+    if (tabName === 'official') {
+        loadOfficialHoles();
+    } else if (tabName === 'yours') {
         loadUserHoles();
+    }
+}
+
+/**
+ * Load official holes from the server
+ */
+async function loadOfficialHoles() {
+    // Show loading state
+    officialHolesLoading.style.display = 'block';
+    officialHolesList.style.display = 'none';
+    officialHolesEmpty.style.display = 'none';
+
+    try {
+        const holes = await courseManager.listOfficialHoles();
+
+        if (holes && holes.length > 0) {
+            // Display holes
+            officialHolesList.innerHTML = '';
+            holes.forEach(hole => {
+                const holeItem = createOfficialHoleListItem(hole);
+                officialHolesList.appendChild(holeItem);
+            });
+            officialHolesLoading.style.display = 'none';
+            officialHolesList.style.display = 'block';
+        } else {
+            // No holes found
+            officialHolesLoading.style.display = 'none';
+            officialHolesEmpty.style.display = 'block';
+        }
+    } catch (error) {
+        console.error('Error loading official holes:', error);
+        officialHolesLoading.style.display = 'none';
+        officialHolesList.innerHTML = '<p style="color: #f44336; text-align: center; padding: 20px;">Error loading holes. Please try again.</p>';
+        officialHolesList.style.display = 'block';
     }
 }
 
@@ -110,6 +151,61 @@ async function loadUserHoles() {
         yourHolesList.innerHTML = '<p style="color: #f44336; text-align: center; padding: 20px;">Error loading holes. Please try again.</p>';
         yourHolesList.style.display = 'block';
     }
+}
+
+/**
+ * Create a list item for an official hole
+ */
+function createOfficialHoleListItem(hole) {
+    const div = document.createElement('div');
+    div.style.cssText = 'background: #f5f5f5; border: 2px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 12px; cursor: pointer; transition: all 0.2s;';
+
+    // Add hover effect
+    div.addEventListener('mouseenter', () => {
+        div.style.background = '#e8f5e9';
+        div.style.borderColor = '#4CAF50';
+    });
+    div.addEventListener('mouseleave', () => {
+        div.style.background = '#f5f5f5';
+        div.style.borderColor = '#e0e0e0';
+    });
+
+    // Hole info
+    const name = document.createElement('div');
+    name.style.cssText = 'font-weight: bold; font-size: 1.1em; margin-bottom: 5px; color: #333;';
+    name.textContent = hole.name || 'Unnamed Hole';
+
+    const details = document.createElement('div');
+    details.style.cssText = 'font-size: 0.9em; color: #666; margin-bottom: 3px;';
+    const distance = hole.lengthMeters ? `${Math.round(hole.lengthMeters)}m` : 'N/A';
+    details.textContent = `Par ${hole.par || 'N/A'} • ${distance}`;
+
+    const creator = document.createElement('div');
+    creator.style.cssText = 'font-size: 0.8em; color: #999;';
+    creator.textContent = `By ${hole.createdBy || 'Unknown'}`;
+
+    div.appendChild(name);
+    div.appendChild(details);
+    div.appendChild(creator);
+
+    // Click handler
+    div.addEventListener('click', async () => {
+        if (onHoleSelectedCallback) {
+            try {
+                // Load the full hole data
+                const fullHole = await courseManager.loadOfficialHole(hole.holeId);
+                // Store hole data in localStorage for playHole mode to pick up
+                localStorage.setItem('previewHoleData', JSON.stringify(fullHole.holeData));
+                onHoleSelectedCallback(fullHole.holeData);
+                hideModal();
+            } catch (error) {
+                console.error('Error loading official hole:', error);
+                alert(`Error loading hole: ${error.message}`);
+            }
+        }
+    });
+
+    return div;
 }
 
 /**

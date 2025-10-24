@@ -202,13 +202,22 @@ async function submitUsername() {
 async function handleLoginSuccess(data) {
     statusMessage.textContent = '✅ Success! Logging in...';
 
+    // Log user ID for admin setup
+    console.log('='.repeat(60));
+    console.log('🔑 USER ID (for admin setup):');
+    console.log(data.user_id);
+    console.log('='.repeat(60));
+    console.log('Add this to your .env file: ADMIN_USER_IDS=' + data.user_id);
+    console.log('='.repeat(60));
+
     // Upgrade player to registered
     await playerManager.upgradeToRegistered(
         data.username,
         data.nano_address,
         data.session_token,
         data.linked_addresses || [data.nano_address], // Pass linked addresses or fallback to primary
-        data.user_id // UUID from server
+        data.user_id, // UUID from server
+        data.is_admin || false // Admin flag from server
     );
 
     // Update UI

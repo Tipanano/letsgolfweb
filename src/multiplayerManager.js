@@ -1090,11 +1090,11 @@ function saveActiveGameSession() {
         wagerAmount,
         savedAt: Date.now()
     };
-    localStorage.setItem('letsgolf_activeGame', JSON.stringify(sessionData));
+    localStorage.setItem('golfishard_activeGame', JSON.stringify(sessionData));
 }
 
 function loadActiveGameSession() {
-    const stored = localStorage.getItem('letsgolf_activeGame');
+    const stored = localStorage.getItem('golfishard_activeGame');
     if (!stored) return null;
 
     try {
@@ -1112,7 +1112,7 @@ function loadActiveGameSession() {
 }
 
 function clearActiveGameSession() {
-    localStorage.removeItem('letsgolf_activeGame');
+    localStorage.removeItem('golfishard_activeGame');
 }
 
 function resetState() {

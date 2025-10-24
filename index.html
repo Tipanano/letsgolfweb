@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Let's Golf!</title>
+    <title>Golf Is Hard</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h1>Let's Golf!</h1>
+    <h1>Golf Is Hard</h1>
 
     <!-- Main Menu -->
     <div id="main-menu">
@@ -389,7 +389,17 @@
 
             <!-- Tab Content -->
             <div id="tab-content-official" class="tab-content" style="display: block; min-height: 200px;">
-                <p style="color: #666; text-align: center; padding: 60px 20px; font-size: 1.1em;">🏗️ Coming Soon</p>
+                <div id="official-holes-loading" style="text-align: center; padding: 40px 20px; color: #666;">
+                    <div style="font-size: 1.1em; margin-bottom: 10px;">Loading official holes...</div>
+                    <div style="font-size: 0.9em; color: #999;">Please wait</div>
+                </div>
+                <div id="official-holes-list" style="display: none; max-height: 400px; overflow-y: auto;">
+                    <!-- Official holes will be listed here -->
+                </div>
+                <div id="official-holes-empty" style="display: none; text-align: center; padding: 60px 20px; color: #666;">
+                    <p style="font-size: 1.1em; margin-bottom: 10px;">No official holes yet!</p>
+                    <p style="font-size: 0.9em; color: #999;">Check back soon.</p>
+                </div>
             </div>
 
             <div id="tab-content-community" class="tab-content" style="display: none; min-height: 200px;">

@@ -1920,13 +1920,45 @@ const holeMaker = {
     // Cloud Save/Load Functions (using courseManager module)
     async updateAuthStatus() {
         const statusDiv = document.getElementById('authStatus');
+        const saveOfficialBtn = document.getElementById('saveOfficialBtn');
 
         if (courseManager.isAuthenticated()) {
-            statusDiv.textContent = `Signed in as: ${courseManager.getUsername()}`;
+            const username = courseManager.getUsername();
+            const isAdmin = courseManager.isAdmin();
+
+            // Debug: Check localStorage
+            const playerData = localStorage.getItem('golfGamePlayer');
+            console.log('='.repeat(60));
+            console.log('🔍 HOLEMAKER AUTH DEBUG:');
+            console.log('Username:', username);
+            console.log('isAdmin() returns:', isAdmin);
+            console.log('localStorage data:', playerData ? JSON.parse(playerData) : 'null');
+            console.log('='.repeat(60));
+
+            // Display username with (Admin) suffix if admin
+            const displayText = isAdmin ? `${username} (Admin)` : username;
+            statusDiv.textContent = `Signed in as: ${displayText}`;
             statusDiv.style.color = '#2ecc71';
+
+            // Log admin status for debugging
+            if (isAdmin) {
+                console.log('='.repeat(60));
+                console.log('✅ ADMIN ACCESS ENABLED');
+                console.log('User:', username);
+                console.log('='.repeat(60));
+            }
+
+            // Show "Save as Official" button only for admins
+            if (isAdmin) {
+                saveOfficialBtn.style.display = 'block';
+            } else {
+                saveOfficialBtn.style.display = 'none';
+                console.log('ℹ️ Not an admin - "Save as Official Hole" button hidden');
+            }
         } else {
             statusDiv.textContent = 'Not signed in';
             statusDiv.style.color = '#95a5a6';
+            saveOfficialBtn.style.display = 'none';
         }
     },
 
@@ -2040,6 +2072,39 @@ const holeMaker = {
             console.error('Error deleting hole:', error);
             alert(`❌ Error deleting hole: ${error.message}`);
         }
+    },
+
+    async saveAsOfficialHole() {
+        if (!courseManager.isAdmin()) {
+            alert('Admin access required to save official holes.');
+            return;
+        }
+
+        if (!this.teeBox) {
+            alert('Cannot save: Hole must have a tee box');
+            return;
+        }
+
+        const green = this.shapes.find(s => s.type === 'green');
+        if (!green) {
+            alert('Cannot save: Hole must have a green');
+            return;
+        }
+
+        // Generate hole data
+        this.exportJSON();
+        const jsonText = document.getElementById('jsonOutput').value;
+        const holeData = JSON.parse(jsonText);
+
+        try {
+            const isUpdate = !!courseManager.currentOfficialHoleId;
+            const result = await courseManager.saveOfficialHole(holeData);
+            const action = isUpdate ? 'updated' : 'saved';
+            alert(`✅ Official hole "${holeData.name}" ${action} successfully!`);
+        } catch (error) {
+            console.error('Error saving official hole:', error);
+            alert(`❌ Error saving official hole: ${error.message}`);
+        }
     }
 };
 
@@ -2047,7 +2112,13 @@ const holeMaker = {
 window.holeMaker = holeMaker;
 
 // Initialize when page loads
-window.addEventListener('load', () => {
+window.addEventListener('load', async () => {
+    // Import playerManager to ensure auth state is fresh
+    const { playerManager } = await import('./src/playerManager.js');
+
+    // Re-verify auth with server to get latest admin status
+    await playerManager.init();
+
     holeMaker.init();
     holeMaker.updateAuthStatus();
 });

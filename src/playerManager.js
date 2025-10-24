@@ -20,15 +20,16 @@ class PlayerManager {
           // Token expired, downgrade to guest
           this.createGuestPlayer();
         } else {
-          // Verify with server that user still exists
+          // Restore registered player first
+          this.currentPlayer = stored;
+
+          // Verify with server that user still exists (and get fresh isAdmin status)
           const isValid = await this.verifySessionWithServer(stored.sessionToken);
-          if (isValid) {
-            // Restore registered player
-            this.currentPlayer = stored;
-          } else {
+          if (!isValid) {
             // Server doesn't recognize user (server restart), downgrade to guest
             this.createGuestPlayer();
           }
+          // Note: verifySessionWithServer updates currentPlayer.isAdmin internally
         }
       } else {
         // Guest player
@@ -73,7 +74,7 @@ class PlayerManager {
   /**
    * Upgrade guest to registered player (after Nano auth)
    */
-  async upgradeToRegistered(username, nanoAddress, sessionToken, linkedAddresses = null, userId = null) {
+  async upgradeToRegistered(username, nanoAddress, sessionToken, linkedAddresses = null, userId = null, isAdmin = false) {
     // Migrate guest stats to server
     const guestStats = this.currentPlayer.stats;
 
@@ -91,7 +92,8 @@ class PlayerManager {
       tokenExpiry: Date.now() + (7 * 24 * 60 * 60 * 1000), // 7 days
       stats: guestStats, // Keep local cache
       preferences: this.currentPlayer.preferences,
-      lastPlayed: Date.now()
+      lastPlayed: Date.now(),
+      isAdmin: isAdmin
     };
 
     this.saveToLocalStorage();
@@ -216,6 +218,21 @@ class PlayerManager {
       });
 
       if (response.ok) {
+        const userData = await response.json();
+
+        // Log user ID for admin setup
+        console.log('='.repeat(60));
+        console.log('🔑 USER ID (for admin setup):');
+        console.log(userData.userId);
+        console.log('='.repeat(60));
+        console.log('Add this to your .env file: ADMIN_USER_IDS=' + userData.userId);
+        console.log('='.repeat(60));
+
+        // Update current player with latest data from server (including isAdmin)
+        if (this.currentPlayer) {
+          this.currentPlayer.isAdmin = userData.isAdmin || false;
+          this.saveToLocalStorage();
+        }
         return true; // User exists on server
       } else {
         return false; // User not found or token invalid
