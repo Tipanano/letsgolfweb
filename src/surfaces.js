@@ -12,6 +12,11 @@ export const SURFACES = {
       launchAngleChange: 0,
       velocityReduction: 0.00
     },
+    // Strike quality factors (for chips/pitches) - 1.0 = baseline (fairway)
+    strikeFactors: {
+      fatForgiveness: 1.0, // Same as fairway
+      thinForgiveness: 1.0  // Same as fairway
+    },
     height: 0.03, // Visual height
     ballLieOffset: 0.16 // Same as fairway - ball sits slightly into grass (then tee height is added)
   },
@@ -25,6 +30,11 @@ export const SURFACES = {
       spinReduction: 0.05,
       launchAngleChange: 0,
       velocityReduction: 0.02
+    },
+    // Strike quality factors (for chips/pitches) - 1.0 = baseline (fairway)
+    strikeFactors: {
+      fatForgiveness: 0.6, // Very tight lie - less forgiving of fat
+      thinForgiveness: 0.7  // Very tight lie - easier to thin
     },
     height: 0.02, // Visual height
     texturePath: 'assets/textures/green.png', // Added texture path
@@ -41,6 +51,11 @@ export const SURFACES = {
       launchAngleChange: 0,
       velocityReduction: 0.05
     },
+    // Strike quality factors (for chips/pitches) - 1.0 = baseline (fairway)
+    strikeFactors: {
+      fatForgiveness: 1.0, // Baseline
+      thinForgiveness: 1.0  // Baseline
+    },
     height: 0.01, // Visual height
     texturePath: 'assets/textures/fairway.png', // Added texture path
     ballLieOffset: 0.11 // Ball sits slightly into the grass
@@ -55,6 +70,11 @@ export const SURFACES = {
       spinReduction: [0.05, 0.1], // Range for spin reduction
       launchAngleChange: 0.5, // Slight increase in launch angle possible
       velocityReduction: [0.05, 0.15] // Range for velocity loss
+    },
+    // Strike quality factors (for chips/pitches) - 1.0 = baseline (fairway)
+    strikeFactors: {
+      fatForgiveness: 1.1, // Slightly more forgiving both ways - light grass cushions
+      thinForgiveness: 1.1  // Ball sits up a bit - easier to get under
     },
     height: 0.00, // Base rough height
     texturePath: 'assets/textures/rough.png', // Added texture path
@@ -71,6 +91,11 @@ export const SURFACES = {
       launchAngleChange: 1.0, // Can affect launch angle more
       velocityReduction: [0.10, 0.25] // Range for velocity loss
     },
+    // Strike quality factors (for chips/pitches) - 1.0 = baseline (fairway)
+    strikeFactors: {
+      fatForgiveness: 0.8, // Less forgiving of fat - grass grabs the club
+      thinForgiveness: 1.3  // Ball sits up more - easier to get under, harder to thin
+    },
     height: 0.00, // Visual height (same as light rough for now)
     texturePath: 'assets/textures/rough.png', // Added texture path
     ballLieOffset: -0.05 // Half hidden
@@ -85,6 +110,11 @@ export const SURFACES = {
       spinReduction: [0.20, 0.40], // Range for spin reduction
       launchAngleChange: 2.0, // Potential for significant launch angle change
       velocityReduction: [0.10, 0.40] // Range for velocity loss
+    },
+    // Strike quality factors (for chips/pitches) - 1.0 = baseline (fairway)
+    strikeFactors: {
+      fatForgiveness: 0.6, // Much less forgiving of fat - thick grass grabs/stops club
+      thinForgiveness: 1.5  // Ball sits well up - much easier to get under, harder to thin
     },
     height: 0.00, // Visual height (same as medium rough for now)
     texturePath: 'assets/textures/rough.png', // Added texture path
@@ -101,6 +131,11 @@ export const SURFACES = {
       launchAngleChange: 1.5, // Tends to increase launch angle
       velocityReduction: [0.25, 0.45] // Range for velocity loss
     },
+    // Strike quality factors (for chips/pitches) - 1.0 = baseline (fairway)
+    strikeFactors: {
+      fatForgiveness: 2.5, // Very forgiving of fat - sand designed for club to slide through
+      thinForgiveness: 0.8  // Less forgiving of thin - ball sits down, easier to blade
+    },
     height: 0.04, // Visual height (highest)
     texturePath: 'assets/textures/bunker.png', // Added texture path
     ballLieOffset: 0.08 // Slightly into
@@ -115,6 +150,11 @@ export const SURFACES = {
       launchAngleChange: 0, // Not applicable if ball is submerged
       velocityReduction: 1.0 // Stops the ball
     },
+    // Strike quality factors (for chips/pitches) - N/A for water
+    strikeFactors: {
+      fatForgiveness: 1.0,
+      thinForgiveness: 1.0
+    },
     isPenalty: true, // Flag for penalty stroke/rules
     height: 0.005, // Visual height (above rough, below fairway)
     ballLieOffset: -1 // Submerged (special value)
@@ -128,6 +168,11 @@ export const SURFACES = {
       spinReduction: 0.9,
       launchAngleChange: 0,
       velocityReduction: 0.9 // Drastic velocity loss
+    },
+    // Strike quality factors (for chips/pitches) - N/A for OOB
+    strikeFactors: {
+      fatForgiveness: 1.0,
+      thinForgiveness: 1.0
     },
     isPenalty: true, // Flag for penalty stroke/rules
     height: -0.01, // Visual height (lowest)
