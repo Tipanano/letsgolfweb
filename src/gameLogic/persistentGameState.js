@@ -12,6 +12,8 @@ const getDefaultState = () => ({
     formerPosition: null, // { x, y, z } - previous ball position before last shot (for OOB handling)
     formerLie: null, // Previous lie before last shot (for OOB handling)
     holeLayoutData: null, // Will store the fully processed hole layout
+    isPracticeMode: true, // Practice mode = no handicap tracking (default true)
+    par: 4, // Par for current hole
     // Add any other relevant data to persist for playHole mode
 });
 

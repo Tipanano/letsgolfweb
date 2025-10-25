@@ -7,7 +7,9 @@ import * as inputHandler from './inputHandler.js'; // Import the new input handl
 import * as environment from './gameLogic/environment.js'; // Import environment simulation
 import * as closestToFlag from './modes/closestToFlag.js'; // Import the CTF mode logic
 import * as playHole from './modes/playHole.js'; // Import the Play Hole mode logic
+import { setIsPracticeMode, setCurrentPar, getIsPracticeMode, getCurrentPar, getHoleStarted, setHoleStarted, setPlayerHandicap, setPlayerHandicapStrokes } from './gameLogic/state.js'; // Import practice mode setters
 import { getRandomInRange } from './utils/gameUtils.js'; // Import getRandomInRange
+import { startHole, completeHole } from './network/apiClient.js'; // Import handicap API functions
 import { initMultiplayerUI } from './multiplayerTest.js'; // Import multiplayer test
 import { playerManager } from './playerManager.js'; // Import player manager
 import * as nanoAuth from './nanoAuth.js'; // Import Nano authentication
@@ -231,9 +233,21 @@ document.getElementById('mode-btn-closest')?.addEventListener('click', () => {
 });
 document.getElementById('mode-btn-hole')?.addEventListener('click', () => {
     // Show hole selection modal
-    playHoleModal.showModal((holeData) => {
+    playHoleModal.showModal((holeData, isPracticeMode) => {
         // Hole selected, start game
         ui.showGameView();
+
+        // Set practice mode and par from hole data
+        setIsPracticeMode(isPracticeMode !== undefined ? isPracticeMode : true);
+        if (holeData && holeData.par) {
+            setCurrentPar(holeData.par);
+        }
+
+        // Reset hole started flag for new hole
+        setHoleStarted(false);
+        setPlayerHandicap(null);
+        setPlayerHandicapStrokes(0);
+
         setGameMode(GAME_MODES.PLAY_HOLE);
     });
 });
@@ -365,10 +379,57 @@ function handleShotCompletion(shotData) {
         }
         // if (closestToFlag.isModeComplete()) modeHandledStatusUpdate = true; // Example if CTF sets a final status
     } else if (currentMode === GAME_MODES.PLAY_HOLE) {
+        // Call hole start API on first shot (non-practice mode only)
+        if (!getHoleStarted() && !getIsPracticeMode()) {
+            const authToken = playerManager.getAuthToken();
+            if (authToken) {
+                const par = getCurrentPar();
+                const holeId = `playhole_${Date.now()}`; // Generate unique hole ID
+
+                startHole(authToken, holeId, par, false)
+                    .then(response => {
+                        console.log('✅ Hole started, handicap received:', response);
+                        setHoleStarted(true);
+                        if (response.handicap !== null) {
+                            setPlayerHandicap(response.handicap);
+                            setPlayerHandicapStrokes(response.handicapStrokes);
+                            // Update UI to show handicap
+                            ui.updatePlayerHandicapDisplay(response.handicapDisplay, response.handicapStrokes);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('❌ Error starting hole:', error);
+                        setHoleStarted(true); // Still mark as started to avoid repeated calls
+                    });
+            }
+        }
+
         playHole.handleShotResult(shotData);
         // playHole.handleShotResult will call ui.updateStatus if the hole is completed.
         if (shotData.isHoledOut) {
             modeHandledStatusUpdate = true;
+
+            // Call hole completion API (non-practice mode only)
+            if (!getIsPracticeMode()) {
+                const authToken = playerManager.getAuthToken();
+                if (authToken) {
+                    const par = getCurrentPar();
+                    const grossScore = playHole.getCurrentStrokes();
+                    const holeId = `playhole_${Date.now()}`;
+                    const sessionId = 'solo_' + Date.now(); // Generate session ID for solo play
+
+                    completeHole(authToken, sessionId, grossScore, par, holeId)
+                        .then(response => {
+                            console.log('✅ Hole completed, handicap updated:', response);
+                            if (response.handicapUpdated) {
+                                console.log(`♿ Handicap: ${response.oldHandicap} → ${response.newHandicap}`);
+                            }
+                        })
+                        .catch(error => {
+                            console.error('❌ Error completing hole:', error);
+                        });
+                }
+            }
         }
     } else if (currentMode === GAME_MODES.RANGE) {
         // Update overlay specifically for range mode

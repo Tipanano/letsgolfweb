@@ -18,6 +18,11 @@ export let swingSpeed = 1.0; // Base speed factor (0.3 to 1.0) - Only for 'full'
 export let selectedClub = clubs['I7']; // Default club - Corrected key
 export let currentTargetLineAngle = 0; // Absolute angle (degrees) of the intended target line relative to Z-axis
 export let shotDirectionAngle = 0; // Angle in degrees RELATIVE to currentTargetLineAngle (player's fine-tuning adjustment)
+export let isPracticeMode = true; // Practice mode (no handicap tracking) - default true
+export let currentPar = 4; // Current hole's par value
+export let holeStarted = false; // Track if hole start API has been called
+export let playerHandicap = null; // Player's handicap from server
+export let playerHandicapStrokes = 0; // Handicap strokes for this hole
 
 // --- Environmental State ---
 export let temperature = 20; // Degrees Celsius (Can be updated per hole/round)
@@ -380,3 +385,30 @@ export const getShotDirectionAngle = () => shotDirectionAngle; // Gets the RELAT
 export const getCurrentTargetLineAngle = () => currentTargetLineAngle; // Gets the ABSOLUTE target line angle
 export const getTemperature = () => temperature;
 export const getWind = () => wind; // Gets the current wind object { speed, direction }
+export const getIsPracticeMode = () => isPracticeMode;
+export const getCurrentPar = () => currentPar;
+
+// Setters for practice mode and par
+export function setIsPracticeMode(mode) {
+    isPracticeMode = mode;
+}
+
+export function setCurrentPar(par) {
+    currentPar = par;
+}
+
+export function setHoleStarted(started) {
+    holeStarted = started;
+}
+
+export function setPlayerHandicap(handicap) {
+    playerHandicap = handicap;
+}
+
+export function setPlayerHandicapStrokes(strokes) {
+    playerHandicapStrokes = strokes;
+}
+
+export const getHoleStarted = () => holeStarted;
+export const getPlayerHandicap = () => playerHandicap;
+export const getPlayerHandicapStrokes = () => playerHandicapStrokes;

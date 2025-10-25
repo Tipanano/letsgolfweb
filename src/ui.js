@@ -1660,3 +1660,23 @@ export function updatePlayerDisplay(playerName, playerType = 'guest') {
         logoutBtn.style.display = playerType === 'registered' ? 'inline-block' : 'none';
     }
 }
+
+/**
+ * Update handicap display in Play Hole bottom-left overlay
+ * @param {string} handicapDisplay - Formatted handicap (e.g., "15.0", "+2.0")
+ * @param {number} handicapStrokes - Strokes for this hole
+ */
+export function updatePlayerHandicapDisplay(handicapDisplay, handicapStrokes) {
+    const handicapElement = document.getElementById('overlay-handicap');
+
+    if (!handicapElement) return;
+
+    if (handicapDisplay && handicapStrokes !== undefined) {
+        // Show handicap with strokes for this hole
+        handicapElement.textContent = `(${handicapDisplay} hc, ${handicapStrokes} ch)`;
+        handicapElement.style.display = 'inline';
+    } else {
+        // Hide handicap display
+        handicapElement.style.display = 'none';
+    }
+}

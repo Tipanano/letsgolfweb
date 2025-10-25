@@ -8,6 +8,7 @@ import { courseManager } from './courseManager.js';
 // DOM elements
 const modal = document.getElementById('play-hole-modal');
 const closeBtn = document.getElementById('close-play-hole-modal');
+const practiceModeToggle = document.getElementById('practice-mode-toggle');
 const tabButtons = {
     official: document.getElementById('tab-official'),
     community: document.getElementById('tab-community'),
@@ -196,7 +197,9 @@ function createOfficialHoleListItem(hole) {
                 const fullHole = await courseManager.loadOfficialHole(hole.holeId);
                 // Store hole data in localStorage for playHole mode to pick up
                 localStorage.setItem('previewHoleData', JSON.stringify(fullHole.holeData));
-                onHoleSelectedCallback(fullHole.holeData);
+                // Get practice mode setting
+                const isPracticeMode = practiceModeToggle ? practiceModeToggle.checked : true;
+                onHoleSelectedCallback(fullHole.holeData, isPracticeMode);
                 hideModal();
             } catch (error) {
                 console.error('Error loading official hole:', error);
@@ -251,7 +254,9 @@ function createHoleListItem(hole) {
                 const fullHole = await courseManager.loadHole(hole.holeId);
                 // Store hole data in localStorage for playHole mode to pick up
                 localStorage.setItem('previewHoleData', JSON.stringify(fullHole.holeData));
-                onHoleSelectedCallback(fullHole.holeData);
+                // Get practice mode setting
+                const isPracticeMode = practiceModeToggle ? practiceModeToggle.checked : true;
+                onHoleSelectedCallback(fullHole.holeData, isPracticeMode);
                 hideModal();
             } catch (error) {
                 console.error('Error loading hole:', error);

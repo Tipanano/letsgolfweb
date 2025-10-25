@@ -338,6 +338,10 @@ export function getDisplayShotNumber() {
     return shotsTaken + 1;
 }
 
+export function getCurrentStrokes() {
+    return shotsTaken;
+}
+
 export function getFormerBallPosition() {
     return formerBallPosition ? { ...formerBallPosition } : null;
 }

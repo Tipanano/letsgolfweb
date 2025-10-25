@@ -115,4 +115,59 @@ export async function leaveGame(authToken, sessionId) {
     return fetchWithAuth('/game/leave', 'POST', { sessionId }, authToken);
 }
 
+/**
+ * Records hole start and gets player's handicap from server
+ * Called when first ball is struck (not when hole is selected)
+ * @param {string} authToken - The auth token
+ * @param {string} holeId - Identifier for the hole being played
+ * @param {number} par - Par for the hole
+ * @param {boolean} isPracticeMode - Whether this is practice mode
+ * @returns {Promise<object>} Server response with handicap, handicapStrokes, etc.
+ */
+export async function startHole(authToken, holeId, par, isPracticeMode) {
+    return fetchWithAuth('/game/hole/start', 'POST', { holeId, par, isPracticeMode }, authToken);
+}
+
+/**
+ * Records hole completion and updates handicap
+ * Called when player holes out (non-practice mode only)
+ * @param {string} authToken - The auth token
+ * @param {string} sessionId - The game session ID
+ * @param {number} grossScore - Actual strokes taken
+ * @param {number} par - Par for the hole
+ * @param {string} holeId - Identifier for the hole
+ * @returns {Promise<object>} Server response with handicap update info
+ */
+export async function completeHole(authToken, sessionId, grossScore, par, holeId) {
+    return fetchWithAuth(`/game/${sessionId}/hole/complete`, 'POST', { grossScore, par, holeId }, authToken);
+}
+
+/**
+ * Gets player's current handicap
+ * @param {string} authToken - The auth token
+ * @returns {Promise<object>} Server response with handicap info
+ */
+export async function getPlayerHandicap(authToken) {
+    return fetchWithAuth('/player/handicap', 'GET', null, authToken);
+}
+
+/**
+ * Gets player's handicap history
+ * @param {string} authToken - The auth token
+ * @param {number} limit - Number of records to return (default 20)
+ * @returns {Promise<object>} Server response with handicap history
+ */
+export async function getHandicapHistory(authToken, limit = 20) {
+    return fetchWithAuth(`/player/handicap/history?limit=${limit}`, 'GET', null, authToken);
+}
+
+/**
+ * Gets player's handicap statistics
+ * @param {string} authToken - The auth token
+ * @returns {Promise<object>} Server response with handicap stats (trend, holesPlayed, etc.)
+ */
+export async function getHandicapStats(authToken) {
+    return fetchWithAuth('/player/handicap/stats', 'GET', null, authToken);
+}
+
 // Add other API client functions as needed, e.g., for fetching leaderboards, player profiles, etc.

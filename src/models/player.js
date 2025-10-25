@@ -13,6 +13,8 @@ export class Player {
         this.displayName = displayName;
         this.score = 0; // Current score for the active game/hole
         this.totalScore = 0; // Could be used for overall tournament score
+        this.handicap = null; // Player's handicap (null for guests, number for registered users)
+        this.handicapStrokes = 0; // Strokes per hole based on handicap
         this.isCurrentTurn = false;
         this.ballState = { // Example ball state
             position: { x: 0, y: 0, z: 0 },
@@ -69,6 +71,31 @@ export class Player {
      */
     setConnected() {
         this.isConnected = true;
+    }
+
+    /**
+     * Sets the player's handicap.
+     * @param {number} handicap - The player's handicap value.
+     */
+    setHandicap(handicap) {
+        this.handicap = handicap;
+        // Calculate handicap strokes per hole (handicap ÷ 18, rounded)
+        this.handicapStrokes = Math.round(handicap / 18);
+    }
+
+    /**
+     * Formats handicap for display.
+     * Negative values (e.g., -2) are shown as plus handicaps (e.g., "+2.0").
+     * @returns {string} Formatted handicap string.
+     */
+    getHandicapDisplay() {
+        if (this.handicap === null) {
+            return 'N/A'; // Guest user
+        }
+        if (this.handicap < 0) {
+            return `+${Math.abs(this.handicap).toFixed(1)}`;
+        }
+        return this.handicap.toFixed(1);
     }
 }
 

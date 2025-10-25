@@ -194,7 +194,10 @@
                     <div class="overlay-bottom">
                          <!-- Play Hole Bottom Left -->
                         <div class="overlay-bottom-left mode-play-hole">
-                            <div class="overlay-text-item">Player: <span id="overlay-player-name">Player 1</span></div>
+                            <div class="overlay-text-item">
+                                Player: <span id="overlay-player-name">Player 1</span>
+                                <span id="overlay-handicap" style="display: none; margin-left: 8px; color: #4CAF50; font-weight: bold;"></span>
+                            </div>
                             <div class="overlay-text-item">Total: <span id="overlay-total-score">N/A</span> (<span id="overlay-position">N/A</span>)</div>
                         </div>
                         <!-- Range / CTF might not need bottom left, or could show something else -->
@@ -418,6 +421,19 @@
                     <p style="font-size: 1.1em; margin-bottom: 10px;">You haven't created any holes yet!</p>
                     <p style="font-size: 0.9em; color: #999;">Use the Hole Maker to create your first hole.</p>
                 </div>
+            </div>
+
+            <!-- Practice Mode Toggle -->
+            <div style="margin-top: 20px; padding: 15px; background: #f5f5f5; border-radius: 5px; border-left: 4px solid #4CAF50;">
+                <label style="display: flex; align-items: center; cursor: pointer; user-select: none;">
+                    <input type="checkbox" id="practice-mode-toggle" checked style="width: 20px; height: 20px; margin-right: 10px; cursor: pointer;">
+                    <div>
+                        <strong style="font-size: 1em; color: #333;">Practice Mode</strong>
+                        <div style="font-size: 0.85em; color: #666; margin-top: 4px;">
+                            When unchecked, your score will count towards your handicap (registered users only)
+                        </div>
+                    </div>
+                </label>
             </div>
 
             <button id="close-play-hole-modal" style="margin-top: 20px; padding: 12px 25px; background: #757575; color: white; border: none; border-radius: 5px; cursor: pointer; width: 100%; font-size: 1em; transition: background 0.2s;" onmouseover="this.style.background='#616161'" onmouseout="this.style.background='#757575'">Cancel</button>
