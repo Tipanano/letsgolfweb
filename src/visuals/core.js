@@ -464,6 +464,11 @@ export function showBallAtAddress(position = null, surfaceType = null) {
     // but for now, we'll allow overriding or default to TEE.
     const currentSurface = surfaceType || 'TEE'; // Default to TEE if not specified
 
+    // Set ball scale based on surface type
+    // Ball should be small (normal scale) only on green, enlarged everywhere else
+    const isOnGreen = currentSurface.toUpperCase() === 'GREEN';
+    setBallScale(!isOnGreen); // Enlarged if NOT on green
+
     // --- Tee Visibility and Positioning ---
     let teeHeightOffset = 0; // Additional height from tee
     if (teeMesh && smallTeeMesh) {

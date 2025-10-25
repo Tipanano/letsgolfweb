@@ -157,13 +157,13 @@ h2 {
     border-radius: 5px;
     position: relative; /* Make this the positioning context */
     /* Ensure it contains the canvas height */
-    min-height: 600px; /* Increased from 400px */
+    min-height: 400px; /* Reduced for smaller displays like Chromebooks */
 }
 
 #golf-canvas {
     display: block; /* Remove extra space below canvas */
     width: 100%;   /* Make canvas responsive */
-    height: 600px; /* Increased from 400px */
+    height: 400px; /* Reduced for smaller displays like Chromebooks */
     background-color: #aaddcc; /* Placeholder canvas background */
     transform: scaleX(-1) !important; /* REMOVING THIS AGAIN FOR DIAGNOSIS */
 }
@@ -275,7 +275,7 @@ h2 {
     width: 100%;
     height: 100%;
     pointer-events: none; /* Allow clicks to pass through to canvas */
-    z-index: 5; /* Position above canvas */
+    z-index: 15; /* Position above canvas AND swing arc overlay */
     padding: 10px;
     box-sizing: border-box;
     color: white; /* Example text color */
@@ -598,12 +598,12 @@ body.mode-closest-to-flag #closest-to-flag-info {
 
 /* When game-view is active, make visuals larger */
 #game-view #visuals-container {
-    min-height: 900px; /* Increased from 600px to 900px (50% taller) */
+    min-height: 500px; /* Reduced for smaller displays - was 900px */
     /* flex-grow: 1; already set, ensure it expands */
 }
 
 #game-view #golf-canvas {
-    height: 900px; /* Increased from 600px to 900px (50% taller) */
+    height: 500px; /* Reduced for smaller displays - was 900px */
     /* width: 100%; already set */
 }
 
@@ -630,7 +630,7 @@ body.fullscreen-mode #main-layout {
 }
 
 body.fullscreen-mode #visuals-container {
-    min-height: 100vh;
+    min-height: 300px; /* Lower minimum for small displays */
     height: 100vh;
     width: 100vw;
     border-radius: 0;
@@ -978,7 +978,7 @@ body.fullscreen-mode #fullscreen-toggle-btn {
     right: 10px;
     /* color, text-shadow, font-size are handled by .overlay-text-item if applied to children */
     text-align: right;
-    z-index: 6;
+    z-index: 16;
     pointer-events: auto;
     background-color: rgba(0, 0, 0, 0.3);
     backdrop-filter: blur(4px);
