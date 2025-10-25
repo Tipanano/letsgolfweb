@@ -298,6 +298,30 @@ if (logoutBtn) {
     });
 }
 
+// Hook up "View Manual" button
+const manualBtn = document.getElementById('manual-btn-placeholder');
+const manualModal = document.getElementById('manual-modal');
+const closeManualBtn = document.getElementById('close-manual-btn');
+
+if (manualBtn && manualModal) {
+    manualBtn.addEventListener('click', () => {
+        manualModal.style.display = 'flex';
+    });
+}
+
+if (closeManualBtn && manualModal) {
+    closeManualBtn.addEventListener('click', () => {
+        manualModal.style.display = 'none';
+    });
+
+    // Also close when clicking outside the modal content
+    manualModal.addEventListener('click', (e) => {
+        if (e.target === manualModal) {
+            manualModal.style.display = 'none';
+        }
+    });
+}
+
 
 // Add global key listeners that call the input handler
 document.addEventListener('keydown', (event) => {

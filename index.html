@@ -44,7 +44,7 @@
         </div>
         <!-- Manual Placeholder -->
         <div id="manual-placeholder" style="background: #eee; padding: 10px; border-radius: 5px;">
-            <strong>Game Manual (Placeholder)</strong><br>
+            <strong>Game Manual</strong><br>
             <button id="manual-btn-placeholder">View Short Manual</button>
         </div>
     </div>
@@ -371,6 +371,143 @@
     <!-- Socket.IO Client -->
     <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+    <!-- Game Manual Modal -->
+    <div id="manual-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 2000; justify-content: center; align-items: center; overflow-y: auto;">
+        <div style="background: white; padding: 30px; border-radius: 10px; max-width: 800px; width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.3); margin: 20px;">
+            <h2 style="margin-top: 0; color: #1b5e20; border-bottom: 2px solid #a5d6a7; padding-bottom: 10px;">Golf Is Hard - Game Manual</h2>
+
+            <div style="margin-bottom: 25px;">
+                <h3 style="color: #2e7d32; margin-bottom: 10px;">🎯 Philosophy</h3>
+                <p style="line-height: 1.6; color: #37474f;">
+                    This game simulates real golf - <strong>there is no "perfect" swing</strong>. Just like in real life, you can achieve great shots in many different ways. Some players prefer to overswing for extra power, others like to draw or fade the ball. The key is understanding how your timing affects the outcome.
+                </p>
+            </div>
+
+            <div style="margin-bottom: 25px;">
+                <h3 style="color: #2e7d32; margin-bottom: 10px;">⛳ Full Swing</h3>
+                <p style="line-height: 1.6; color: #37474f; margin-bottom: 15px;">
+                    The full swing uses a sequence of key presses that simulate the real golf swing mechanics. Watch the swing arc visualizer on the left side of the screen for feedback.
+                </p>
+
+                <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 15px;">
+                    <h4 style="margin-top: 0; color: #1b5e20;">The Sequence:</h4>
+                    <ol style="line-height: 1.8; color: #37474f;">
+                        <li><strong>Press and hold 'w'</strong> - Start your backswing. The longer you hold, the more potential power you build.</li>
+                        <li><strong>Press 'j' (during or after backswing)</strong> - Initiate hip rotation. This is your transition move.</li>
+                        <li><strong>Release 'w'</strong> - Complete your backswing and begin the downswing.</li>
+                        <li><strong>Press 'a'</strong> - Start body rotation.</li>
+                        <li><strong>Press 'd'</strong> - Release arms.</li>
+                        <li><strong>Press 'i'</strong> - Release wrists for impact.</li>
+                    </ol>
+                </div>
+
+                <div style="background: #e8f5e9; padding: 15px; border-radius: 5px; margin-bottom: 15px;">
+                    <h4 style="margin-top: 0; color: #1b5e20;">What Each Key Does:</h4>
+                    <ul style="line-height: 1.8; color: #37474f;">
+                        <li><strong>Backswing Length (w):</strong> Affects potential power. Longer = more power but harder timing windows.</li>
+                        <li><strong>Hip Initiation (j):</strong> Too early or too late loses power. Ideal is about 150ms before releasing 'w'.</li>
+                        <li><strong>Rotation vs Arms (a & d):</strong>
+                            <ul>
+                                <li>If 'a' comes BEFORE 'd' (rotation first): Promotes fade spin, out-to-in path</li>
+                                <li>If 'd' comes BEFORE 'a' (arms first): Promotes draw spin, in-to-out path</li>
+                                <li>The bigger the gap between them, the more pronounced the effect</li>
+                            </ul>
+                        </li>
+                        <li><strong>Wrist Release (i):</strong>
+                            <ul>
+                                <li>Early release: Adds loft, closes face, risk of "fat" contact</li>
+                                <li>Late release: Removes loft, opens face, risk of "thin" contact</li>
+                                <li>Affects dynamic loft more than anything else</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+
+                <div style="background: #fff3e0; padding: 15px; border-radius: 5px;">
+                    <h4 style="margin-top: 0; color: #e65100;">💡 Tips:</h4>
+                    <ul style="line-height: 1.8; color: #37474f;">
+                        <li>Want more power? Longer backswing, but remember the timing windows scale with it.</li>
+                        <li>Want a draw? Press 'd' well before 'a'.</li>
+                        <li>Want a fade? Press 'a' before 'd'.</li>
+                        <li>Struggle with timing? Reduce swing speed (power slider) - the windows get easier.</li>
+                        <li>The yellow zone on the backswing bar shows ideal 'j' press timing - aim for the middle.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div style="margin-bottom: 25px;">
+                <h3 style="color: #2e7d32; margin-bottom: 10px;">🏌️ Chip Shots</h3>
+                <p style="line-height: 1.6; color: #37474f; margin-bottom: 15px;">
+                    Chipping is simpler but requires finesse. Ball position is CRITICAL for chip shots.
+                </p>
+
+                <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 15px;">
+                    <h4 style="margin-top: 0; color: #1b5e20;">The Sequence:</h4>
+                    <ol style="line-height: 1.8; color: #37474f;">
+                        <li><strong>Set ball position</strong> - Click on the stance visual to adjust (forward = high soft, back = low running)</li>
+                        <li><strong>Press and hold 'w'</strong> - Length determines power/distance</li>
+                        <li><strong>Release 'w'</strong> - Starts downswing</li>
+                        <li><strong>Press 'a'</strong> - Body rotation (affects face angle slightly)</li>
+                        <li><strong>Press 'i'</strong> - Strike the ball</li>
+                    </ol>
+                </div>
+
+                <div style="background: #e8f5e9; padding: 15px; border-radius: 5px;">
+                    <h4 style="margin-top: 0; color: #1b5e20;">Ball Position Effects:</h4>
+                    <ul style="line-height: 1.8; color: #37474f;">
+                        <li><strong>Forward (toward target):</strong> Higher loft, shallower attack angle, easier to thin</li>
+                        <li><strong>Back (away from target):</strong> Lower loft, steeper attack angle, easier to fat</li>
+                        <li><strong>Wrist Timing (i):</strong> Must adjust based on ball position. Forward ball needs earlier 'i', back ball needs later 'i'.</li>
+                        <li>Experiment with combinations: Back ball position + steep attack = low spinner. Forward ball + shallow = flop shot.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div style="margin-bottom: 25px;">
+                <h3 style="color: #2e7d32; margin-bottom: 10px;">⛳ Putting</h3>
+                <p style="line-height: 1.6; color: #37474f; margin-bottom: 15px;">
+                    Putting is all about distance control and timing. Unlike full swing, backswing length determines power, downswing timing determines direction.
+                </p>
+
+                <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 15px;">
+                    <h4 style="margin-top: 0; color: #1b5e20;">The Sequence:</h4>
+                    <ol style="line-height: 1.8; color: #37474f;">
+                        <li><strong>Press and hold 'w'</strong> - Length of backswing determines putt distance</li>
+                        <li><strong>Release 'w'</strong> - Starts downswing (fixed tempo, always same speed)</li>
+                        <li><strong>Press 'i' in the green zone</strong> - Strike the ball. Timing affects push/pull.</li>
+                    </ol>
+                </div>
+
+                <div style="background: #e8f5e9; padding: 15px; border-radius: 5px;">
+                    <h4 style="margin-top: 0; color: #1b5e20;">Timing:</h4>
+                    <ul style="line-height: 1.8; color: #37474f;">
+                        <li><strong>Too Early:</strong> Push (ball starts right of target)</li>
+                        <li><strong>Perfect (in green zone):</strong> Straight putt</li>
+                        <li><strong>Too Late:</strong> Pull (ball starts left of target)</li>
+                        <li>Use the putting guide (spacebar during address) to see the line, but remember - greens have break!</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div style="margin-bottom: 25px;">
+                <h3 style="color: #2e7d32; margin-bottom: 10px;">📊 Understanding Feedback</h3>
+                <div style="background: #f5f5f5; padding: 15px; border-radius: 5px;">
+                    <ul style="line-height: 1.8; color: #37474f;">
+                        <li><strong>Swing Arc Visualizer (left side):</strong> Shows your swing path in real-time. Green = backswing, Blue/Purple/Red = downswing phases.</li>
+                        <li><strong>Shot Results:</strong> Shows club head speed, ball speed, launch angle, spin, and strike quality.</li>
+                        <li><strong>Strike Quality:</strong> Fat, Thin, Center, High, Punch - tells you how well you contacted the ball.</li>
+                        <li><strong>Club Path & Face Angle:</strong> Negative path = out-to-in (fade), Positive = in-to-out (draw). Face angle relative to path determines spin.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div style="text-align: center; margin-top: 30px;">
+                <p style="font-style: italic; color: #666; margin-bottom: 20px;">Remember: Golf is hard. Practice, experiment, and find what works for you!</p>
+                <button id="close-manual-btn" style="padding: 12px 30px; background: #4CAF50; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; font-weight: bold; transition: background-color 0.3s ease;">Got It!</button>
+            </div>
+        </div>
+    </div>
 
     <script type="module" src="src/main.js"></script>
     <script type="module" src="src/tools.js"></script>
