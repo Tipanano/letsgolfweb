@@ -93,8 +93,16 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
         }
     }
 
-    // 2. Green (Polygon)
-    if (holeLayout.green?.type === 'polygon' && holeLayout.green.vertices) {
+    // 2. Greens (Array of Polygons or single Polygon - legacy)
+    if (holeLayout.greens && Array.isArray(holeLayout.greens)) {
+        for (let i = 0; i < holeLayout.greens.length; i++) {
+            const green = holeLayout.greens[i];
+            if (green.vertices && isPointInPolygon(point, green.vertices)) {
+                return 'GREEN';
+            }
+        }
+    } else if (holeLayout.green?.type === 'polygon' && holeLayout.green.vertices) {
+        // Legacy single green support
         if (isPointInPolygon(point, holeLayout.green.vertices)) {
             return 'GREEN';
         }

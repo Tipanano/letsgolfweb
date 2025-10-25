@@ -49,6 +49,8 @@ const holeMaker = {
     teeBox: null, // Store the tee box object
     flagPositions: [], // Store flag positions (max 4)
     vertexMarkers: [], // Store vertex marker circles
+    currentVertexHeight: 0, // Current height for next vertex (meters)
+    selectedVertex: null, // Currently selected vertex for editing {polygon, pointIndex}
 
     init() {
         // Set initial dimensions based on par 4
@@ -236,6 +238,95 @@ const holeMaker = {
         this.updateVertexMarkers();
     },
 
+    onHeightChange(value) {
+        this.currentVertexHeight = parseFloat(value);
+        document.getElementById('heightValue').textContent = `${value}m`;
+    },
+
+    selectVertex(polygon, pointIndex) {
+        this.selectedVertex = { polygon, pointIndex };
+
+        // Get current height of selected vertex
+        const point = polygon.points[pointIndex];
+        const currentHeight = point.height !== undefined ? point.height : 0;
+
+        // Update UI
+        document.getElementById('heightSlider').value = currentHeight;
+        document.getElementById('heightValue').textContent = `${currentHeight.toFixed(1)}m`;
+        document.getElementById('heightHelpText').textContent = `Editing vertex height (currently ${currentHeight.toFixed(1)}m)`;
+        document.getElementById('updateHeightBtn').style.display = 'block';
+
+        console.log(`Selected vertex ${pointIndex} with height ${currentHeight}m`);
+    },
+
+    deselectVertex() {
+        this.selectedVertex = null;
+        document.getElementById('heightHelpText').textContent = 'Set height for next vertex (-10m to +10m)';
+        document.getElementById('updateHeightBtn').style.display = 'none';
+    },
+
+    updateSelectedVertexHeight() {
+        if (!this.selectedVertex) {
+            console.warn('No vertex selected');
+            return;
+        }
+
+        const { polygon, pointIndex } = this.selectedVertex;
+        const newHeight = this.currentVertexHeight;
+
+        // Get the XZ position of the selected vertex
+        const selectedPoint = polygon.points[pointIndex];
+        const targetX = selectedPoint.x;
+        const targetY = selectedPoint.y;
+        const SNAP_THRESHOLD = 2.5 * this.scale; // Same threshold used for snapping
+
+        // Convert selected point to absolute canvas coordinates
+        const absTargetPoint = fabric.util.transformPoint(
+            { x: selectedPoint.x - polygon.pathOffset.x, y: selectedPoint.y - polygon.pathOffset.y },
+            polygon.calcTransformMatrix()
+        );
+
+        let updatedCount = 0;
+
+        // Update ALL vertices at the same position (across all polygons)
+        this.shapes.forEach(shape => {
+            if (shape.polygon && shape.polygon.points) {
+                shape.polygon.points.forEach((point, idx) => {
+                    // Convert point to absolute canvas coordinates
+                    const absPoint = fabric.util.transformPoint(
+                        { x: point.x - shape.polygon.pathOffset.x, y: point.y - shape.polygon.pathOffset.y },
+                        shape.polygon.calcTransformMatrix()
+                    );
+
+                    // Check if this point is at the same XZ position (within snap threshold)
+                    const dx = absPoint.x - absTargetPoint.x;
+                    const dy = absPoint.y - absTargetPoint.y;
+                    const distSq = dx * dx + dy * dy;
+
+                    if (distSq < SNAP_THRESHOLD * SNAP_THRESHOLD) {
+                        // Update height on the polygon point
+                        point.height = newHeight;
+
+                        // Update in stored shape data
+                        if (shape.points && shape.points[idx]) {
+                            shape.points[idx].height = newHeight;
+                        }
+
+                        updatedCount++;
+                    }
+                });
+            }
+        });
+
+        console.log(`Updated ${updatedCount} vertex/vertices at this position to height ${newHeight}m`);
+
+        // Refresh vertex markers to show new colors/sizes
+        this.updateVertexMarkers();
+
+        // Deselect after update
+        this.deselectVertex();
+    },
+
     updateVertexMarkers() {
         // Remove existing vertex markers
         this.vertexMarkers.forEach(marker => this.canvas.remove(marker));
@@ -249,20 +340,27 @@ const holeMaker = {
         // Add vertex markers for all polygons
         this.shapes.forEach(shape => {
             if (shape.polygon && shape.polygon.points) {
-                shape.polygon.points.forEach(point => {
+                shape.polygon.points.forEach((point, idx) => {
                     // Convert to absolute canvas coordinates
                     const absPoint = fabric.util.transformPoint(
                         { x: point.x - shape.polygon.pathOffset.x, y: point.y - shape.polygon.pathOffset.y },
                         shape.polygon.calcTransformMatrix()
                     );
 
+                    // Get height if stored, default to 0
+                    const height = point.height !== undefined ? point.height : 0;
+                    const heightNormalized = (height + 10) / 20; // Map -10 to 10 → 0 to 1
+                    const radius = 3 + heightNormalized * 4; // 3px to 7px based on height
+                    const hue = heightNormalized * 240; // 0 (red) to 240 (blue)
+                    const color = `hsl(${hue}, 80%, 50%)`;
+
                     const marker = new fabric.Circle({
                         left: absPoint.x,
                         top: absPoint.y,
-                        radius: 3,
-                        fill: '#e74c3c',
-                        stroke: '#c0392b',
-                        strokeWidth: 1,
+                        radius: radius,
+                        fill: color,
+                        stroke: '#fff',
+                        strokeWidth: 1.5,
                         originX: 'center',
                         originY: 'center',
                         selectable: false,
@@ -270,10 +368,11 @@ const holeMaker = {
                         hoverCursor: 'pointer'
                     });
 
-                    // Store reference to parent polygon
+                    // Store reference to parent polygon and point index
                     marker.parentPolygon = shape.polygon;
+                    marker.pointIndex = idx;
 
-                    // Add click handler to select the parent polygon
+                    // Add click handler to select this vertex for height editing
                     marker.on('mousedown', (options) => {
                         // Stop event propagation to prevent Fabric's selection box
                         if (options.e) {
@@ -281,6 +380,10 @@ const holeMaker = {
                             options.e.preventDefault();
                         }
 
+                        // Select this vertex for editing
+                        this.selectVertex(shape.polygon, idx);
+
+                        // Also select the polygon in Fabric
                         this.activePolygon = shape.polygon;
                         this.canvas.setActiveObject(shape.polygon);
                         this.canvas.requestRenderAll();
@@ -688,14 +791,22 @@ const holeMaker = {
 
         // Constrain to canvas bounds, snap to edges, and snap to vertices
         const snappedPoint = this.snapToVertices(pointer.x, pointer.y);
+        snappedPoint.height = this.currentVertexHeight; // Store height with the point
         this.currentPoints.push(snappedPoint);
 
-        // Draw point marker
+        // Draw point marker with size/color based on height
+        const heightNormalized = (this.currentVertexHeight + 10) / 20; // Map -10 to 10 → 0 to 1
+        const radius = 3 + heightNormalized * 5; // 3px to 8px based on height
+        const hue = heightNormalized * 240; // 0 (red) to 240 (blue)
+        const color = `hsl(${hue}, 80%, 50%)`;
+
         const circle = new fabric.Circle({
             left: snappedPoint.x,
             top: snappedPoint.y,
-            radius: 4,
-            fill: '#3498db',
+            radius: radius,
+            fill: color,
+            stroke: '#fff',
+            strokeWidth: 1,
             originX: 'center',
             originY: 'center',
             selectable: false,
@@ -755,14 +866,8 @@ const holeMaker = {
             }
         }
 
-        if (this.currentSurface === 'green') {
-            const existingGreen = this.shapes.find(s => s.type === 'green');
-            if (existingGreen) {
-                alert('Only one green is allowed. Delete the existing green first.');
-                this.cancelDrawing();
-                return;
-            }
-        }
+        // Multiple greens are now allowed for creating slopes with different heights
+        // (removed single green restriction)
 
         // Remove temporary markers
         const objects = this.canvas.getObjects();
@@ -789,6 +894,13 @@ const holeMaker = {
             selectable: true,
             evented: true,
             perPixelTargetFind: true
+        });
+
+        // Preserve height data on polygon points (Fabric.js might strip custom properties)
+        polygon.points.forEach((point, idx) => {
+            if (this.currentPoints[idx] && this.currentPoints[idx].height !== undefined) {
+                point.height = this.currentPoints[idx].height;
+            }
         });
 
         // Hide default transform controls (but allow custom vertex controls)
@@ -912,6 +1024,9 @@ const holeMaker = {
                     return true;
                 },
                 mouseUpHandler: (eventData, transform) => {
+                    if (!transform || !transform.target) {
+                        return true; // Exit gracefully if transform is invalid
+                    }
                     const polygon = transform.target;
 
                     // Snap to nearby vertices after drag completes
@@ -1427,9 +1542,9 @@ const holeMaker = {
     },
 
     calculateHoleLength() {
-        const green = this.shapes.find(s => s.type === 'green');
+        const greens = this.shapes.filter(s => s.type === 'green');
 
-        if (!this.teeBox || !green) {
+        if (!this.teeBox || greens.length === 0) {
             document.getElementById('holeLength').value = '-';
             return;
         }
@@ -1438,13 +1553,17 @@ const holeMaker = {
         const teeCenterX = this.teeBox.x;
         const teeCenterZ = this.teeBox.z;
 
-        // Calculate green center (flag position)
+        // Calculate combined green center from all green polygons
         // Green points are in canvas coordinates, need to flip y-axis when converting to meters
-        const greenPoints = green.polygon.points;
-        const greenMinX = Math.min(...greenPoints.map(p => p.x)) / this.scale;
-        const greenMaxX = Math.max(...greenPoints.map(p => p.x)) / this.scale;
-        const greenMinY = Math.min(...greenPoints.map(p => p.y)) / this.scale;
-        const greenMaxY = Math.max(...greenPoints.map(p => p.y)) / this.scale;
+        let allGreenPoints = [];
+        greens.forEach(green => {
+            allGreenPoints = allGreenPoints.concat(green.polygon.points);
+        });
+
+        const greenMinX = Math.min(...allGreenPoints.map(p => p.x)) / this.scale;
+        const greenMaxX = Math.max(...allGreenPoints.map(p => p.x)) / this.scale;
+        const greenMinY = Math.min(...allGreenPoints.map(p => p.y)) / this.scale;
+        const greenMaxY = Math.max(...allGreenPoints.map(p => p.y)) / this.scale;
         const greenCenterX = (greenMinX + greenMaxX) / 2;
         const greenCenterY_canvas = (greenMinY + greenMaxY) / 2;
         const greenCenterZ = CANVAS_HEIGHT - greenCenterY_canvas; // Flip y-axis to get z in meters
@@ -1518,16 +1637,28 @@ const holeMaker = {
                     x: p.x - polygon.pathOffset.x,
                     y: p.y - polygon.pathOffset.y
                 };
-                return fabric.util.transformPoint(localPoint, transform);
+                const transformed = fabric.util.transformPoint(localPoint, transform);
+                // Preserve height data
+                transformed.height = p.height;
+                return transformed;
             });
         }
 
         // Convert canvas coordinates to meters (round to 2 decimals)
         // Flip y-axis: canvas y=0 (top) should be z=CANVAS_HEIGHT (far), canvas y=CANVAS_HEIGHT (bottom) should be z=0 (tee)
-        return absolutePoints.map(p => ({
-            x: parseFloat((p.x / this.scale).toFixed(2)),
-            z: parseFloat((CANVAS_HEIGHT - (p.y / this.scale)).toFixed(2))
-        }));
+        return absolutePoints.map(p => {
+            const result = {
+                x: parseFloat((p.x / this.scale).toFixed(2)),
+                z: parseFloat((CANVAS_HEIGHT - (p.y / this.scale)).toFixed(2))
+            };
+            // Add y (height) if present, default to 0
+            if (p.height !== undefined) {
+                result.y = parseFloat(p.height.toFixed(2));
+            } else {
+                result.y = 0;
+            }
+            return result;
+        });
     },
 
     exportJSON() {
@@ -1543,21 +1674,22 @@ const holeMaker = {
             par: par,
             lengthMeters: lengthMeters,
             canvasWidth: CANVAS_WIDTH,
-            canvasHeight: CANVAS_HEIGHT,
-            background: {
-                vertices: [
-                    { x: -30, z: -30 },
-                    { x: CANVAS_WIDTH + 30, z: -30 },
-                    { x: CANVAS_WIDTH + 30, z: CANVAS_HEIGHT + 30 },
-                    { x: -30, z: CANVAS_HEIGHT + 30 }
-                ],
-                surface: "OUT_OF_BOUNDS"
-            }
+            canvasHeight: CANVAS_HEIGHT
+            // Background removed - see how it looks without it
+            // background: {
+            //     vertices: [
+            //         { x: -30, z: -30 },
+            //         { x: CANVAS_WIDTH + 30, z: -30 },
+            //         { x: CANVAS_WIDTH + 30, z: CANVAS_HEIGHT + 30 },
+            //         { x: -30, z: CANVAS_HEIGHT + 30 }
+            //     ],
+            //     surface: "OUT_OF_BOUNDS"
+            // }
         };
 
         // Group shapes by type
         const fairways = this.shapes.filter(s => s.type === 'fairway');
-        const green = this.shapes.find(s => s.type === 'green');
+        const greens = this.shapes.filter(s => s.type === 'green'); // Support multiple greens
         const roughLight = this.shapes.filter(s => s.type === 'rough_light');
         const roughMedium = this.shapes.filter(s => s.type === 'rough_medium');
         const roughHeavy = this.shapes.filter(s => s.type === 'rough_heavy');
@@ -1585,13 +1717,12 @@ const holeMaker = {
             }));
         }
 
-        // Add green
-        if (green) {
-            const metersPoints = this.convertPointsToMeters(green.polygon.points, green.polygon);
-            layout.green = {
-                controlPoints: metersPoints,
+        // Add greens (support multiple for creating slopes)
+        if (greens.length > 0) {
+            layout.greens = greens.map(green => ({
+                controlPoints: this.convertPointsToMeters(green.polygon.points, green.polygon),
                 surface: "GREEN"
-            };
+            }));
         }
 
         // Add light rough
@@ -1666,9 +1797,9 @@ const holeMaker = {
             return;
         }
 
-        const green = this.shapes.find(s => s.type === 'green');
-        if (!green) {
-            alert('Cannot preview: Hole must have a green. Please create a green first.');
+        const greens = this.shapes.filter(s => s.type === 'green');
+        if (greens.length === 0) {
+            alert('Cannot preview: Hole must have at least one green. Please create a green first.');
             return;
         }
 
@@ -1721,10 +1852,17 @@ const holeMaker = {
 
             // Helper to convert meters (from JSON) to canvas coordinates
             // Flip y-axis: z=0 (tee) should be canvas y=CANVAS_HEIGHT (bottom), z=CANVAS_HEIGHT (far) should be canvas y=0 (top)
-            const metersToCanvas = (point) => ({
-                x: point.x * this.scale,
-                y: (CANVAS_HEIGHT - point.z) * this.scale
-            });
+            const metersToCanvas = (point) => {
+                const canvasPoint = {
+                    x: point.x * this.scale,
+                    y: (CANVAS_HEIGHT - point.z) * this.scale
+                };
+                // Preserve height if present
+                if (point.y !== undefined) {
+                    canvasPoint.height = point.y;
+                }
+                return canvasPoint;
+            };
 
             // Import tee box (new placement-based system)
             if (layout.tee && layout.tee.center) {
@@ -1973,9 +2111,9 @@ const holeMaker = {
             return;
         }
 
-        const green = this.shapes.find(s => s.type === 'green');
-        if (!green) {
-            alert('Cannot save: Hole must have a green');
+        const greens = this.shapes.filter(s => s.type === 'green');
+        if (greens.length === 0) {
+            alert('Cannot save: Hole must have at least one green');
             return;
         }
 
@@ -2085,9 +2223,9 @@ const holeMaker = {
             return;
         }
 
-        const green = this.shapes.find(s => s.type === 'green');
-        if (!green) {
-            alert('Cannot save: Hole must have a green');
+        const greens = this.shapes.filter(s => s.type === 'green');
+        if (greens.length === 0) {
+            alert('Cannot save: Hole must have at least one green');
             return;
         }
 

@@ -11,6 +11,7 @@ import { getCurrentGameMode } from './main.js'; // Import game mode getter
 import { YARDS_TO_METERS } from './utils/unitConversions.js'; // Import conversion constant
 import * as multiplayerManager from './multiplayerManager.js'; // Import multiplayer manager
 import * as ui from './ui.js'; // Import UI functions
+import { buildTerrainMesh, getTerrainHeight, getTerrainInfo } from './terrainHeight.js'; // Import terrain height system
 
 // Store references from core visuals if needed
 let coreScene;
@@ -20,6 +21,9 @@ let coreCanvas;
 let coreCanvasWidth;
 let coreCanvasHeight;
 let currentTargetDistanceYards = 0; // Store target distance for reverse camera
+
+// Terrain mesh for height lookups
+let currentTerrainMesh = null;
 
 // Track current visual mode
 const VISUAL_MODES = {
@@ -164,6 +168,11 @@ export function switchToHoleView(holeLayout, initialScene = null) {
 // Wrapper function called by playHole.js
 export function drawHole(holeLayout) {
     switchToHoleView(holeLayout);
+
+    // Build terrain mesh for height lookups
+    if (holeLayout) {
+        currentTerrainMesh = buildTerrainMesh(holeLayout);
+    }
 }
 
 
@@ -521,6 +530,21 @@ export const getMarkerPosition = PlayerMarkers.getMarkerPosition;
 
 // Export hole view functions
 export const drawHoleLayout = HoleVisuals.drawHoleLayout;
+
+// Export terrain height query functions
+export function queryTerrainHeight(x, z) {
+    if (!currentTerrainMesh) {
+        return 0; // Default ground level if no terrain loaded
+    }
+    return getTerrainHeight(x, z, currentTerrainMesh);
+}
+
+export function queryTerrainInfo(x, z) {
+    if (!currentTerrainMesh) {
+        return { height: 0, surface: null, surfaceName: null };
+    }
+    return getTerrainInfo(x, z, currentTerrainMesh);
+}
 
 // Function to redraw the current view after resize
 export function redrawCurrentView() {

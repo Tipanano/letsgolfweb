@@ -44,14 +44,15 @@ export async function initializeMode(holeName) { // Made async, added holeName p
                 throw new Error('Failed to process hole layout');
             }
 
-            // Set initial position
+            // Set initial position (XZ only for now)
             // Preview holes from hole maker are already in meters, no conversion needed
             let initialX = 0, initialZ = 0;
             if (currentHoleLayout.tee?.center) {
                 initialX = currentHoleLayout.tee.center.x;
                 initialZ = currentHoleLayout.tee.center.z;
             }
-            currentBallPosition = { x: initialX, y: BALL_RADIUS, z: initialZ };
+
+            // Initialize other state
             shotsTaken = 0;
             score = 0;
             currentLie = 'TEE';
@@ -87,8 +88,15 @@ export async function initializeMode(holeName) { // Made async, added holeName p
 
             console.log('New hole - defaults set: power 90%, stance center, club selection cleared');
 
-            // Use the exact same flow as normal hole loading (lines 292-334)
+            // Draw hole first (builds terrain mesh)
             visuals.drawHole(currentHoleLayout);
+
+            // Now query terrain height at tee position
+            const { queryTerrainHeight } = await import('../visuals.js');
+            const groundHeight = queryTerrainHeight(initialX, initialZ);
+            currentBallPosition = { x: initialX, y: groundHeight + BALL_RADIUS, z: initialZ };
+
+            // Reset visuals with correct ball height
             visuals.resetVisuals(currentBallPosition, currentLie);
 
             // Set shot type based on lie

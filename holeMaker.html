@@ -271,6 +271,17 @@
                     <div class="help-text">Distance from tee center to flag</div>
                 </div>
 
+                <div class="input-group">
+                    <label>Vertex Height: <span id="heightValue">0.0m</span></label>
+                    <input type="range" id="heightSlider" min="-10" max="10" step="0.1" value="0"
+                           oninput="holeMaker.onHeightChange(this.value)"
+                           style="width: 100%; cursor: pointer;">
+                    <div class="help-text" id="heightHelpText">Set height for next vertex (-10m to +10m)</div>
+                    <button class="btn btn-primary" id="updateHeightBtn" onclick="holeMaker.updateSelectedVertexHeight()" style="display: none; margin-top: 5px;">
+                        Update Selected Vertex Height
+                    </button>
+                </div>
+
                 <button class="btn btn-primary" onclick="holeMaker.toggleGrid()">Toggle Grid</button>
                 <button class="btn btn-primary" onclick="holeMaker.toggleGuides()">Toggle Guides</button>
                 <button class="btn btn-primary" onclick="holeMaker.toggleVertices()">Toggle All Vertices</button>

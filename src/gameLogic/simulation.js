@@ -5,18 +5,26 @@ import { getSurfaceProperties } from '../surfaces.js'; // Import getSurfacePrope
 import { getFlagPosition } from '../visuals/holeView.js'; // To get hole coordinates
 import { BALL_RADIUS } from '../visuals/core.js'; // For ground check, hole interaction, and obstacle collision
 import { getSurfaceTypeAtPoint } from '../utils/gameUtils.js'; // For dynamic surface detection
+import { queryTerrainHeight } from '../visuals.js'; // For terrain height lookups
 
 /**
- * Helper function to get the correct ball Y position based on surface type
+ * Helper function to get the correct ball Y position based on surface type AND terrain height
  * @param {string} surfaceType - The surface type name
+ * @param {number} x - Ball X position
+ * @param {number} z - Ball Z position
  * @returns {number} The Y position for the ball
  */
-function getBallYPositionForSurface(surfaceType) {
+function getBallYPositionForSurface(surfaceType, x = 0, z = 0) {
+    // Get terrain height at this XZ position
+    const terrainHeight = queryTerrainHeight(x, z);
+
+    // Get surface lie offset
     const surfaceProps = getSurfaceProperties(surfaceType);
-    if (surfaceProps && typeof surfaceProps.ballLieOffset === 'number' && surfaceProps.ballLieOffset !== -1) {
-        return BALL_RADIUS + surfaceProps.ballLieOffset;
-    }
-    return BALL_RADIUS; // Default
+    const lieOffset = (surfaceProps && typeof surfaceProps.ballLieOffset === 'number' && surfaceProps.ballLieOffset !== -1)
+        ? surfaceProps.ballLieOffset
+        : 0;
+
+    return terrainHeight + BALL_RADIUS + lieOffset;
 }
 
 // --- Step-by-Step Flight Simulation ---
@@ -110,7 +118,7 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club, 
     };
 
 
-     while (position.y > 0.01 || time === 0) { // Loop until ball is near/below ground (allow at least one step)
+     while (position.y > queryTerrainHeight(position.x, position.z) + 0.01 || time === 0) { // Loop until ball is near/below ground (allow at least one step)
         // 1. Calculate Relative Velocity (Ball Velocity - Wind Velocity)
         const relativeVel = {
             x: velocity.x - windVel.x,
@@ -505,7 +513,7 @@ export function simulateBouncePhase(landingPosition, landingVelocity, landingAng
             }
 
             // Set position on ground with correct lie offset and mark as airborne
-            position.y = getBallYPositionForSurface(currentSurfaceType);
+            position.y = getBallYPositionForSurface(currentSurfaceType, position.x, position.z);
             bouncePoints.push({ x: position.x, y: position.y, z: position.z, time: time });
             inAir = true;
             airTime = 0;
@@ -528,8 +536,8 @@ export function simulateBouncePhase(landingPosition, landingVelocity, landingAng
 
             bouncePoints.push({ x: position.x, y: position.y, z: position.z, time: time });
 
-            // Check for ground contact (need to get current surface for proper height check)
-            const groundY = getBallYPositionForSurface(currentSurfaceType);
+            // Check for ground contact (get terrain height at current position)
+            const groundY = getBallYPositionForSurface(currentSurfaceType, position.x, position.z);
             if (position.y <= groundY) {
                 position.y = groundY;
                 inAir = false;
@@ -607,7 +615,7 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
     const initialSpeed = Math.sqrt(velocity.x**2 + velocity.z**2);
 
     // Ensure ball starts on the ground with correct lie offset for roll simulation
-    position.y = getBallYPositionForSurface(surfaceType);
+    position.y = getBallYPositionForSurface(surfaceType, position.x, position.z);
     // We only care about horizontal velocity for rolling friction
     velocity.y = 0;
 
@@ -804,8 +812,8 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
 
         // Update position using the potentially modified velocity
         position.addScaledVector(velocity, dt);
-        // Keep ball on the ground plane with correct lie offset
-        position.y = getBallYPositionForSurface(currentSurfaceType);
+        // Keep ball on the ground plane with correct lie offset and terrain height
+        position.y = getBallYPositionForSurface(currentSurfaceType, position.x, position.z);
 
         // Track distance traveled in this step
         const stepDistance = position.distanceTo(lastPosition);
@@ -864,12 +872,12 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
     } else if (isHoledOut) {
     } else {
         console.warn(`Sim (Roll): Could not apply lie offset. HoledOut=${isHoledOut}, SurfaceProps=${!!surfaceProps}, Offset=${surfaceProps?.ballLieOffset}`);
-        // Keep position.y as BALL_RADIUS if offset couldn't be applied and not holed out
-        position.y = BALL_RADIUS;
+        // Keep position.y at terrain height + BALL_RADIUS if offset couldn't be applied and not holed out
+        position.y = queryTerrainHeight(position.x, position.z) + BALL_RADIUS;
     }
 
     // --- Apply Ball Lie Offset to the final position AND the last trajectory point ---
-    let finalAdjustedY = BALL_RADIUS; // Default to standard radius height
+    let finalAdjustedY = queryTerrainHeight(position.x, position.z) + BALL_RADIUS; // Default to terrain height + standard radius height
     if (!isHoledOut && surfaceProps && typeof surfaceProps.ballLieOffset === 'number') {
         if (surfaceProps.ballLieOffset === -1) { // Special case for water
             finalAdjustedY = (surfaceProps.height ?? 0) - BALL_RADIUS * 2; // Example: below water surface

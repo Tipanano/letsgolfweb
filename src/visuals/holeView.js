@@ -1,11 +1,18 @@
 // src/visuals/holeView.js
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
-import { TextureLoader } from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js'; // Import TextureLoader
-import { createNoise2D } from 'https://esm.sh/simplex-noise'; // Import Simplex noise
-import { scene } from './core.js'; // Import scene
-import { YARDS_TO_METERS } from '../utils/unitConversions.js'; // Import conversion factor
-import { renderObstacles, clearObstacles } from './obstacles.js'; // Import obstacle rendering
-import { createObstacle } from '../obstacleConfig.js'; // Import obstacle creation
+import { TextureLoader } from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
+import { scene } from './core.js';
+import { renderObstacles, clearObstacles } from './obstacles.js';
+import { createObstacle } from '../obstacleConfig.js';
+import {
+    renderBackground,
+    renderRoughAreas,
+    renderWaterHazards,
+    renderBunkers,
+    renderFairways,
+    renderGreen,
+    renderTeeBox
+} from './holeRenderer.js';
 
 let currentHoleObjects = []; // To keep track of objects added for the hole
 let currentFlagPosition = null; // Store the flag position in meters (Vector3)
@@ -49,686 +56,27 @@ export function drawHoleLayout(holeLayout) {
     }
 
     clearHoleLayout(); // Clear previous layout first
-    currentFlagPosition = null; // Reset flag position on new draw
-    currentGreenCenter = null; // Reset green data
+    currentFlagPosition = null;
+    currentGreenCenter = null;
     currentGreenRadius = null;
 
-    const scale = 1.0; // All hole layouts are now in meters, no conversion needed
-    const textureLoader = new TextureLoader(); // Create texture loader instance
+    const textureLoader = new TextureLoader();
 
-    // --- Draw Background (Out of Bounds - Draw first) ---
-    if (holeLayout.background && holeLayout.background.vertices && holeLayout.background.surface) {
-        const bgShape = new THREE.Shape();
-        const firstBgPoint = holeLayout.background.vertices[0];
-        // Use original Z
-        bgShape.moveTo(firstBgPoint.x * scale, firstBgPoint.z * scale);
-        for (let i = 1; i < holeLayout.background.vertices.length; i++) {
-            const point = holeLayout.background.vertices[i];
-             // Use original Z
-            bgShape.lineTo(point.x * scale, point.z * scale);
-        }
-        bgShape.closePath();
+    // Render all surfaces using the new height-aware renderer
+    renderBackground(holeLayout, scene, textureLoader, currentHoleObjects);
+    renderRoughAreas(holeLayout, scene, textureLoader, currentHoleObjects);
+    renderWaterHazards(holeLayout, scene, textureLoader, currentHoleObjects);
+    renderBunkers(holeLayout, scene, textureLoader, currentHoleObjects);
+    renderFairways(holeLayout, scene, textureLoader, currentHoleObjects);
 
-        const bgGeometry = new THREE.ShapeGeometry(bgShape);
-        // --- BEGIN Manual UV Calculation for Background ---
-        bgGeometry.computeBoundingBox();
-        const bgBbox = bgGeometry.boundingBox;
-        if (bgBbox) {
-            const positionAttribute = bgGeometry.attributes.position;
-            const uvAttribute = new THREE.BufferAttribute(new Float32Array(positionAttribute.count * 2), 2);
-            const sizeX = bgBbox.max.x - bgBbox.min.x;
-            const sizeY = bgBbox.max.y - bgBbox.min.y;
-
-            if (sizeX > 0 && sizeY > 0) {
-                for (let i = 0; i < positionAttribute.count; i++) {
-                    const x = positionAttribute.getX(i);
-                    const y = positionAttribute.getY(i);
-                    const u = (x - bgBbox.min.x) / sizeX;
-                    const v = (y - bgBbox.min.y) / sizeY;
-                    uvAttribute.setXY(i, u, v);
-                }
-                bgGeometry.setAttribute('uv', uvAttribute);
-            } else {
-                console.warn("Background geometry has zero size in X or Y dimension, cannot calculate UVs.");
-            }
-        } else {
-            console.warn("Could not compute bounding box for background geometry.");
-        }
-        // --- END Manual UV Calculation for Background ---
-        // Geometry is created using world coordinates, no centering needed.
-
-        const bgSurface = holeLayout.background.surface;
-        const bgMesh = new THREE.Mesh(bgGeometry); // Create mesh first
-        bgMesh.rotation.x = Math.PI / 2; // Positive rotation
-        bgMesh.position.set(0, bgSurface?.height ?? -0.01, 0); // Use defined height or fallback
-        bgMesh.receiveShadow = true;
-
-        // --- Background Material (Texture or Color) ---
-        if (bgSurface && bgSurface.texturePath) {
-            textureLoader.load(
-                bgSurface.texturePath,
-                (texture) => {
-                    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-                    const textureRepetitions = 5; // Example value, adjust as needed
-                    texture.repeat.set(textureRepetitions, textureRepetitions);
-                    bgMesh.material = new THREE.MeshStandardMaterial({
-                        map: texture,
-                        side: THREE.DoubleSide
-                    });
-                    bgMesh.material.needsUpdate = true;
-                },
-                undefined,
-                (err) => {
-                    console.error(`Error loading background texture: ${bgSurface.texturePath}`, err);
-                    bgMesh.material = new THREE.MeshStandardMaterial({
-                        color: bgSurface?.color || '#8B4513', // Fallback color (SaddleBrown)
-                        side: THREE.DoubleSide
-                    });
-                    bgMesh.material.needsUpdate = true;
-                }
-            );
-        } else {
-            bgMesh.material = new THREE.MeshStandardMaterial({
-                color: bgSurface?.color || '#8B4513', // Fallback color
-                side: THREE.DoubleSide
-            });
-        }
-
-        scene.add(bgMesh);
-        currentHoleObjects.push(bgMesh);
+    // Render green and store center/radius for camera positioning
+    const greenData = renderGreen(holeLayout, scene, textureLoader, currentHoleObjects);
+    if (greenData) {
+        currentGreenCenter = greenData.center;
+        currentGreenRadius = greenData.radius;
     }
 
-    // --- Helper function to draw a single rough polygon ---
-    const drawRoughPolygon = (roughData, roughTypeName) => {
-        if (!roughData || !roughData.vertices || roughData.vertices.length < 3) {
-            console.warn(`${roughTypeName} definition missing or invalid vertices.`);
-            return;
-        }
-
-        const roughShape = new THREE.Shape();
-        const firstPoint = roughData.vertices[0];
-        roughShape.moveTo(firstPoint.x * scale, firstPoint.z * scale);
-        for (let i = 1; i < roughData.vertices.length; i++) {
-            const point = roughData.vertices[i];
-            roughShape.lineTo(point.x * scale, point.z * scale);
-        }
-        roughShape.closePath();
-        const roughGeometry = new THREE.ShapeGeometry(roughShape);
-
-        // --- Manual UV Calculation ---
-        roughGeometry.computeBoundingBox();
-        const bbox = roughGeometry.boundingBox;
-        if (bbox) {
-            const positionAttribute = roughGeometry.attributes.position;
-            const uvAttribute = new THREE.BufferAttribute(new Float32Array(positionAttribute.count * 2), 2);
-            const sizeX = bbox.max.x - bbox.min.x;
-            const sizeY = bbox.max.y - bbox.min.y;
-
-            if (sizeX > 0 && sizeY > 0) {
-                for (let i = 0; i < positionAttribute.count; i++) {
-                    const x = positionAttribute.getX(i);
-                    const y = positionAttribute.getY(i);
-                    const u = (x - bbox.min.x) / sizeX;
-                    const v = (y - bbox.min.y) / sizeY;
-                    uvAttribute.setXY(i, u, v);
-                }
-                roughGeometry.setAttribute('uv', uvAttribute);
-            }
-        }
-
-        // --- Simplex Noise Vertex Colors ---
-        const positionAttributeRough = roughGeometry.attributes.position;
-        const vertexCountRough = positionAttributeRough.count;
-        const colorsRough = new Float32Array(vertexCountRough * 3);
-        const baseRoughColor = new THREE.Color(roughData.surface?.color || '#228b22');
-        const noise2D = createNoise2D();
-        const noiseScale = 0.001;
-        const variationStrength = 0.4;
-
-        for (let i = 0; i < vertexCountRough; i++) {
-            const x = positionAttributeRough.getX(i);
-            const y = positionAttributeRough.getY(i);
-            const noiseValue = noise2D(x * noiseScale, y * noiseScale);
-            const variation = 1.0 + noiseValue * variationStrength;
-            const clampedVariation = Math.max(0, variation);
-
-            colorsRough[i * 3] = baseRoughColor.r * clampedVariation;
-            colorsRough[i * 3 + 1] = baseRoughColor.g * clampedVariation;
-            colorsRough[i * 3 + 2] = baseRoughColor.b * clampedVariation;
-        }
-        roughGeometry.setAttribute('color', new THREE.BufferAttribute(colorsRough, 3));
-
-        // --- Create Mesh ---
-        const roughSurface = roughData.surface;
-        const roughMesh = new THREE.Mesh(roughGeometry);
-        roughMesh.rotation.x = Math.PI / 2;
-        roughMesh.position.set(0, roughSurface?.height ?? 0.0, 0);
-        roughMesh.receiveShadow = true;
-
-        // --- Apply Material ---
-        if (roughSurface && roughSurface.texturePath) {
-            textureLoader.load(
-                roughSurface.texturePath,
-                (texture) => {
-                    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-                    const simpleRepetitions = 10;
-                    texture.repeat.set(simpleRepetitions, simpleRepetitions);
-                    roughMesh.material = new THREE.MeshStandardMaterial({
-                        map: texture,
-                        side: THREE.DoubleSide,
-                        vertexColors: true
-                    });
-                    roughMesh.material.needsUpdate = true;
-                },
-                undefined,
-                (err) => {
-                    console.error(`Error loading ${roughTypeName} texture:`, err);
-                    roughMesh.material = new THREE.MeshStandardMaterial({
-                        color: roughSurface?.color || '#228b22',
-                        side: THREE.DoubleSide,
-                        vertexColors: true
-                    });
-                    roughMesh.material.needsUpdate = true;
-                }
-            );
-        } else {
-            roughMesh.material = new THREE.MeshStandardMaterial({
-                color: roughSurface?.color || '#228b22',
-                side: THREE.DoubleSide,
-                vertexColors: true
-            });
-        }
-
-        scene.add(roughMesh);
-        currentHoleObjects.push(roughMesh);
-    };
-
-    // --- Draw Rough (Draw on top of background) ---
-    // Handle all three rough types (lightRough, mediumRough, thickRough arrays)
-    if (holeLayout.lightRough && Array.isArray(holeLayout.lightRough)) {
-        holeLayout.lightRough.forEach((rough, index) => {
-            drawRoughPolygon(rough, `Light Rough #${index + 1}`);
-        });
-    }
-
-    if (holeLayout.mediumRough && Array.isArray(holeLayout.mediumRough)) {
-        holeLayout.mediumRough.forEach((rough, index) => {
-            drawRoughPolygon(rough, `Medium Rough #${index + 1}`);
-        });
-    }
-
-    if (holeLayout.thickRough && Array.isArray(holeLayout.thickRough)) {
-        holeLayout.thickRough.forEach((rough, index) => {
-            drawRoughPolygon(rough, `Thick Rough #${index + 1}`);
-        });
-    }
-
-    // Legacy support: single rough object (backwards compatibility)
-    if (holeLayout.rough?.vertices && holeLayout.rough.vertices.length >= 3) {
-        drawRoughPolygon(holeLayout.rough, 'Rough (Legacy)');
-    }
-
-
-    // --- Draw Water Hazards (On top of rough, below bunkers/fairway/green) ---
-    if (holeLayout.waterHazards && Array.isArray(holeLayout.waterHazards)) {
-        holeLayout.waterHazards.forEach(water => {
-            if (!water || !water.surface) return; // Skip invalid water hazards
-
-            let waterGeometry;
-            let waterMesh = new THREE.Mesh(); // Create mesh shell first
-            waterMesh.receiveShadow = true; // Water can receive shadows
-            const waterYOffset = water.surface.height ?? 0.002; // Use defined height or fallback
-            const waterSurface = water.surface;
-
-            if (water.type === 'circle' && water.center && water.radius) {
-                const radiusMeters = water.radius * scale;
-                const centerX = water.center.x * scale;
-                const centerZ = water.center.z * scale;
-                waterGeometry = new THREE.CircleGeometry(radiusMeters, 32);
-                waterMesh.geometry = waterGeometry; // Assign geometry
-                waterMesh.position.set(centerX, waterYOffset, centerZ);
-                waterMesh.rotation.x = -Math.PI / 2;
-
-            } else if (water.type === 'polygon' && water.vertices && water.vertices.length >= 3) {
-                const waterShape = new THREE.Shape();
-                const firstPoint = water.vertices[0];
-                waterShape.moveTo(firstPoint.x * scale, firstPoint.z * scale);
-                for (let i = 1; i < water.vertices.length; i++) {
-                    const point = water.vertices[i];
-                    waterShape.lineTo(point.x * scale, point.z * scale);
-                }
-                waterShape.closePath();
-                waterGeometry = new THREE.ShapeGeometry(waterShape);
-                 // --- BEGIN Manual UV Calculation for Polygon Water ---
-                waterGeometry.computeBoundingBox();
-                const waterBbox = waterGeometry.boundingBox;
-                if (waterBbox) {
-                    const positionAttribute = waterGeometry.attributes.position;
-                    const uvAttribute = new THREE.BufferAttribute(new Float32Array(positionAttribute.count * 2), 2);
-                    const sizeX = waterBbox.max.x - waterBbox.min.x;
-                    const sizeY = waterBbox.max.y - waterBbox.min.y;
-
-                    if (sizeX > 0 && sizeY > 0) {
-                        for (let i = 0; i < positionAttribute.count; i++) {
-                            const x = positionAttribute.getX(i);
-                            const y = positionAttribute.getY(i);
-                            const u = (x - waterBbox.min.x) / sizeX;
-                            const v = (y - waterBbox.min.y) / sizeY;
-                            uvAttribute.setXY(i, u, v);
-                        }
-                        waterGeometry.setAttribute('uv', uvAttribute);
-                    } else {
-                        console.warn("Polygon water geometry has zero size in X or Y dimension, cannot calculate UVs.");
-                    }
-                } else {
-                    console.warn("Could not compute bounding box for polygon water geometry.");
-                }
-                // --- END Manual UV Calculation for Polygon Water ---
-                waterMesh.geometry = waterGeometry; // Assign geometry
-                waterMesh.position.set(0, waterYOffset, 0);
-                waterMesh.rotation.x = Math.PI / 2;
-
-            } else {
-                console.warn("Skipping invalid water hazard definition:", water);
-                return; // Skip this water hazard
-            }
-
-             // --- Water Material (Texture or Color) ---
-            const waterMaterialOptions = {
-                side: THREE.DoubleSide,
-                transparent: true,
-                opacity: 0.85
-            };
-
-            if (waterSurface && waterSurface.texturePath) {
-                textureLoader.load(
-                    waterSurface.texturePath,
-                    (texture) => {
-                        texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-                        const textureRepetitions = 5; // Example value, adjust as needed
-                        texture.repeat.set(textureRepetitions, textureRepetitions);
-                        waterMesh.material = new THREE.MeshStandardMaterial({
-                            ...waterMaterialOptions,
-                            map: texture
-                        });
-                        waterMesh.material.needsUpdate = true;
-                    },
-                    undefined,
-                    (err) => {
-                        console.error(`Error loading water texture: ${waterSurface.texturePath}`, err);
-                        waterMesh.material = new THREE.MeshStandardMaterial({
-                            ...waterMaterialOptions,
-                            color: waterSurface?.color || '#ADD8E6' // Fallback color (LightBlue)
-                        });
-                        waterMesh.material.needsUpdate = true;
-                    }
-                );
-            } else {
-                waterMesh.material = new THREE.MeshStandardMaterial({
-                     ...waterMaterialOptions,
-                    color: waterSurface?.color || '#ADD8E6' // Fallback color
-                });
-            }
-
-
-            scene.add(waterMesh);
-            currentHoleObjects.push(waterMesh);
-        });
-    }
-
-    // --- Draw Bunkers (On top of rough/water, below fairway/green) ---
-    if (holeLayout.bunkers && Array.isArray(holeLayout.bunkers)) {
-        holeLayout.bunkers.forEach(bunker => {
-            if (!bunker || !bunker.surface) return; // Skip invalid bunkers
-
-            // Initialize mesh first, material will be set later (async texture loading)
-            let bunkerGeometry;
-            let bunkerMesh = new THREE.Mesh(); // Create mesh shell
-            bunkerMesh.receiveShadow = true;
-            const bunkerYOffset = bunker.surface.height ?? 0.005; // Use defined height or fallback
-            const bunkerSurface = bunker.surface; // Reference surface data
-
-            if (bunker.type === 'circle' && bunker.center && bunker.radius) {
-                const radiusMeters = bunker.radius * scale;
-                const centerX = bunker.center.x * scale;
-                const centerZ = bunker.center.z * scale;
-                bunkerGeometry = new THREE.CircleGeometry(radiusMeters, 32);
-                bunkerMesh.geometry = bunkerGeometry; // Assign geometry
-                bunkerMesh.position.set(centerX, bunkerYOffset, centerZ);
-                bunkerMesh.rotation.x = -Math.PI / 2;
-
-            } else if (bunker.type === 'polygon' && bunker.vertices && bunker.vertices.length >= 3) {
-                const bunkerShape = new THREE.Shape();
-                const firstPoint = bunker.vertices[0];
-                bunkerShape.moveTo(firstPoint.x * scale, firstPoint.z * scale);
-                for (let i = 1; i < bunker.vertices.length; i++) {
-                    const point = bunker.vertices[i];
-                    bunkerShape.lineTo(point.x * scale, point.z * scale);
-                }
-                bunkerShape.closePath();
-                bunkerGeometry = new THREE.ShapeGeometry(bunkerShape);
-                // --- BEGIN Manual UV Calculation for Polygon Bunker ---
-                bunkerGeometry.computeBoundingBox();
-                const bunkerBbox = bunkerGeometry.boundingBox;
-                if (bunkerBbox) {
-                    const positionAttribute = bunkerGeometry.attributes.position;
-                    const uvAttribute = new THREE.BufferAttribute(new Float32Array(positionAttribute.count * 2), 2);
-                    const sizeX = bunkerBbox.max.x - bunkerBbox.min.x;
-                    const sizeY = bunkerBbox.max.y - bunkerBbox.min.y;
-
-                    if (sizeX > 0 && sizeY > 0) {
-                        for (let i = 0; i < positionAttribute.count; i++) {
-                            const x = positionAttribute.getX(i);
-                            const y = positionAttribute.getY(i);
-                            const u = (x - bunkerBbox.min.x) / sizeX;
-                            const v = (y - bunkerBbox.min.y) / sizeY;
-                            uvAttribute.setXY(i, u, v);
-                        }
-                        bunkerGeometry.setAttribute('uv', uvAttribute);
-                    } else {
-                        console.warn("Polygon bunker geometry has zero size in X or Y dimension, cannot calculate UVs.");
-                    }
-                } else {
-                    console.warn("Could not compute bounding box for polygon bunker geometry.");
-                }
-                 // --- END Manual UV Calculation for Polygon Bunker ---
-                bunkerMesh.geometry = bunkerGeometry; // Assign geometry
-                bunkerMesh.position.set(0, bunkerYOffset, 0);
-                bunkerMesh.rotation.x = Math.PI / 2;
-
-            } else {
-                console.warn("Skipping invalid bunker definition:", bunker);
-                return; // Skip this bunker
-            }
-
-            // --- Bunker Material (Texture or Color) ---
-            if (bunkerSurface && bunkerSurface.texturePath) {
-                textureLoader.load(
-                    bunkerSurface.texturePath,
-                    // onLoad callback
-                    (texture) => {
-                        texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-                        // Adjust repetition as needed, similar to fairway/green
-                        const textureRepetitions = 8; // Example value, adjust for desired look
-                        texture.repeat.set(textureRepetitions, textureRepetitions);
-
-                        bunkerMesh.material = new THREE.MeshStandardMaterial({
-                            map: texture,
-                            side: THREE.DoubleSide
-                        });
-                        bunkerMesh.material.needsUpdate = true;
-                    },
-                    // onProgress callback (optional)
-                    undefined,
-                    // onError callback
-                    (err) => {
-                        console.error(`Error loading bunker texture: ${bunkerSurface.texturePath}`, err);
-                        // Fallback to color on error
-                        bunkerMesh.material = new THREE.MeshStandardMaterial({
-                            color: bunkerSurface?.color || '#D2B48C', // Fallback color (Tan)
-                            side: THREE.DoubleSide
-                        });
-                        bunkerMesh.material.needsUpdate = true;
-                    }
-                );
-            } else {
-                // Apply color immediately if no texture path
-                bunkerMesh.material = new THREE.MeshStandardMaterial({
-                    color: bunkerSurface?.color || '#D2B48C', // Fallback color (Tan)
-                    side: THREE.DoubleSide
-                });
-            }
-
-            scene.add(bunkerMesh); // Add mesh to scene (material might be applied async)
-            currentHoleObjects.push(bunkerMesh);
-        });
-    }
-
-
-    // --- Draw Fairway (On top of rough/water/bunkers) ---
-    // --- Draw Fairways (Support multiple) ---
-    const drawFairwayPolygon = (fairwayData, fairwayName) => {
-        if (!fairwayData?.vertices || fairwayData.vertices.length < 3) {
-            console.warn(`${fairwayName} definition missing or invalid. Cannot draw.`);
-            return;
-        }
-
-        const fairwayShape = new THREE.Shape();
-        const firstPoint = fairwayData.vertices[0];
-        fairwayShape.moveTo(firstPoint.x * scale, firstPoint.z * scale);
-        for (let i = 1; i < fairwayData.vertices.length; i++) {
-            const point = fairwayData.vertices[i];
-            fairwayShape.lineTo(point.x * scale, point.z * scale);
-        }
-        fairwayShape.closePath();
-        const fairwayGeometry = new THREE.ShapeGeometry(fairwayShape);
-
-        // Manual UV Calculation
-        fairwayGeometry.computeBoundingBox();
-        const fairwayBbox = fairwayGeometry.boundingBox;
-        if (fairwayBbox) {
-            const positionAttribute = fairwayGeometry.attributes.position;
-            const uvAttribute = new THREE.BufferAttribute(new Float32Array(positionAttribute.count * 2), 2);
-            const sizeX = fairwayBbox.max.x - fairwayBbox.min.x;
-            const sizeY = fairwayBbox.max.y - fairwayBbox.min.y;
-
-            if (sizeX > 0 && sizeY > 0) {
-                for (let i = 0; i < positionAttribute.count; i++) {
-                    const x = positionAttribute.getX(i);
-                    const y = positionAttribute.getY(i);
-                    const u = (x - fairwayBbox.min.x) / sizeX;
-                    const v = (y - fairwayBbox.min.y) / sizeY;
-                    uvAttribute.setXY(i, u, v);
-                }
-                fairwayGeometry.setAttribute('uv', uvAttribute);
-            }
-        }
-
-        const fairwaySurface = fairwayData.surface;
-        const fairwayMesh = new THREE.Mesh(fairwayGeometry);
-        fairwayMesh.rotation.x = Math.PI / 2;
-        fairwayMesh.position.set(0, fairwaySurface?.height ?? 0.01, 0);
-        fairwayMesh.receiveShadow = true;
-
-        if (fairwaySurface && fairwaySurface.texturePath) {
-            textureLoader.load(
-                fairwaySurface.texturePath,
-                (texture) => {
-                    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-                    const textureRepetitions = 15;
-                    texture.repeat.set(textureRepetitions, textureRepetitions);
-                    fairwayMesh.material = new THREE.MeshStandardMaterial({
-                        map: texture,
-                        side: THREE.DoubleSide
-                    });
-                    fairwayMesh.material.needsUpdate = true;
-                },
-                undefined,
-                (err) => {
-                    console.error(`Error loading ${fairwayName} texture: ${fairwaySurface.texturePath}`, err);
-                    fairwayMesh.material = new THREE.MeshStandardMaterial({
-                        color: fairwaySurface?.color || '#5DBB5D',
-                        side: THREE.DoubleSide
-                    });
-                    fairwayMesh.material.needsUpdate = true;
-                }
-            );
-        } else {
-            fairwayMesh.material = new THREE.MeshStandardMaterial({
-                color: fairwaySurface?.color || '#5DBB5D',
-                side: THREE.DoubleSide
-            });
-        }
-        scene.add(fairwayMesh);
-        currentHoleObjects.push(fairwayMesh);
-    };
-
-    // Draw all fairways
-    if (holeLayout.fairways && Array.isArray(holeLayout.fairways)) {
-        holeLayout.fairways.forEach((fairway, index) => {
-            drawFairwayPolygon(fairway, `Fairway #${index + 1}`);
-        });
-    } else if (holeLayout.fairway) {
-        // Legacy single fairway support
-        drawFairwayPolygon(holeLayout.fairway, 'Fairway');
-    }
-
-    // --- Draw Green --- (Now uses polygon logic)
-    if (holeLayout.green && holeLayout.green.type === 'polygon' && holeLayout.green.vertices && holeLayout.green.vertices.length >= 3 && holeLayout.green.surface) {
-        const greenHeight = holeLayout.green.surface.height ?? 0.02; // Use defined height or fallback
-
-        const greenShape = new THREE.Shape();
-        const firstPoint = holeLayout.green.vertices[0];
-        greenShape.moveTo(firstPoint.x * scale, firstPoint.z * scale);
-        for (let i = 1; i < holeLayout.green.vertices.length; i++) {
-            const point = holeLayout.green.vertices[i];
-            greenShape.lineTo(point.x * scale, point.z * scale);
-        }
-        greenShape.closePath();
-
-        const greenGeometry = new THREE.ShapeGeometry(greenShape);
-        // --- BEGIN Manual UV Calculation for Green ---
-        greenGeometry.computeBoundingBox();
-        const greenBbox = greenGeometry.boundingBox;
-        if (greenBbox) {
-            const positionAttribute = greenGeometry.attributes.position;
-            const uvAttribute = new THREE.BufferAttribute(new Float32Array(positionAttribute.count * 2), 2);
-            const sizeX = greenBbox.max.x - greenBbox.min.x;
-            const sizeY = greenBbox.max.y - greenBbox.min.y;
-
-            if (sizeX > 0 && sizeY > 0) {
-                for (let i = 0; i < positionAttribute.count; i++) {
-                    const x = positionAttribute.getX(i);
-                    const y = positionAttribute.getY(i);
-                    const u = (x - greenBbox.min.x) / sizeX;
-                    const v = (y - greenBbox.min.y) / sizeY;
-                    uvAttribute.setXY(i, u, v);
-                }
-                greenGeometry.setAttribute('uv', uvAttribute);
-            } else {
-                console.warn("Green geometry has zero size in X or Y dimension, cannot calculate UVs.");
-            }
-        } else {
-            console.warn("Could not compute bounding box for green geometry.");
-        }
-        // --- END Manual UV Calculation for Green ---
-        // --- Green Material (Texture or Color) ---
-        const greenSurface = holeLayout.green.surface;
-        const greenMesh = new THREE.Mesh(greenGeometry); // Create mesh first
-        greenMesh.rotation.x = Math.PI / 2; // Rotate polygon to lay flat like fairway/rough
-        greenMesh.position.set(0, greenHeight, 0); // Position mesh using surface height
-        greenMesh.receiveShadow = true;
-
-         if (greenSurface && greenSurface.texturePath) {
-             textureLoader.load(
-                greenSurface.texturePath,
-                // onLoad callback
-                (texture) => {
-                    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-                    // Removed old repetition logic - manual UVs handle mapping
-                    // const textureWorldSize = 4;
-                    // greenGeometry.computeBoundingBox(); // Already computed for UVs
-                    // const size = greenGeometry.boundingBox.getSize(new THREE.Vector3());
-                    // texture.repeat.set(size.x / textureWorldSize, size.y / textureWorldSize);
-                    const textureRepetitions = 10; // Adjust this value to control tiling density
-                    texture.repeat.set(textureRepetitions, textureRepetitions);
-
-
-                    greenMesh.material = new THREE.MeshStandardMaterial({ // Changed to StandardMaterial
-                        map: texture,
-                        side: THREE.DoubleSide
-                    });
-                    greenMesh.material.needsUpdate = true;
-                },
-                 // onProgress callback (optional)
-                undefined,
-                // onError callback
-                (err) => {
-                    console.error(`Error loading green texture: ${greenSurface.texturePath}`, err);
-                    // Fallback to color on error
-                    greenMesh.material = new THREE.MeshStandardMaterial({ // Changed to StandardMaterial
-                        color: greenSurface?.color || '#3A9A3A',
-                        side: THREE.DoubleSide
-                    });
-                    greenMesh.material.needsUpdate = true;
-                }
-            );
-        } else {
-             // Apply color immediately if no texture path
-            greenMesh.material = new THREE.MeshStandardMaterial({ // Changed to StandardMaterial
-                color: greenSurface?.color || '#3A9A3A', // Fallback color
-                side: THREE.DoubleSide
-            });
-        }
-        scene.add(greenMesh); // Add mesh to scene
-        currentHoleObjects.push(greenMesh);
-
-        // Calculate green center and approximate radius from polygon vertices
-        // This is needed for camera views (key 4 - green camera)
-        let sumX = 0, sumZ = 0;
-        holeLayout.green.vertices.forEach(v => {
-            sumX += v.x * scale;
-            sumZ += v.z * scale;
-        });
-        const centerX = sumX / holeLayout.green.vertices.length;
-        const centerZ = sumZ / holeLayout.green.vertices.length;
-        currentGreenCenter = new THREE.Vector3(centerX, greenHeight, centerZ);
-
-        // Calculate approximate radius (average distance from center to vertices)
-        let sumDist = 0;
-        holeLayout.green.vertices.forEach(v => {
-            const vx = v.x * scale;
-            const vz = v.z * scale;
-            const dist = Math.sqrt((vx - centerX) ** 2 + (vz - centerZ) ** 2);
-            sumDist += dist;
-        });
-        currentGreenRadius = sumDist / holeLayout.green.vertices.length;
-
-
-    } else if (holeLayout.green && holeLayout.green.center && holeLayout.green.radius) {
-         // Fallback for old circle definition (optional, can be removed later)
-         console.warn("Drawing green using legacy circle definition.");
-         const greenRadiusMeters = holeLayout.green.radius * scale;
-         const greenCenterX = holeLayout.green.center.x * scale;
-         const greenCenterZ = holeLayout.green.center.z * scale;
-         const greenHeight = holeLayout.green.surface?.height ?? 0.02;
-         const greenGeometry = new THREE.CircleGeometry(greenRadiusMeters, 64);
-         const greenMaterial = new THREE.MeshLambertMaterial({ color: holeLayout.green.surface?.color || '#3A9A3A', side: THREE.DoubleSide });
-         const greenMesh = new THREE.Mesh(greenGeometry, greenMaterial);
-         greenMesh.position.set(greenCenterX, greenHeight, greenCenterZ);
-         greenMesh.rotation.x = -Math.PI / 2;
-         greenMesh.receiveShadow = true;
-         scene.add(greenMesh);
-         currentHoleObjects.push(greenMesh);
-         currentGreenCenter = new THREE.Vector3(greenCenterX, greenHeight, greenCenterZ);
-         currentGreenRadius = greenRadiusMeters;
-    } else {
-        console.warn("Green definition is missing or invalid.");
-    }
-
-     // --- Draw Tee Box --- (Simple rectangle for now)
-     if (holeLayout.tee && holeLayout.tee.center && holeLayout.tee.surface) {
-        const teeWidth = holeLayout.tee.width * scale;
-        const teeDepth = holeLayout.tee.depth * scale;
-        const teeHeight = holeLayout.tee.surface.height ?? 0.03; // Use defined height or fallback
-
-        const teeGeometry = new THREE.PlaneGeometry(teeWidth, teeDepth);
-        const teeMaterial = new THREE.MeshLambertMaterial({ // Use Lambert
-            color: holeLayout.tee.surface.color, // Use specified surface color
-            side: THREE.DoubleSide
-        });
-        const teeMesh = new THREE.Mesh(teeGeometry, teeMaterial);
-        teeMesh.position.set(
-            holeLayout.tee.center.x * scale,
-            teeHeight, // Use defined height
-            holeLayout.tee.center.z * scale
-        );
-        teeMesh.rotation.x = -Math.PI / 2;
-        teeMesh.receiveShadow = true; // Tee should also receive shadows
-        scene.add(teeMesh);
-        currentHoleObjects.push(teeMesh);
-    }
-
+    renderTeeBox(holeLayout, scene, currentHoleObjects);
 
     // --- Draw Flagstick ---
     if (holeLayout.flagPosition) {
@@ -736,12 +84,12 @@ export function drawHoleLayout(holeLayout) {
         const flagRadius = 0.05; // Meters
         const flagGeometry = new THREE.CylinderGeometry(flagRadius, flagRadius, flagHeight, 8);
         const flagMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff }); // White pole
-        flagstickPoleMesh = new THREE.Mesh(flagGeometry, flagMaterial); // Assign to module variable
-        flagstickPoleMesh.name = "FlagstickPole"; // Optional: Add name for debugging
+        flagstickPoleMesh = new THREE.Mesh(flagGeometry, flagMaterial);
+        flagstickPoleMesh.name = "FlagstickPole";
         flagstickPoleMesh.position.set(
-            holeLayout.flagPosition.x * scale,
-            flagHeight / 2, // Position base at ground level (Y=0) relative to its center
-            holeLayout.flagPosition.z * scale
+            holeLayout.flagPosition.x,
+            flagHeight / 2,
+            holeLayout.flagPosition.z
         );
         flagstickPoleMesh.castShadow = true;
         scene.add(flagstickPoleMesh);
@@ -749,9 +97,9 @@ export function drawHoleLayout(holeLayout) {
 
         // Store the flag position (base of the stick)
         currentFlagPosition = new THREE.Vector3(
-            holeLayout.flagPosition.x * scale,
-            0, // Assuming flag base is at y=0 world coordinate
-            holeLayout.flagPosition.z * scale
+            holeLayout.flagPosition.x,
+            0,
+            holeLayout.flagPosition.z
         );
 
 
@@ -799,7 +147,7 @@ export function drawHoleLayout(holeLayout) {
 
         // Convert obstacle data from JSON format to full obstacle objects with properties
         const obstaclesWithProps = holeLayout.obstacles.map(obs =>
-            createObstacle(obs.type, obs.size, obs.x * scale, obs.z * scale)
+            createObstacle(obs.type, obs.size, obs.x, obs.z)
         );
 
         // Store obstacles for physics calculations
