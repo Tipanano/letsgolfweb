@@ -1,6 +1,8 @@
 // src/terrainHeight.js
 // Handles terrain height lookups for ball physics
 
+import earcut from 'https://cdn.skypack.dev/earcut@2.2.4';
+
 /**
  * Checks if a point is inside a triangle using barycentric coordinates
  * @param {number} px - Point X
@@ -124,24 +126,37 @@ export function buildTerrainMesh(holeLayout) {
 }
 
 /**
- * Simple ear clipping triangulation for a polygon
+ * Proper triangulation using earcut library (handles any polygon shape)
  * @param {Array} vertices - Array of {x, y?, z} vertices
  * @returns {Array} Array of triangles [{v1, v2, v3}, ...]
  */
 function triangulatePolygon(vertices) {
     if (vertices.length < 3) return [];
 
-    const triangles = [];
-    const remaining = [...vertices];
+    // Flatten vertices to [x, z, x, z, ...] for earcut (2D triangulation on XZ plane)
+    const coords = [];
+    for (const v of vertices) {
+        coords.push(v.x, v.z);
+    }
 
-    // Simple fan triangulation (works for convex polygons and most simple polygons)
-    // For complex polygons, you'd use earcut library
-    const v0 = remaining[0];
-    for (let i = 1; i < remaining.length - 1; i++) {
+    // Triangulate using earcut (returns flat array of vertex indices: [i1, i2, i3, i1, i2, i3, ...])
+    const indices = earcut(coords);
+
+    // Convert indices to triangle objects with full vertex data including heights
+    const triangles = [];
+    for (let i = 0; i < indices.length; i += 3) {
+        const idx1 = indices[i];
+        const idx2 = indices[i + 1];
+        const idx3 = indices[i + 2];
+
+        const v1 = vertices[idx1];
+        const v2 = vertices[idx2];
+        const v3 = vertices[idx3];
+
         triangles.push({
-            v1: { x: v0.x, y: v0.y, z: v0.z },
-            v2: { x: remaining[i].x, y: remaining[i].y, z: remaining[i].z },
-            v3: { x: remaining[i + 1].x, y: remaining[i + 1].y, z: remaining[i + 1].z }
+            v1: { x: v1.x, y: v1.y !== undefined ? v1.y : 0, z: v1.z },
+            v2: { x: v2.x, y: v2.y !== undefined ? v2.y : 0, z: v2.z },
+            v3: { x: v3.x, y: v3.y !== undefined ? v3.y : 0, z: v3.z }
         });
     }
 

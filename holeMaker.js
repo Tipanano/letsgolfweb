@@ -49,8 +49,15 @@ const holeMaker = {
     teeBox: null, // Store the tee box object
     flagPositions: [], // Store flag positions (max 4)
     vertexMarkers: [], // Store vertex marker circles
+    highlightMarkers: [], // Store highlight markers for area-selected vertices
+    selectedPointIndicator: null, // Blue ring indicator for point selected from list
+    currentAreaPoints: null, // Store area-selected points for refresh
     currentVertexHeight: 0, // Current height for next vertex (meters)
     selectedVertex: null, // Currently selected vertex for editing {polygon, pointIndex}
+    selectedTeeBox: false, // Flag for when tee box is selected for height editing
+    areaSelectionMode: false, // Ctrl+drag to select area
+    areaSelectionStart: null, // Starting point of area selection
+    areaSelectionRect: null, // Visual rectangle for area selection
 
     init() {
         // Set initial dimensions based on par 4
@@ -77,12 +84,44 @@ const holeMaker = {
         this.drawGuides();
 
         // Event listeners
+        // Intercept at native DOM level to catch Ctrl/Cmd before Fabric.js does
+        this.canvas.upperCanvasEl.addEventListener('mousedown', (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                if (!this.teeBoxPlacementMode && !this.flagPlacementMode && !this.objectPlacementMode && !this.isDrawing) {
+                    // Block Fabric.js completely
+                    e.stopImmediatePropagation();
+                    e.preventDefault();
+
+                    // Start area selection
+                    this.startAreaSelection(e);
+                    return false;
+                }
+            }
+        }, true); // Use capture phase to intercept before Fabric
+
         this.canvas.on('mouse:down', (e) => this.onMouseDown(e));
         this.canvas.on('mouse:move', (e) => this.onMouseMove(e));
         this.canvas.on('mouse:up', (e) => this.onMouseUp(e));
         this.canvas.on('mouse:dblclick', (e) => this.onDoubleClick(e));
         this.canvas.on('selection:created', (e) => this.onSelectionChange(e));
         this.canvas.on('selection:updated', (e) => this.onSelectionChange(e));
+        this.canvas.on('mouse:down', (e) => {
+            // Check if a vertex marker was clicked (prioritize over shape selection)
+            if (e.target && e.target.parentPolygon) {
+                // This is a vertex marker - handle it
+                this.selectVertex(e.target.parentPolygon, e.target.pointIndex);
+                this.activePolygon = e.target.parentPolygon;
+                this.canvas.setActiveObject(e.target.parentPolygon);
+                e.e?.stopPropagation();
+                e.e?.preventDefault();
+                return false;
+            }
+
+            // Check if tee box was clicked
+            if (e.target && e.target === this.teeBox?.visual) {
+                this.selectTeeBox();
+            }
+        });
         this.canvas.on('object:moving', (e) => this.updateVertexMarkers());
         this.canvas.on('object:modified', (e) => {
             // This fires when moving the whole shape or editing vertices is complete
@@ -245,6 +284,7 @@ const holeMaker = {
 
     selectVertex(polygon, pointIndex) {
         this.selectedVertex = { polygon, pointIndex };
+        this.selectedTeeBox = false; // Clear tee box selection
 
         // Get current height of selected vertex
         const point = polygon.points[pointIndex];
@@ -254,18 +294,382 @@ const holeMaker = {
         document.getElementById('heightSlider').value = currentHeight;
         document.getElementById('heightValue').textContent = `${currentHeight.toFixed(1)}m`;
         document.getElementById('heightHelpText').textContent = `Editing vertex height (currently ${currentHeight.toFixed(1)}m)`;
+        document.getElementById('updateHeightBtn').textContent = 'Update Selected Vertex Height';
         document.getElementById('updateHeightBtn').style.display = 'block';
+
+        // Show nearby points
+        this.showNearbyPoints(polygon, pointIndex);
 
         console.log(`Selected vertex ${pointIndex} with height ${currentHeight}m`);
     },
 
+    selectVertexWithoutChangingList(polygon, pointIndex) {
+        this.selectedVertex = { polygon, pointIndex };
+        this.selectedTeeBox = false; // Clear tee box selection
+
+        // Get current height of selected vertex
+        const point = polygon.points[pointIndex];
+        const currentHeight = point.height !== undefined ? point.height : 0;
+
+        // Update UI (but don't change the points list)
+        document.getElementById('heightSlider').value = currentHeight;
+        document.getElementById('heightValue').textContent = `${currentHeight.toFixed(1)}m`;
+        document.getElementById('heightHelpText').textContent = `Editing vertex height (currently ${currentHeight.toFixed(1)}m)`;
+        document.getElementById('updateHeightBtn').textContent = 'Update Selected Vertex Height';
+        document.getElementById('updateHeightBtn').style.display = 'block';
+
+        // Add a visual indicator on the canvas for the selected point
+        this.addSelectedPointIndicator(polygon, pointIndex);
+
+        // Update the "SELECTED" label in the list
+        this.updateSelectedLabelInList(polygon, pointIndex);
+
+        console.log(`Selected vertex ${pointIndex} from list with height ${currentHeight}m`);
+    },
+
+    updateSelectedLabelInList(selectedPolygon, selectedPointIndex) {
+        // Find the currently selected vertex in the shapes array
+        let selectedShapeIndex = -1;
+        this.shapes.forEach((shape, idx) => {
+            if (shape.polygon === selectedPolygon) {
+                selectedShapeIndex = idx;
+            }
+        });
+
+        // Update all point divs in the list
+        const list = document.getElementById('pointDetailsList');
+        const pointDivs = list.children;
+
+        // First pass: Remove ALL existing "SELECTED" labels and reset styles
+        Array.from(pointDivs).forEach((div) => {
+            const labelArea = div.querySelector('div[style*="justify-content: space-between"]');
+            if (labelArea) {
+                // Remove all spans that contain "SELECTED"
+                const spans = labelArea.querySelectorAll('span');
+                spans.forEach(span => {
+                    if (span.textContent.includes('SELECTED')) {
+                        span.remove();
+                    }
+                });
+            }
+            // Reset background and border
+            div.style.background = '#1a252f';
+            div.style.border = '1px solid #34495e';
+        });
+
+        // Second pass: Add "SELECTED" label to the correct point
+        Array.from(pointDivs).forEach((div) => {
+            const deleteBtn = div.querySelector('button[onclick*="deletePoint"]');
+            if (deleteBtn) {
+                const onclickAttr = deleteBtn.getAttribute('onclick');
+                const match = onclickAttr.match(/deletePoint\((\d+),\s*(\d+)\)/);
+                if (match) {
+                    const shapeIdx = parseInt(match[1]);
+                    const pointIdx = parseInt(match[2]);
+
+                    // Check if this is the selected point
+                    if (shapeIdx === selectedShapeIndex && pointIdx === selectedPointIndex) {
+                        const labelArea = div.querySelector('div[style*="justify-content: space-between"]');
+                        if (labelArea) {
+                            const selectedLabel = document.createElement('span');
+                            selectedLabel.style.color = '#3498db';
+                            selectedLabel.textContent = '● SELECTED';
+                            labelArea.appendChild(selectedLabel);
+                        }
+
+                        // Highlight background and border
+                        div.style.background = '#2c3e50';
+                        div.style.border = '2px solid #3498db';
+                    }
+                }
+            }
+        });
+    },
+
+    addSelectedPointIndicator(polygon, pointIndex) {
+        // Remove any existing selected point indicator
+        if (this.selectedPointIndicator) {
+            this.canvas.remove(this.selectedPointIndicator);
+        }
+
+        const point = polygon.points[pointIndex];
+        const absPoint = fabric.util.transformPoint(
+            { x: point.x - polygon.pathOffset.x, y: point.y - polygon.pathOffset.y },
+            polygon.calcTransformMatrix()
+        );
+
+        // Create a pulsing blue ring around the selected point
+        this.selectedPointIndicator = new fabric.Circle({
+            left: absPoint.x,
+            top: absPoint.y,
+            radius: 10,
+            fill: 'rgba(52, 152, 219, 0.2)', // Blue with transparency
+            stroke: '#3498db', // Bright blue
+            strokeWidth: 4,
+            originX: 'center',
+            originY: 'center',
+            selectable: false,
+            evented: false
+        });
+
+        this.canvas.add(this.selectedPointIndicator);
+        this.canvas.bringToFront(this.selectedPointIndicator);
+        this.canvas.requestRenderAll();
+    },
+
+    selectTeeBox() {
+        this.selectedTeeBox = true;
+        this.selectedVertex = null; // Clear vertex selection
+        this.currentAreaPoints = null; // Clear area selection
+
+        const currentHeight = this.teeBox.y !== undefined ? this.teeBox.y : 0;
+
+        // Update UI
+        document.getElementById('heightSlider').value = currentHeight;
+        document.getElementById('heightValue').textContent = `${currentHeight.toFixed(1)}m`;
+        document.getElementById('heightHelpText').textContent = `Editing tee box height (currently ${currentHeight.toFixed(1)}m)`;
+        document.getElementById('updateHeightBtn').textContent = 'Update Tee Box Height';
+        document.getElementById('updateHeightBtn').style.display = 'block';
+
+        // Clear highlight markers and point details panel
+        if (this.highlightMarkers) {
+            this.highlightMarkers.forEach(marker => this.canvas.remove(marker));
+            this.highlightMarkers = [];
+        }
+        if (this.selectedPointIndicator) {
+            this.canvas.remove(this.selectedPointIndicator);
+            this.selectedPointIndicator = null;
+        }
+        document.getElementById('pointDetailsPanel').style.display = 'none';
+
+        this.canvas.requestRenderAll();
+
+        console.log(`Selected tee box with height ${currentHeight}m`);
+    },
+
     deselectVertex() {
         this.selectedVertex = null;
+        this.selectedTeeBox = false;
+        this.currentAreaPoints = null;
         document.getElementById('heightHelpText').textContent = 'Set height for next vertex (-10m to +10m)';
+        document.getElementById('updateHeightBtn').textContent = 'Update Selected Vertex Height';
         document.getElementById('updateHeightBtn').style.display = 'none';
+        document.getElementById('pointDetailsPanel').style.display = 'none';
+
+        // Clear highlight markers
+        if (this.highlightMarkers) {
+            this.highlightMarkers.forEach(marker => this.canvas.remove(marker));
+            this.highlightMarkers = [];
+        }
+
+        // Clear selected point indicator
+        if (this.selectedPointIndicator) {
+            this.canvas.remove(this.selectedPointIndicator);
+            this.selectedPointIndicator = null;
+        }
+
+        this.canvas.requestRenderAll();
+    },
+
+    showNearbyPoints(selectedPolygon, selectedPointIndex) {
+        const panel = document.getElementById('pointDetailsPanel');
+        const list = document.getElementById('pointDetailsList');
+
+        panel.style.display = 'block';
+        list.innerHTML = '';
+
+        // Update the header and help text to show context
+        const header = panel.querySelector('h2');
+        if (header) {
+            header.textContent = '🔍 Nearby Points';
+        }
+        const helpDiv = panel.querySelector('div[style*="font-size: 11px"]');
+        if (helpDiv) {
+            helpDiv.textContent = 'Vertices within 2m of selected point';
+        }
+
+        // Get selected point position
+        const selectedPoint = selectedPolygon.points[selectedPointIndex];
+        const absSelectedPoint = fabric.util.transformPoint(
+            { x: selectedPoint.x - selectedPolygon.pathOffset.x, y: selectedPoint.y - selectedPolygon.pathOffset.y },
+            selectedPolygon.calcTransformMatrix()
+        );
+
+        // Convert to meters for distance calculation
+        const selectedX = absSelectedPoint.x / this.scale;
+        const selectedZ = CANVAS_HEIGHT - (absSelectedPoint.y / this.scale);
+
+        const SEARCH_RADIUS = 2; // meters
+        const nearbyPoints = [];
+
+        // Find all points within 2m
+        this.shapes.forEach((shape, shapeIndex) => {
+            if (shape.polygon && shape.polygon.points) {
+                shape.polygon.points.forEach((point, pointIdx) => {
+                    const absPoint = fabric.util.transformPoint(
+                        { x: point.x - shape.polygon.pathOffset.x, y: point.y - shape.polygon.pathOffset.y },
+                        shape.polygon.calcTransformMatrix()
+                    );
+
+                    const pointX = absPoint.x / this.scale;
+                    const pointZ = CANVAS_HEIGHT - (absPoint.y / this.scale);
+
+                    const dx = pointX - selectedX;
+                    const dz = pointZ - selectedZ;
+                    const distance = Math.sqrt(dx * dx + dz * dz);
+
+                    if (distance <= SEARCH_RADIUS) {
+                        nearbyPoints.push({
+                            shape,
+                            shapeIndex,
+                            pointIndex: pointIdx,
+                            point,
+                            distance,
+                            x: pointX,
+                            z: pointZ,
+                            height: point.height !== undefined ? point.height : 0,
+                            isSelected: shape.polygon === selectedPolygon && pointIdx === selectedPointIndex
+                        });
+                    }
+                });
+            }
+        });
+
+        // Sort by distance
+        nearbyPoints.sort((a, b) => a.distance - b.distance);
+
+        // Display points
+        nearbyPoints.forEach(item => {
+            const pointDiv = document.createElement('div');
+            pointDiv.style.cssText = `
+                background: ${item.isSelected ? '#2c3e50' : '#1a252f'};
+                padding: 8px;
+                margin-bottom: 6px;
+                border-radius: 4px;
+                border: ${item.isSelected ? '2px solid #3498db' : '1px solid #34495e'};
+                font-size: 11px;
+            `;
+
+            const heightNormalized = (item.height + 10) / 20;
+            const hue = heightNormalized * 240;
+            const heightColor = `hsl(${hue}, 80%, 50%)`;
+
+            pointDiv.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <div style="width: 10px; height: 10px; background: ${SURFACE_COLORS[item.shape.type]}; border-radius: 50%;"></div>
+                        <strong style="color: #ecf0f1;">${item.shape.type.toUpperCase()}</strong>
+                    </div>
+                    ${item.isSelected ? '<span style="color: #3498db;">● SELECTED</span>' : ''}
+                </div>
+                <div style="color: #95a5a6; margin-bottom: 4px;">
+                    Point #${item.pointIndex + 1} • ${item.distance.toFixed(2)}m away
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <span style="color: #ecf0f1;">Height: </span>
+                        <span style="color: ${heightColor}; font-weight: bold;">${item.height.toFixed(1)}m</span>
+                    </div>
+                    <button onclick="holeMaker.deletePoint(${item.shapeIndex}, ${item.pointIndex})"
+                            style="background: #e74c3c; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer; font-size: 10px;">
+                        Delete
+                    </button>
+                </div>
+                <div style="color: #7f8c8d; font-size: 10px; margin-top: 4px;">
+                    x: ${item.x.toFixed(1)}m, z: ${item.z.toFixed(1)}m
+                </div>
+            `;
+
+            list.appendChild(pointDiv);
+        });
+
+        if (nearbyPoints.length === 0) {
+            list.innerHTML = '<div style="color: #95a5a6; font-size: 11px; padding: 10px; text-align: center;">No points found</div>';
+        }
+    },
+
+    deletePoint(shapeIndex, pointIndex) {
+        const shape = this.shapes[shapeIndex];
+        if (!shape || !shape.polygon) return;
+
+        // Need at least 3 points for a polygon
+        if (shape.polygon.points.length <= 3) {
+            alert('Cannot delete point: Polygon must have at least 3 points');
+            return;
+        }
+
+        // Remove the polygon from canvas temporarily
+        this.canvas.remove(shape.polygon);
+
+        // Remove point from polygon
+        shape.polygon.points.splice(pointIndex, 1);
+
+        // Update stored points
+        if (shape.points) {
+            shape.points.splice(pointIndex, 1);
+        }
+
+        // Recreate the polygon with the updated points
+        const newPolygon = new fabric.Polygon(shape.polygon.points, {
+            fill: shape.polygon.fill,
+            stroke: shape.polygon.stroke,
+            strokeWidth: shape.polygon.strokeWidth,
+            opacity: shape.polygon.opacity,
+            objectCaching: false,
+            transparentCorners: false,
+            cornerColor: '#3498db',
+            cornerSize: 12,
+            hasBorders: false,
+            hasControls: true,
+            hasRotatingPoint: false,
+            lockRotation: true,
+            selectable: true,
+            evented: true,
+            perPixelTargetFind: true
+        });
+
+        // Preserve height data on new polygon points
+        newPolygon.points.forEach((point, idx) => {
+            if (shape.polygon.points[idx] && shape.polygon.points[idx].height !== undefined) {
+                point.height = shape.polygon.points[idx].height;
+            }
+        });
+
+        // Hide default transform controls
+        newPolygon.setControlsVisibility({
+            mt: false, mb: false, ml: false, mr: false,
+            bl: false, br: false, tl: false, tr: false,
+            mtr: false
+        });
+
+        // Enable polygon editing
+        this.enablePolygonEditing(newPolygon);
+
+        // Replace old polygon with new one
+        shape.polygon = newPolygon;
+        this.canvas.add(newPolygon);
+
+        console.log(`Deleted point #${pointIndex} from ${shape.type.toUpperCase()} #${shapeIndex + 1}`);
+
+        // Refresh UI
+        this.canvas.requestRenderAll();
+        this.updateVertexMarkers();
+        this.deselectVertex();
+        this.exportJSON();
     },
 
     updateSelectedVertexHeight() {
+        // Handle tee box height update
+        if (this.selectedTeeBox && this.teeBox) {
+            const newHeight = this.currentVertexHeight;
+            this.teeBox.y = newHeight;
+            console.log(`holeMaker: Updated tee box height to ${newHeight}m, teeBox:`, this.teeBox);
+            this.exportJSON(); // Make sure JSON is updated
+            this.deselectVertex();
+            return;
+        }
+
+        // Handle vertex height update
         if (!this.selectedVertex) {
             console.warn('No vertex selected');
             return;
@@ -323,8 +727,65 @@ const holeMaker = {
         // Refresh vertex markers to show new colors/sizes
         this.updateVertexMarkers();
 
-        // Deselect after update
-        this.deselectVertex();
+        // Update the highlight markers and list to reflect new height
+        if (this.highlightMarkers && this.highlightMarkers.length > 0) {
+            // We're in area selection mode - keep the selection and update the list
+            this.refreshAreaSelectionList(polygon, pointIndex, newHeight);
+        } else {
+            // Normal vertex selection mode - deselect after update
+            this.deselectVertex();
+        }
+    },
+
+    refreshAreaSelectionList(selectedPolygon, selectedPointIndex, newHeight) {
+        // Find the point in the list and update its displayed height
+        const list = document.getElementById('pointDetailsList');
+        if (!list) return;
+
+        // Update vertex markers with new colors
+        this.updateVertexMarkers();
+
+        // Update highlight markers with new positions (in case terrain height changed)
+        this.highlightSelectedVertices(this.currentAreaPoints || []);
+
+        // Update the selected point indicator
+        this.addSelectedPointIndicator(selectedPolygon, selectedPointIndex);
+
+        // Update the "SELECTED" label
+        this.updateSelectedLabelInList(selectedPolygon, selectedPointIndex);
+
+        // Update the point list display with new heights
+        // Re-render the list to show updated height values
+        const pointDivs = list.children;
+        Array.from(pointDivs).forEach((div) => {
+            const deleteBtn = div.querySelector('button[onclick*="deletePoint"]');
+            if (deleteBtn) {
+                const onclickAttr = deleteBtn.getAttribute('onclick');
+                const match = onclickAttr.match(/deletePoint\((\d+),\s*(\d+)\)/);
+                if (match) {
+                    const shapeIdx = parseInt(match[1]);
+                    const pointIdx = parseInt(match[2]);
+
+                    const shape = this.shapes[shapeIdx];
+                    if (shape && shape.polygon && shape.polygon.points[pointIdx]) {
+                        const point = shape.polygon.points[pointIdx];
+                        const currentHeight = point.height !== undefined ? point.height : 0;
+
+                        // Update the height display in the div
+                        const heightSpan = div.querySelector('span[style*="font-weight: bold"]');
+                        if (heightSpan) {
+                            const heightNormalized = (currentHeight + 10) / 20;
+                            const hue = heightNormalized * 240;
+                            const heightColor = `hsl(${hue}, 80%, 50%)`;
+                            heightSpan.style.color = heightColor;
+                            heightSpan.textContent = `${currentHeight.toFixed(1)}m`;
+                        }
+                    }
+                }
+            }
+        });
+
+        console.log('Refreshed area selection list with updated heights');
     },
 
     updateVertexMarkers() {
@@ -365,12 +826,15 @@ const holeMaker = {
                         originY: 'center',
                         selectable: false,
                         evented: true,
-                        hoverCursor: 'pointer'
+                        hoverCursor: 'pointer',
+                        hasControls: false,
+                        hasBorders: false
                     });
 
                     // Store reference to parent polygon and point index
                     marker.parentPolygon = shape.polygon;
                     marker.pointIndex = idx;
+                    marker.shapeRef = shape;
 
                     // Add click handler to select this vertex for height editing
                     marker.on('mousedown', (options) => {
@@ -383,7 +847,7 @@ const holeMaker = {
                         // Select this vertex for editing
                         this.selectVertex(shape.polygon, idx);
 
-                        // Also select the polygon in Fabric
+                        // Also select the polygon in Fabric (but don't let it interfere)
                         this.activePolygon = shape.polygon;
                         this.canvas.setActiveObject(shape.polygon);
                         this.canvas.requestRenderAll();
@@ -394,6 +858,7 @@ const holeMaker = {
 
                     this.vertexMarkers.push(marker);
                     this.canvas.add(marker);
+                    this.canvas.bringToFront(marker); // Ensure markers are always on top
                 });
             }
         });
@@ -741,7 +1206,47 @@ const holeMaker = {
         this.updateVertexMarkers();
     },
 
+    startAreaSelection(nativeEvent) {
+        // Get pointer position (allow selecting slightly outside canvas bounds)
+        const rect = this.canvas.upperCanvasEl.getBoundingClientRect();
+        let x = nativeEvent.clientX - rect.left;
+        let y = nativeEvent.clientY - rect.top;
+
+        // Allow selection to extend 50px outside canvas for easier corner selection
+        const SELECTION_MARGIN = 50;
+        x = Math.max(-SELECTION_MARGIN, Math.min(this.canvas.width + SELECTION_MARGIN, x));
+        y = Math.max(-SELECTION_MARGIN, Math.min(this.canvas.height + SELECTION_MARGIN, y));
+
+        this.areaSelectionMode = true;
+        this.areaSelectionStart = { x, y };
+        this.canvas.selection = false;
+
+        // Make all objects non-interactive
+        this.canvas.forEachObject(obj => {
+            obj.evented = false;
+            obj.selectable = false;
+        });
+
+        // Create visual rectangle
+        this.areaSelectionRect = new fabric.Rect({
+            left: x,
+            top: y,
+            width: 0,
+            height: 0,
+            fill: 'rgba(52, 152, 219, 0.2)',
+            stroke: '#3498db',
+            strokeWidth: 2,
+            selectable: false,
+            evented: false
+        });
+        this.canvas.add(this.areaSelectionRect);
+        this.canvas.renderAll();
+    },
+
     onMouseDown(e) {
+        // Area selection is now handled by native DOM listener
+        // This handler only deals with other interactions now
+
         // Handle tee box placement mode
         if (this.teeBoxPlacementMode) {
             const pointer = this.canvas.getPointer(e.e);
@@ -844,10 +1349,247 @@ const holeMaker = {
 
         document.getElementById('mousePos').textContent =
             `Mouse: ${metersX.toFixed(0)}m, ${metersY.toFixed(0)}m`;
+
+        // Update area selection rectangle
+        if (this.areaSelectionMode && this.areaSelectionRect && this.areaSelectionStart) {
+            // Allow pointer to extend outside canvas for easier corner selection
+            const SELECTION_MARGIN = 50;
+            let x = pointer.x;
+            let y = pointer.y;
+            x = Math.max(-SELECTION_MARGIN, Math.min(this.canvas.width + SELECTION_MARGIN, x));
+            y = Math.max(-SELECTION_MARGIN, Math.min(this.canvas.height + SELECTION_MARGIN, y));
+
+            const width = x - this.areaSelectionStart.x;
+            const height = y - this.areaSelectionStart.y;
+
+            if (width < 0) {
+                this.areaSelectionRect.set({ left: x, width: -width });
+            } else {
+                this.areaSelectionRect.set({ left: this.areaSelectionStart.x, width: width });
+            }
+
+            if (height < 0) {
+                this.areaSelectionRect.set({ top: y, height: -height });
+            } else {
+                this.areaSelectionRect.set({ top: this.areaSelectionStart.y, height: height });
+            }
+
+            this.canvas.requestRenderAll();
+        }
     },
 
     onMouseUp(e) {
-        // Currently not used, but could be for drag operations
+        // Handle area selection completion
+        if (this.areaSelectionMode && this.areaSelectionRect) {
+            this.completeAreaSelection();
+            return;
+        }
+    },
+
+    completeAreaSelection() {
+        if (!this.areaSelectionRect || !this.areaSelectionStart) return;
+
+        const rect = this.areaSelectionRect;
+        // Expand selection bounds by a small margin to catch points near edges
+        const POINT_MARGIN = 10; // Give 10px extra margin for catching points
+        const left = rect.left - POINT_MARGIN;
+        const top = rect.top - POINT_MARGIN;
+        const right = rect.left + rect.width + POINT_MARGIN;
+        const bottom = rect.top + rect.height + POINT_MARGIN;
+
+        // Find all points within the rectangle
+        const pointsInArea = [];
+
+        this.shapes.forEach((shape, shapeIndex) => {
+            if (shape.polygon && shape.polygon.points) {
+                shape.polygon.points.forEach((point, pointIdx) => {
+                    const absPoint = fabric.util.transformPoint(
+                        { x: point.x - shape.polygon.pathOffset.x, y: point.y - shape.polygon.pathOffset.y },
+                        shape.polygon.calcTransformMatrix()
+                    );
+
+                    if (absPoint.x >= left && absPoint.x <= right && absPoint.y >= top && absPoint.y <= bottom) {
+                        const pointX = absPoint.x / this.scale;
+                        const pointZ = CANVAS_HEIGHT - (absPoint.y / this.scale);
+
+                        pointsInArea.push({
+                            shape,
+                            shapeIndex,
+                            pointIndex: pointIdx,
+                            point,
+                            x: pointX,
+                            z: pointZ,
+                            height: point.height !== undefined ? point.height : 0
+                        });
+                    }
+                });
+            }
+        });
+
+        // Remove selection rectangle
+        this.canvas.remove(this.areaSelectionRect);
+        this.areaSelectionRect = null;
+        this.areaSelectionStart = null;
+        this.areaSelectionMode = false;
+
+        // Re-enable selection and interaction
+        this.canvas.selection = true;
+        this.canvas.forEachObject(obj => {
+            // Re-enable for shapes, but not vertex markers
+            if (obj.type === 'polygon' || obj.type === 'rect') {
+                if (!obj.parentPolygon) {
+                    obj.evented = true;
+                    obj.selectable = true;
+                }
+            }
+            // Vertex markers should stay evented but not selectable
+            if (obj.parentPolygon) {
+                obj.evented = true;
+                obj.selectable = false;
+            }
+        });
+
+        // Sort points by location to group those at the same position together
+        pointsInArea.sort((a, b) => {
+            // First sort by X coordinate
+            const xDiff = a.x - b.x;
+            if (Math.abs(xDiff) > 0.1) return xDiff;
+
+            // Then by Z coordinate if X is similar
+            const zDiff = a.z - b.z;
+            if (Math.abs(zDiff) > 0.1) return zDiff;
+
+            // Finally by height if position is the same
+            return a.height - b.height;
+        });
+
+        // Show points in panel
+        if (pointsInArea.length > 0) {
+            this.showAreaSelectedPoints(pointsInArea);
+        } else {
+            alert('No points found in selected area');
+        }
+
+        this.canvas.requestRenderAll();
+    },
+
+    showAreaSelectedPoints(points) {
+        const panel = document.getElementById('pointDetailsPanel');
+        const list = document.getElementById('pointDetailsList');
+
+        panel.style.display = 'block';
+        list.innerHTML = '';
+
+        // Store points for later refresh
+        this.currentAreaPoints = points;
+
+        // Update the header and help text to show context
+        const header = panel.querySelector('h2');
+        if (header) {
+            header.textContent = '🔍 Selected Area Points';
+        }
+        const helpDiv = panel.querySelector('div[style*="font-size: 11px"]');
+        if (helpDiv) {
+            helpDiv.textContent = `${points.length} vertices in selected area`;
+        }
+
+        // Update height help text
+        document.getElementById('heightHelpText').textContent = `${points.length} points in selected area`;
+
+        // Highlight selected vertices on canvas
+        this.highlightSelectedVertices(points);
+
+        // Display points
+        points.forEach(item => {
+            const pointDiv = document.createElement('div');
+            pointDiv.style.cssText = `
+                background: #1a252f;
+                padding: 8px;
+                margin-bottom: 6px;
+                border-radius: 4px;
+                border: 1px solid #34495e;
+                font-size: 11px;
+                cursor: pointer;
+            `;
+
+            const heightNormalized = (item.height + 10) / 20;
+            const hue = heightNormalized * 240;
+            const heightColor = `hsl(${hue}, 80%, 50%)`;
+
+            pointDiv.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <div style="width: 10px; height: 10px; background: ${SURFACE_COLORS[item.shape.type]}; border-radius: 50%;"></div>
+                        <strong style="color: #ecf0f1;">${item.shape.type.toUpperCase()}</strong>
+                    </div>
+                </div>
+                <div style="color: #95a5a6; margin-bottom: 4px;">
+                    Point #${item.pointIndex + 1}
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <span style="color: #ecf0f1;">Height: </span>
+                        <span style="color: ${heightColor}; font-weight: bold;">${item.height.toFixed(1)}m</span>
+                    </div>
+                    <button onclick="holeMaker.deletePoint(${item.shapeIndex}, ${item.pointIndex})"
+                            style="background: #e74c3c; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer; font-size: 10px;">
+                        Delete
+                    </button>
+                </div>
+                <div style="color: #7f8c8d; font-size: 10px; margin-top: 4px;">
+                    x: ${item.x.toFixed(1)}m, z: ${item.z.toFixed(1)}m
+                </div>
+            `;
+
+            // Click to select this point
+            pointDiv.onclick = (ev) => {
+                if (ev.target.tagName !== 'BUTTON') {
+                    // Select the vertex but don't trigger showNearbyPoints
+                    this.selectVertexWithoutChangingList(item.shape.polygon, item.pointIndex);
+                    this.canvas.setActiveObject(item.shape.polygon);
+                    this.canvas.requestRenderAll();
+                }
+            };
+
+            list.appendChild(pointDiv);
+        });
+
+        console.log(`Found ${points.length} points in selected area`);
+    },
+
+    highlightSelectedVertices(points) {
+        // Remove any existing highlight markers
+        if (this.highlightMarkers) {
+            this.highlightMarkers.forEach(marker => this.canvas.remove(marker));
+        }
+        this.highlightMarkers = [];
+
+        // Create highlight markers for selected points
+        points.forEach(item => {
+            const absPoint = fabric.util.transformPoint(
+                { x: item.point.x - item.shape.polygon.pathOffset.x, y: item.point.y - item.shape.polygon.pathOffset.y },
+                item.shape.polygon.calcTransformMatrix()
+            );
+
+            // Create a larger, glowing circle around the selected vertex
+            const highlight = new fabric.Circle({
+                left: absPoint.x,
+                top: absPoint.y,
+                radius: 8,
+                fill: 'rgba(255, 215, 0, 0.3)', // Gold with transparency
+                stroke: '#FFD700', // Gold
+                strokeWidth: 3,
+                originX: 'center',
+                originY: 'center',
+                selectable: false,
+                evented: false
+            });
+
+            this.highlightMarkers.push(highlight);
+            this.canvas.add(highlight);
+        });
+
+        this.canvas.requestRenderAll();
     },
 
     closePolygon() {
@@ -1212,7 +1954,7 @@ const holeMaker = {
         }
     },
 
-    placeTeeBox(x, y) {
+    placeTeeBox(x, y, heightValue = null) {
         // Remove existing tee box if any
         if (this.teeBox && this.teeBox.visual) {
             this.canvas.remove(this.teeBox.visual);
@@ -1221,6 +1963,9 @@ const holeMaker = {
         // Convert from scaled pixels to meters (flip y-axis)
         const metersX = x / this.scale;
         const metersZ = CANVAS_HEIGHT - (y / this.scale);
+
+        // Use provided height or current height slider value
+        const teeHeight = heightValue !== null ? heightValue : this.currentVertexHeight;
 
         // Create 10m x 10m tee box (rectangle)
         const teeBoxSize = 10;
@@ -1245,6 +1990,7 @@ const holeMaker = {
         this.teeBox = {
             x: metersX,
             z: metersZ,
+            y: teeHeight,
             width: teeBoxSize,
             height: teeBoxSize,
             visual: rect
@@ -1607,8 +2353,39 @@ const holeMaker = {
         this.canvas.renderAll();
     },
 
+    startNewHole() {
+        if (!confirm('Start a new hole? This will clear all current work.')) return;
+
+        // Clear all data
+        this.shapes = [];
+        this.objects = [];
+        this.flagPositions = [];
+        this.teeBox = null;
+        this.isDrawing = false;
+        this.currentPoints = [];
+
+        // Reset form fields
+        document.getElementById('holeName').value = 'custom_hole_01';
+        document.getElementById('holePar').value = 4;
+        document.getElementById('holeLength').value = '-';
+        document.getElementById('jsonOutput').value = '';
+
+        // Clear the current hole ID so next save creates a new hole
+        courseManager.currentHoleId = null;
+
+        // Reset canvas dimensions to par 4 default
+        this.onParChange();
+
+        console.log('Started new hole');
+
+        this.redrawAll();
+        this.updateLayersList();
+        this.updateFlagCount();
+        this.deselectVertex();
+    },
+
     clearCanvas() {
-        if (!confirm('Clear all shapes?')) return;
+        if (!confirm('Clear all shapes and objects? (Hole settings will be kept)')) return;
 
         this.shapes = [];
         this.objects = [];
@@ -1617,13 +2394,12 @@ const holeMaker = {
         this.isDrawing = false;
         this.currentPoints = [];
 
-        // Clear the current hole ID so next save creates a new hole
-        courseManager.currentHoleId = null;
-        console.log('Cleared canvas and reset hole ID');
+        console.log('Cleared canvas');
 
         this.redrawAll();
-        this.updateLayersList(); // Updates calculated length
+        this.updateLayersList();
         this.updateFlagCount();
+        this.deselectVertex();
     },
 
     convertPointsToMeters(points, polygon = null) {
@@ -1701,6 +2477,7 @@ const holeMaker = {
             layout.tee = {
                 center: {
                     x: parseFloat(this.teeBox.x.toFixed(2)),
+                    y: parseFloat((this.teeBox.y !== undefined ? this.teeBox.y : 0).toFixed(2)),
                     z: parseFloat(this.teeBox.z.toFixed(2))
                 },
                 width: parseFloat(this.teeBox.width.toFixed(2)),
@@ -1867,7 +2644,8 @@ const holeMaker = {
             // Import tee box (new placement-based system)
             if (layout.tee && layout.tee.center) {
                 const canvasPos = metersToCanvas(layout.tee.center);
-                this.placeTeeBox(canvasPos.x, canvasPos.y);
+                const teeHeight = layout.tee.center.y !== undefined ? layout.tee.center.y : 0;
+                this.placeTeeBox(canvasPos.x, canvasPos.y, teeHeight);
             }
 
             // Import fairways (support multiple)
@@ -1884,8 +2662,17 @@ const holeMaker = {
                 this.closePolygon();
             }
 
-            // Import green
-            if (layout.green && layout.green.controlPoints) {
+            // Import greens (support multiple for creating slopes)
+            if (layout.greens && Array.isArray(layout.greens)) {
+                layout.greens.forEach(green => {
+                    if (green.controlPoints) {
+                        this.currentPoints = green.controlPoints.map(metersToCanvas);
+                        this.currentSurface = 'green';
+                        this.closePolygon();
+                    }
+                });
+            } else if (layout.green && layout.green.controlPoints) {
+                // Legacy single green support
                 this.currentPoints = layout.green.controlPoints.map(metersToCanvas);
                 this.currentSurface = 'green';
                 this.closePolygon();

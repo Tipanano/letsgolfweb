@@ -1,5 +1,6 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
 import { OBSTACLE_TYPES } from '../obstacleConfig.js';
+import { queryTerrainHeight } from '../visuals.js'; // For terrain-aware placement
 
 // Create a tree mesh
 function createTreeMesh(props) {
@@ -54,7 +55,11 @@ export function createObstacleMesh(obstacle) {
     mesh = createBushMesh(obstacle);
   }
 
+  // Position obstacle at terrain height
+  const terrainHeight = queryTerrainHeight(obstacle.x, obstacle.z);
+
   mesh.position.x = obstacle.x;
+  mesh.position.y = terrainHeight; // Place on terrain surface
   mesh.position.z = obstacle.z;
   mesh.userData.obstacle = obstacle;
 

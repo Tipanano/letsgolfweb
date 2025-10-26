@@ -282,10 +282,20 @@
                     </button>
                 </div>
 
+                <div id="pointDetailsPanel" style="margin-top: 20px; display: none;">
+                    <h2 style="font-size: 16px; color: #3498db; margin: 0 0 10px 0; border-bottom: 2px solid #3498db; padding-bottom: 5px;">🔍 Nearby Points</h2>
+                    <div style="font-size: 11px; color: #95a5a6; margin-bottom: 10px;">
+                        Vertices within 2m of selected point
+                    </div>
+                    <div id="pointDetailsList" style="max-height: 250px; overflow-y: auto;"></div>
+                </div>
+
+                <button class="btn btn-success" onclick="holeMaker.startNewHole()" style="margin-bottom: 10px;">🆕 Start New Hole</button>
+
                 <button class="btn btn-primary" onclick="holeMaker.toggleGrid()">Toggle Grid</button>
                 <button class="btn btn-primary" onclick="holeMaker.toggleGuides()">Toggle Guides</button>
                 <button class="btn btn-primary" onclick="holeMaker.toggleVertices()">Toggle All Vertices</button>
-                <button class="btn btn-primary" onclick="holeMaker.clearCanvas()">Clear All</button>
+                <button class="btn btn-danger" onclick="holeMaker.clearCanvas()">Clear All</button>
 
                 <div class="stats">
                     <div id="canvasDimensions"><strong>Canvas:</strong> 200m wide × 475m long</div>

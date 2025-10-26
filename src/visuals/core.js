@@ -488,7 +488,9 @@ export function showBallAtAddress(position = null, surfaceType = null) {
             const activeTee = useLargeTee ? teeMesh : smallTeeMesh;
             const inactiveTee = useLargeTee ? smallTeeMesh : teeMesh;
 
-            activeTee.position.set(ballPos.x, 0.0, ballPos.z);
+            // Get terrain height at ball position (ballPos.y already includes it from playHole)
+            const terrainHeight = ballPos.y - BALL_RADIUS; // Extract terrain height from ball position
+            activeTee.position.set(ballPos.x, terrainHeight, ballPos.z);
             activeTee.visible = true;
             inactiveTee.visible = false;
 
@@ -500,12 +502,14 @@ export function showBallAtAddress(position = null, surfaceType = null) {
 
     // Adjust ball Y position based on surface offset and tee height
     // This is crucial for placing the ball correctly *before* the shot
+    // ballPos.y already contains terrain height + BALL_RADIUS from playHole.js
     const surfaceProps = typeof getSurfaceProperties === 'function' ? getSurfaceProperties(currentSurface) : null;
-    if (surfaceProps && typeof surfaceProps.ballLieOffset === 'number' && surfaceProps.ballLieOffset !== -1) { // Check if getSurfaceProperties exists
-        ballPos.y = BALL_RADIUS + surfaceProps.ballLieOffset + teeHeightOffset;
+    if (surfaceProps && typeof surfaceProps.ballLieOffset === 'number' && surfaceProps.ballLieOffset !== -1) {
+        // Add surface offset and tee height to the existing position
+        ballPos.y = ballPos.y + surfaceProps.ballLieOffset + teeHeightOffset;
     } else {
-        // Default Y if no surface info or water
-        ballPos.y = BALL_RADIUS + teeHeightOffset;
+        // Just add tee height offset if on tee
+        ballPos.y = ballPos.y + teeHeightOffset;
     }
 
     ball.position.copy(ballPos);

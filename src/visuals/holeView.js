@@ -13,6 +13,7 @@ import {
     renderGreen,
     renderTeeBox
 } from './holeRenderer.js';
+import { queryTerrainHeight } from '../visuals.js'; // For getting terrain height at flag position
 
 let currentHoleObjects = []; // To keep track of objects added for the hole
 let currentFlagPosition = null; // Store the flag position in meters (Vector3)
@@ -76,7 +77,7 @@ export function drawHoleLayout(holeLayout) {
         currentGreenRadius = greenData.radius;
     }
 
-    renderTeeBox(holeLayout, scene, currentHoleObjects);
+    renderTeeBox(holeLayout, scene, textureLoader, currentHoleObjects);
 
     // --- Draw Flagstick ---
     if (holeLayout.flagPosition) {
@@ -125,9 +126,9 @@ export function drawHoleLayout(holeLayout) {
         const holeMesh = new THREE.Mesh(holeGeometry, holeMaterial);
         holeMesh.renderOrder = 1; // Draw hole *after* the green
 
-        // Position the hole centered at the flag position, top edge slightly below green surface
-        const greenSurfaceY = currentGreenCenter ? currentGreenCenter.y : (holeLayout.green?.surface?.height ?? 0.02); // Get green height
-        const holeTopEdgeY = greenSurfaceY + 0.05; // Place top slightly below green surface
+        // Position the hole centered at the flag position, using actual terrain height at that XZ position
+        const terrainHeightAtFlag = queryTerrainHeight(currentFlagPosition.x, currentFlagPosition.z);
+        const holeTopEdgeY = terrainHeightAtFlag + 0.01; // Place top just at green surface
         const holeCenterY = holeTopEdgeY - (holeDepth / 2); // Calculate center Y
 
         holeMesh.position.set(

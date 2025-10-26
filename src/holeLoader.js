@@ -148,12 +148,15 @@ export function processHoleLayout(sourceLayout) {
             const c = layout.tee.center;
             const hw = layout.tee.width / 2;
             const hd = layout.tee.depth / 2;
+            const teeHeight = c.y !== undefined ? c.y : 0; // Get height from center
+            console.log('holeLoader: Processing tee box - center:', c, 'teeHeight:', teeHeight);
             layout.tee.vertices = [
-                { x: c.x - hw, z: c.z - hd }, // Front-left
-                { x: c.x + hw, z: c.z - hd }, // Front-right
-                { x: c.x + hw, z: c.z + hd }, // Back-right
-                { x: c.x - hw, z: c.z + hd }  // Back-left
+                { x: c.x - hw, y: teeHeight, z: c.z - hd }, // Front-left
+                { x: c.x + hw, y: teeHeight, z: c.z - hd }, // Front-right
+                { x: c.x + hw, y: teeHeight, z: c.z + hd }, // Back-right
+                { x: c.x - hw, y: teeHeight, z: c.z + hd }  // Back-left
             ];
+            console.log('holeLoader: Tee box vertices:', layout.tee.vertices);
             layout.tee.surface = SURFACES[layout.tee.surface];
             layout.tee.type = 'polygon';
         }

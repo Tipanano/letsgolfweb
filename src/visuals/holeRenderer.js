@@ -390,24 +390,37 @@ export function renderGreen(holeLayout, scene, textureLoader, objectsArray) {
 }
 
 /**
- * Renders the tee box
+ * Renders the tee box (now using polygon with heights like other surfaces)
  */
-export function renderTeeBox(holeLayout, scene, objectsArray) {
-    if (!holeLayout.tee?.center) return;
+export function renderTeeBox(holeLayout, scene, textureLoader, objectsArray) {
+    if (!holeLayout.tee) return;
 
-    const teeWidth = holeLayout.tee.width || 10;
-    const teeDepth = holeLayout.tee.depth || 10;
-    const teeHeight = holeLayout.tee.surface?.height || 0.03;
+    console.log('renderTeeBox: tee data:', holeLayout.tee);
 
-    const geometry = new THREE.PlaneGeometry(teeWidth, teeDepth);
-    const material = new THREE.MeshLambertMaterial({
-        color: holeLayout.tee.surface?.color || '#ecf0f1',
-        side: THREE.DoubleSide
-    });
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.set(holeLayout.tee.center.x, teeHeight, holeLayout.tee.center.z);
-    mesh.rotation.x = -Math.PI / 2;
-    mesh.receiveShadow = true;
-    scene.add(mesh);
-    objectsArray.push(mesh);
+    // If tee box has vertices (from holeLoader processing), render as polygon with heights
+    if (holeLayout.tee.vertices && holeLayout.tee.vertices.length >= 3) {
+        console.log('renderTeeBox: Rendering as polygon with vertices:', holeLayout.tee.vertices);
+        renderPolygonWithHeights(holeLayout.tee, scene, textureLoader, objectsArray, {
+            name: 'Tee Box',
+            textureRepetitions: 5
+        });
+    } else if (holeLayout.tee.center) {
+        // Fallback to old method for legacy holes without vertices
+        console.log('renderTeeBox: Using legacy flat rendering at center:', holeLayout.tee.center);
+        const teeWidth = holeLayout.tee.width || 10;
+        const teeDepth = holeLayout.tee.depth || 10;
+        const terrainHeight = holeLayout.tee.center.y || 0; // Use terrain height from center
+
+        const geometry = new THREE.PlaneGeometry(teeWidth, teeDepth);
+        const material = new THREE.MeshLambertMaterial({
+            color: holeLayout.tee.surface?.color || '#ecf0f1',
+            side: THREE.DoubleSide
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.set(holeLayout.tee.center.x, terrainHeight + 0.03, holeLayout.tee.center.z);
+        mesh.rotation.x = -Math.PI / 2;
+        mesh.receiveShadow = true;
+        scene.add(mesh);
+        objectsArray.push(mesh);
+    }
 }
