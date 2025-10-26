@@ -505,12 +505,13 @@ export function showBallAtAddress(position = null, surfaceType = null) {
     // ballPos.y already contains terrain height + BALL_RADIUS from playHole.js
     const surfaceProps = typeof getSurfaceProperties === 'function' ? getSurfaceProperties(currentSurface) : null;
     if (surfaceProps && typeof surfaceProps.ballLieOffset === 'number' && surfaceProps.ballLieOffset !== -1) {
-        // Add surface offset and tee height to the existing position
+        // Add surface offset (and tee height if on tee)
         ballPos.y = ballPos.y + surfaceProps.ballLieOffset + teeHeightOffset;
-    } else {
-        // Just add tee height offset if on tee
+    } else if (currentSurface.toUpperCase() === 'TEE') {
+        // Only add tee height offset when actually on tee surface
         ballPos.y = ballPos.y + teeHeightOffset;
     }
+    // Otherwise, leave ballPos.y unchanged (already has terrain height + BALL_RADIUS from playHole.js)
 
     ball.position.copy(ballPos);
     ball.visible = true;
