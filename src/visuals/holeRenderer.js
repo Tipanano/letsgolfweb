@@ -10,7 +10,7 @@ import earcut from 'https://cdn.skypack.dev/earcut@2.2.4';
  * @param {Array} vertices - Array of {x, y?, z} vertices
  * @returns {Object} - {positions: Float32Array, indices: Uint16Array/Uint32Array}
  */
-function triangulatePolygonWithHeights(vertices) {
+function triangulatePolygonWithHeights(vertices, heightOffset = 0) {
     if (!vertices || vertices.length < 3) {
         throw new Error('Need at least 3 vertices to triangulate');
     }
@@ -22,7 +22,7 @@ function triangulatePolygonWithHeights(vertices) {
     for (let i = 0; i < vertices.length; i++) {
         const v = vertices[i];
         coords.push(v.x, v.z);
-        heights.push(v.y !== undefined ? v.y : 0); // Store height, default to 0
+        heights.push((v.y !== undefined ? v.y : 0) + heightOffset); // Store height + offset, default to 0 + offset
     }
 
     // Triangulate using earcut
@@ -32,7 +32,7 @@ function triangulatePolygonWithHeights(vertices) {
     const positions = new Float32Array(vertices.length * 3);
     for (let i = 0; i < vertices.length; i++) {
         positions[i * 3] = vertices[i].x;
-        positions[i * 3 + 1] = heights[i]; // Use height as Y coordinate
+        positions[i * 3 + 1] = heights[i]; // Use height (with offset) as Y coordinate
         positions[i * 3 + 2] = vertices[i].z;
     }
 
@@ -96,11 +96,11 @@ export function renderPolygonWithHeights(polygonData, scene, textureLoader, obje
         return;
     }
 
-    const { name = 'Polygon', addNoise = false, noiseScale = 0.001, variationStrength = 0.4 } = options;
+    const { name = 'Polygon', addNoise = false, noiseScale = 0.001, variationStrength = 0.4, heightOffset = 0 } = options;
 
     try {
         // Triangulate with heights
-        const { positions, indices } = triangulatePolygonWithHeights(polygonData.vertices);
+        const { positions, indices } = triangulatePolygonWithHeights(polygonData.vertices, heightOffset);
 
         // Create geometry
         const geometry = createGeometryFromTriangulation(positions, indices);
@@ -402,7 +402,8 @@ export function renderTeeBox(holeLayout, scene, textureLoader, objectsArray) {
         console.log('renderTeeBox: Rendering as polygon with vertices:', holeLayout.tee.vertices);
         renderPolygonWithHeights(holeLayout.tee, scene, textureLoader, objectsArray, {
             name: 'Tee Box',
-            textureRepetitions: 5
+            textureRepetitions: 5,
+            heightOffset: 0.03 // Raise tee box slightly above ground to prevent z-fighting
         });
     } else if (holeLayout.tee.center) {
         // Fallback to old method for legacy holes without vertices

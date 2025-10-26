@@ -83,13 +83,22 @@ export function drawHoleLayout(holeLayout) {
     if (holeLayout.flagPosition) {
         const flagHeight = 2.5; // Meters
         const flagRadius = 0.05; // Meters
+
+        // Get terrain height at flag position (use provided y or query terrain)
+        let terrainHeight = 0;
+        if (holeLayout.flagPosition.y !== undefined) {
+            terrainHeight = holeLayout.flagPosition.y;
+        } else {
+            terrainHeight = queryTerrainHeight(holeLayout.flagPosition.x, holeLayout.flagPosition.z);
+        }
+
         const flagGeometry = new THREE.CylinderGeometry(flagRadius, flagRadius, flagHeight, 8);
         const flagMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff }); // White pole
         flagstickPoleMesh = new THREE.Mesh(flagGeometry, flagMaterial);
         flagstickPoleMesh.name = "FlagstickPole";
         flagstickPoleMesh.position.set(
             holeLayout.flagPosition.x,
-            flagHeight / 2,
+            terrainHeight + flagHeight / 2,
             holeLayout.flagPosition.z
         );
         flagstickPoleMesh.castShadow = true;
@@ -99,7 +108,7 @@ export function drawHoleLayout(holeLayout) {
         // Store the flag position (base of the stick)
         currentFlagPosition = new THREE.Vector3(
             holeLayout.flagPosition.x,
-            0,
+            terrainHeight,
             holeLayout.flagPosition.z
         );
 

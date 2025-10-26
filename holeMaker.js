@@ -1758,9 +1758,13 @@ const holeMaker = {
                     // Convert back to local polygon coordinates
                     const invertedTransform = fabric.util.invertTransform(polygon.calcTransformMatrix());
                     const snappedLocal = fabric.util.transformPoint(snappedAbs, invertedTransform);
+
+                    // Preserve existing height when dragging
+                    const existingHeight = polygon.points[index].height;
                     polygon.points[index] = {
                         x: snappedLocal.x + polygon.pathOffset.x,
-                        y: snappedLocal.y + polygon.pathOffset.y
+                        y: snappedLocal.y + polygon.pathOffset.y,
+                        height: existingHeight !== undefined ? existingHeight : 0
                     };
 
                     return true;
@@ -1784,6 +1788,7 @@ const holeMaker = {
 
                     let minDistance = SNAP_DISTANCE;
                     let snapToAbsPoint = null;
+                    let snapToHeight = null; // Store height of snap target
 
                     self.shapes.forEach(shape => {
                         if (shape.polygon && shape.polygon !== polygon && shape.polygon.points) {
@@ -1801,6 +1806,7 @@ const holeMaker = {
                                 if (distance < minDistance) {
                                     minDistance = distance;
                                     snapToAbsPoint = absOtherPoint; // Store the absolute point
+                                    snapToHeight = otherPoint.height; // Store the height of the snap target
                                 }
                             });
                         }
@@ -1813,7 +1819,8 @@ const holeMaker = {
                         const localSnapPoint = fabric.util.transformPoint(snapToAbsPoint, invertedTransform);
                         polygon.points[index] = {
                             x: localSnapPoint.x + polygon.pathOffset.x,
-                            y: localSnapPoint.y + polygon.pathOffset.y
+                            y: localSnapPoint.y + polygon.pathOffset.y,
+                            height: snapToHeight !== undefined ? snapToHeight : (polygon.points[index].height !== undefined ? polygon.points[index].height : 0)
                         };
                     }
 
@@ -2050,6 +2057,19 @@ const holeMaker = {
         const metersX = x / this.scale;
         const metersZ = CANVAS_HEIGHT - (y / this.scale);
 
+        // Get terrain height at this position by checking all shapes
+        let terrainHeight = 0;
+        for (const shape of this.shapes) {
+            if (shape.polygon && shape.polygon.points) {
+                // Check if point is inside this polygon
+                if (this.isPointInPolygon(metersX, metersZ, shape.polygon.points)) {
+                    // Get height using simple interpolation from nearest vertices
+                    terrainHeight = this.getHeightAtPoint(metersX, metersZ, shape.polygon.points);
+                    break;
+                }
+            }
+        }
+
         // Create flag marker (small red circle with number)
         const flagNumber = this.flagPositions.length + 1;
 
@@ -2090,6 +2110,7 @@ const holeMaker = {
         this.flagPositions.push({
             number: flagNumber,
             x: metersX,
+            y: terrainHeight,
             z: metersZ,
             visual: group
         });
@@ -2445,10 +2466,30 @@ const holeMaker = {
         const lengthText = document.getElementById('holeLength').value;
         const lengthMeters = lengthText === '-' ? 0 : parseFloat(lengthText);
 
+        // Check if hole has any elevation changes
+        let hasElevation = false;
+
+        // Check all shape vertices for non-zero heights
+        this.shapes.forEach(shape => {
+            if (shape.polygon && shape.polygon.points) {
+                shape.polygon.points.forEach(point => {
+                    if (point.height !== undefined && Math.abs(point.height) > 0.01) {
+                        hasElevation = true;
+                    }
+                });
+            }
+        });
+
+        // Also check tee box height
+        if (this.teeBox && this.teeBox.y !== undefined && Math.abs(this.teeBox.y) > 0.01) {
+            hasElevation = true;
+        }
+
         const layout = {
             name: holeName,
             par: par,
             lengthMeters: lengthMeters,
+            hasElevation: hasElevation,
             canvasWidth: CANVAS_WIDTH,
             canvasHeight: CANVAS_HEIGHT
             // Background removed - see how it looks without it
@@ -2557,6 +2598,7 @@ const holeMaker = {
             layout.flagPositions = this.flagPositions.map(flag => ({
                 number: flag.number,
                 x: parseFloat(flag.x.toFixed(2)),
+                y: parseFloat((flag.y !== undefined ? flag.y : 0).toFixed(2)),
                 z: parseFloat(flag.z.toFixed(2))
             }));
         }
@@ -2817,6 +2859,7 @@ const holeMaker = {
                     this.flagPositions.push({
                         number: flag.number,
                         x: flag.x,
+                        y: flag.y !== undefined ? flag.y : 0,
                         z: flag.z,
                         visual: group
                     });
@@ -3030,6 +3073,51 @@ const holeMaker = {
             console.error('Error saving official hole:', error);
             alert(`❌ Error saving official hole: ${error.message}`);
         }
+    },
+
+    // Helper function to check if a point is inside a polygon
+    isPointInPolygon(x, z, points) {
+        let inside = false;
+        for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+            const xi = points[i].x, zi = points[i].y;
+            const xj = points[j].x, zj = points[j].y;
+
+            const intersect = ((zi > z) !== (zj > z)) &&
+                (x < (xj - xi) * (z - zi) / (zj - zi) + xi);
+            if (intersect) inside = !inside;
+        }
+        return inside;
+    },
+
+    // Helper function to get interpolated height at a point within a polygon
+    getHeightAtPoint(x, z, points) {
+        if (!points || points.length < 3) return 0;
+
+        // Find the three nearest vertices to use for interpolation
+        const distances = points.map((p, idx) => ({
+            index: idx,
+            dist: Math.sqrt(Math.pow(p.x - x, 2) + Math.pow(p.y - z, 2)),
+            height: p.height !== undefined ? p.height : 0
+        }));
+
+        distances.sort((a, b) => a.dist - b.dist);
+
+        // Use inverse distance weighting from the 3 nearest points
+        const nearest = distances.slice(0, 3);
+        let totalWeight = 0;
+        let weightedHeight = 0;
+
+        for (const pt of nearest) {
+            if (pt.dist < 0.01) {
+                // Point is essentially at a vertex
+                return pt.height;
+            }
+            const weight = 1 / pt.dist;
+            totalWeight += weight;
+            weightedHeight += weight * pt.height;
+        }
+
+        return totalWeight > 0 ? weightedHeight / totalWeight : 0;
     }
 };
 

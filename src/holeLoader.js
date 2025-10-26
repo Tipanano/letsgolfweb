@@ -268,6 +268,7 @@ export function processHoleLayout(sourceLayout) {
             if (layout.flagPositions.length > 0) {
                 layout.flagPosition = {
                     x: layout.flagPositions[0].x,
+                    y: layout.flagPositions[0].y !== undefined ? layout.flagPositions[0].y : 0,
                     z: layout.flagPositions[0].z
                 };
             }
