@@ -1,7 +1,7 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
 import { TextureLoader } from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js'; // Import TextureLoader
 // Import both relative and target line angles
-import { getShotDirectionAngle, getCurrentTargetLineAngle, getSelectedClub } from '../gameLogic/state.js';
+import { getShotDirectionAngle, getCurrentTargetLineAngle, getSelectedClub, setRelativeShotDirectionAngle } from '../gameLogic/state.js';
 import * as MeasurementView from './measurementView.js';
 // Import position getters needed for re-applying hole view camera
 import { getCurrentBallPosition as getPlayHoleBallPosition } from '../modes/playHole.js';
@@ -42,7 +42,7 @@ const STATIC_ZOOM_MAX_LEVEL = 1.0;
 const STATIC_ZOOM_MIN_DIST_FACTOR = 0.15; // Multiplier for base distance when fully zoomed in
 const STATIC_ZOOM_MAX_DIST_FACTOR = 3.0; // Multiplier for base distance when fully zoomed out
 const STATIC_ZOOM_MIN_HEIGHT = BALL_RADIUS + 0.5; // Minimum height above ball radius
-const STATIC_ZOOM_MAX_HEIGHT = 25.0; // Maximum height in meters
+const STATIC_ZOOM_MAX_HEIGHT = 50.0; // Maximum height in meters (increased from 25.0)
 const STATIC_ZOOM_MAX_HEIGHT_THRESHOLD = 1.0; // Zoom level at which max height is reached
 // let staticCameraZoomLevel = DEFAULT_STATIC_ZOOM_LEVEL; // Deprecated
 let staticCameraHeightLevel = DEFAULT_STATIC_ZOOM_LEVEL; // New: Controls height
@@ -77,6 +77,89 @@ function rotatePointAroundPivot(point, pivot, angleDegrees) {
 
     // Translate point back and return a new Vector3
     return new THREE.Vector3(rotatedX + pivot.x, point.y, rotatedZ + pivot.z);
+}
+
+// Mouse camera control state
+let isMouseDragging = false;
+let mouseStartX = 0;
+let mouseStartY = 0;
+let cameraRotationOnDragStart = 0;
+let cameraHeightLevelOnDragStart = 0;
+
+/**
+ * Setup mouse/trackpad controls for camera manipulation in static mode
+ * - Click and drag to rotate camera (horizontal movement)
+ * - Click and drag to adjust height (vertical movement)
+ * - Scroll wheel to zoom in/out
+ */
+function setupMouseCameraControls(canvasElement) {
+    // Mouse wheel for zoom
+    canvasElement.addEventListener('wheel', (event) => {
+        if (activeCameraMode !== CameraMode.STATIC) return;
+
+        event.preventDefault();
+        const delta = event.deltaY;
+
+        // Scroll up (negative delta) = zoom in, scroll down (positive delta) = zoom out
+        if (delta < 0) {
+            adjustStaticCameraDistance(-0.01); // Zoom in (finer steps)
+        } else {
+            adjustStaticCameraDistance(0.01); // Zoom out (finer steps)
+        }
+    }, { passive: false });
+
+    // Mouse down - start drag
+    canvasElement.addEventListener('mousedown', (event) => {
+        if (activeCameraMode !== CameraMode.STATIC) return;
+        if (event.button !== 0) return; // Only left mouse button
+
+        isMouseDragging = true;
+        mouseStartX = event.clientX;
+        mouseStartY = event.clientY;
+
+        // Store current camera rotation (aim angle) and height level
+        cameraRotationOnDragStart = getShotDirectionAngle();
+        cameraHeightLevelOnDragStart = staticCameraHeightLevel;
+
+        canvasElement.style.cursor = 'grabbing';
+    });
+
+    // Mouse move - rotate camera or adjust height
+    canvasElement.addEventListener('mousemove', (event) => {
+        if (!isMouseDragging || activeCameraMode !== CameraMode.STATIC) return;
+
+        const deltaX = event.clientX - mouseStartX;
+        const deltaY = event.clientY - mouseStartY;
+
+        // Horizontal movement = rotation (aim angle adjustment)
+        const rotationSensitivity = 0.05; // degrees per pixel
+        const newAngle = cameraRotationOnDragStart + (deltaX * rotationSensitivity);
+
+        setRelativeShotDirectionAngle(newAngle);
+        applyAimAngleToCamera();
+
+        // Vertical movement = height adjustment (like arrow up/down)
+        const heightSensitivity = 0.0008; // Height level units per pixel
+        const heightDelta = deltaY * heightSensitivity; // Drag down (positive deltaY) = increase height
+        const newHeightLevel = cameraHeightLevelOnDragStart + heightDelta;
+
+        // Clamp to valid range and set directly
+        staticCameraHeightLevel = Math.max(STATIC_ZOOM_MIN_LEVEL, Math.min(STATIC_ZOOM_MAX_LEVEL, newHeightLevel));
+        applyAimAngleToCamera(); // Re-apply to update camera with new height
+    });
+
+    // Mouse up - end drag
+    const handleMouseUp = () => {
+        if (isMouseDragging) {
+            isMouseDragging = false;
+            if (canvasElement) {
+                canvasElement.style.cursor = 'default';
+            }
+        }
+    };
+
+    canvasElement.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('mouseup', handleMouseUp); // Catch mouse up outside canvas
 }
 
 
@@ -147,6 +230,9 @@ export function initCoreVisuals(canvasElement) {
 
     // Handle window resize
     window.addEventListener('resize', onWindowResize, false);
+
+    // Setup mouse controls for camera manipulation in static mode
+    setupMouseCameraControls(canvasElement);
 
     // Start render loop
     animate();

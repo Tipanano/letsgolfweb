@@ -408,17 +408,8 @@ function _prepareNextShotAtCurrentPosition() {
 
         if (ballPos && targetPos) { // Ensure we have positions before setting camera
             const distance = ballPos.distanceTo(targetPos);
-            if (activeCamMode === CameraMode.STATIC) {
-                // *** FIX 1: Pass the calculated angleDeg ***
-                setCameraBehindBallLookingAtTarget(ballPos, targetPos, distance, angleDeg);
-            } else if (activeCamMode === CameraMode.FOLLOW_BALL) {
-                 // *** FIX 2: Call with correct signature (no distance, no angle needed) ***
-                setInitialFollowCameraLookingAtTarget(ballPos, targetPos);
-            } else if (activeCamMode === CameraMode.REVERSE_ANGLE || activeCamMode === CameraMode.GREEN_FOCUS) {
-                // If reverse or green view, switch back to the standard 'hole' static view
-                 // *** FIX 3: Pass the calculated angleDeg ***
-                setCameraBehindBallLookingAtTarget(ballPos, targetPos, distance, angleDeg);
-            }
+            // Always switch to camera 1 (STATIC) for next shot
+            setCameraBehindBallLookingAtTarget(ballPos, targetPos, distance, angleDeg);
         } else {
              console.warn("Action: Cannot update camera position for next shot, missing ball or target position.");
              // Optionally reset to a default view if positions are missing
