@@ -2222,8 +2222,11 @@ const holeMaker = {
             `;
 
             item.onclick = () => {
-                this.canvas.setActiveObject(shape.polygon);
-                this.canvas.renderAll();
+                // Check if polygon still exists on canvas before trying to select it
+                if (shape.polygon && shape.polygon.canvas) {
+                    this.canvas.setActiveObject(shape.polygon);
+                    this.canvas.renderAll();
+                }
             };
 
             list.appendChild(item);
@@ -2246,8 +2249,11 @@ const holeMaker = {
             `;
 
             item.onclick = () => {
-                this.canvas.setActiveObject(this.teeBox.visual);
-                this.canvas.renderAll();
+                // Check if teeBox visual still exists on canvas before trying to select it
+                if (this.teeBox && this.teeBox.visual && this.teeBox.visual.canvas) {
+                    this.canvas.setActiveObject(this.teeBox.visual);
+                    this.canvas.renderAll();
+                }
             };
 
             list.appendChild(item);
@@ -2273,8 +2279,11 @@ const holeMaker = {
             `;
 
             item.onclick = () => {
-                this.canvas.setActiveObject(obj.visual);
-                this.canvas.renderAll();
+                // Check if object visual still exists on canvas before trying to select it
+                if (obj.visual && obj.visual.canvas) {
+                    this.canvas.setActiveObject(obj.visual);
+                    this.canvas.renderAll();
+                }
             };
 
             list.appendChild(item);
@@ -2297,8 +2306,11 @@ const holeMaker = {
             `;
 
             item.onclick = () => {
-                this.canvas.setActiveObject(flag.visual);
-                this.canvas.renderAll();
+                // Check if flag visual still exists on canvas before trying to select it
+                if (flag.visual && flag.visual.canvas) {
+                    this.canvas.setActiveObject(flag.visual);
+                    this.canvas.renderAll();
+                }
             };
 
             list.appendChild(item);
@@ -2377,7 +2389,10 @@ const holeMaker = {
     startNewHole() {
         if (!confirm('Start a new hole? This will clear all current work.')) return;
 
-        // Clear all data
+        // Clear canvas first - remove all visual objects
+        this.canvas.clear();
+
+        // Clear all data arrays
         this.shapes = [];
         this.objects = [];
         this.flagPositions = [];
@@ -2408,6 +2423,10 @@ const holeMaker = {
     clearCanvas() {
         if (!confirm('Clear all shapes and objects? (Hole settings will be kept)')) return;
 
+        // Clear canvas first - remove all visual objects
+        this.canvas.clear();
+
+        // Clear all data arrays
         this.shapes = [];
         this.objects = [];
         this.flagPositions = [];
