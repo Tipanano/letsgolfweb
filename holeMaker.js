@@ -4,6 +4,9 @@
 
 import { courseManager } from './src/courseManager.js';
 
+// Feature flags
+const ENABLE_HEIGHT_FEATURE = false; // Set to true to enable vertex height editing
+
 // Par-based canvas dimensions
 const PAR_CONFIGS = {
     3: { width: 100, minHeight: 125, maxHeight: 325 },  // Par 3: min 125m, max 325m
@@ -60,6 +63,11 @@ const holeMaker = {
     areaSelectionRect: null, // Visual rectangle for area selection
 
     init() {
+        // Show/hide height controls based on feature flag
+        if (ENABLE_HEIGHT_FEATURE) {
+            document.getElementById('heightControlGroup').style.display = 'block';
+        }
+
         // Set initial dimensions based on par 4
         this.updateCanvasDimensions(4);
 
