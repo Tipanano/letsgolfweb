@@ -17,7 +17,8 @@ export function initMultiplayerUI() {
         updateStatus('Testing connection...');
         try {
             const { API_BASE_URL } = await import('./config.js');
-            const baseUrl = API_BASE_URL.replace('/api', '');
+            // Remove trailing /api from the URL (only at the end)
+            const baseUrl = API_BASE_URL.replace(/\/api$/, '');
             const response = await fetch(`${baseUrl}/health`);
             const data = await response.json();
             updateStatus(`✅ Connected! Active sessions: ${data.activeSessions}`);

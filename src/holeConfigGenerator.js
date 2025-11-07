@@ -157,38 +157,23 @@ export function ctfConfigToHoleLayout(holeConfig) {
     const leftWidthMultiplier = fairwayAdjustments?.leftWidthMultiplier ?? 1.0;
     const rightWidthMultiplier = fairwayAdjustments?.rightWidthMultiplier ?? 1.0;
 
-    const fairwayStartZ = distance - fairwayApproachDistance;
-    const fairwayEndZ = distance + fairwayExtension;
-
-    // Add large background area (thick rough) so balls don't go OOB
+    // Add large light rough area (CTF default landing surface)
     // Make it very large to catch all possible shots in CTF mode
+    // Visual fairway is shown for aesthetics, but all shots land in light rough for consistent gameplay
     const margin = 300; // 300m margin on each side (catches wide shots)
     const backMargin = 100; // Behind tee
     const frontMargin = 200; // Beyond target (catches long shots)
-    layout.background = {
+    layout.lightRough = [{
         vertices: [
             { x: -margin, z: -backMargin },
             { x: margin, z: -backMargin },
             { x: margin, z: distance + frontMargin },
             { x: -margin, z: distance + frontMargin }
-        ],
-        surface: { name: 'THICK_ROUGH' }
-    };
-
-    // Add fairway (simplified rectangle, with width adjustments if water present)
-    // Note: Visual fairway is organic/angled, but for lie detection a simple rectangle is sufficient
-    const leftWidth = (fairwayWidth / 2) * leftWidthMultiplier;
-    const rightWidth = (fairwayWidth / 2) * rightWidthMultiplier;
-
-    layout.fairways = [{
-        vertices: [
-            { x: -leftWidth, z: fairwayStartZ },
-            { x: rightWidth, z: fairwayStartZ },
-            { x: rightWidth, z: fairwayEndZ },
-            { x: -leftWidth, z: fairwayEndZ }
-        ],
-        surface: 'FAIRWAY'
+        ]
     }];
+
+    // CTF mode: Light rough for all shots (except green/water)
+    // Fairway is visual only - doesn't affect lie detection
 
     // Add green (rectangular, positioned based on greenOffset)
     const greenCenterX = greenOffset;

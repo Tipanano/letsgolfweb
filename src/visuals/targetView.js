@@ -165,72 +165,59 @@ function createTargetElements() {
     flagMesh.position.set(flagX + 0.25, flagstickMesh.position.y + flagstickHeight / 2 - 0.15, flagZ);
     targetGroup.add(flagMesh);
 
-    // --- Fairway (angled towards green center with organic shape) ---
+    // --- Fairway (visual only - all shots land in light rough for gameplay) ---
     // Get fairway adjustments from server config (if water hazard exists)
-    // This ensures all players have identical fairway shapes in multiplayer
     const waterHazard = currentHoleConfig?.waterHazard;
     const fairwayAdjustments = waterHazard?.fairwayAdjustments;
 
     let fairwayWidth = 25; // Base width (meters)
-    let fairwayExtension = fairwayAdjustments?.extension ?? 10; // Use server value or default
-    let fairwayApproachDistance = fairwayAdjustments?.approachDistance ?? 40; // Use server value or default
-    const leftWidthMultiplier = fairwayAdjustments?.leftWidthMultiplier ?? 1.0; // Use server value or default
-    const rightWidthMultiplier = fairwayAdjustments?.rightWidthMultiplier ?? 1.0; // Use server value or default
+    let fairwayExtension = fairwayAdjustments?.extension ?? 10;
+    let fairwayApproachDistance = fairwayAdjustments?.approachDistance ?? 40;
+    const leftWidthMultiplier = fairwayAdjustments?.leftWidthMultiplier ?? 1.0;
+    const rightWidthMultiplier = fairwayAdjustments?.rightWidthMultiplier ?? 1.0;
 
-    const fairwayStartZ = targetZ - fairwayApproachDistance; // Start position
-    const fairwayLength = fairwayApproachDistance + fairwayExtension; // Total length
-
-    // Calculate angle from tee (0,0) to green center
+    const fairwayStartZ = targetZ - fairwayApproachDistance;
+    const fairwayLength = fairwayApproachDistance + fairwayExtension;
     const angleToGreen = Math.atan2(greenOffsetMeters, targetZ);
 
-    // Create organic fairway shape with slight variations on edges and bowed ends
+    // Create organic fairway shape
     const fairwayShape = new THREE.Shape();
-    const lengthSegments = 3; // Segments along the length (left/right edges)
-    const endSegments = 5; // Segments for the curved ends (front/back)
+    const lengthSegments = 3;
+    const endSegments = 5;
+    const backBow = (seededRandom(shapeSeed, 100) - 0.5) * 6;
+    const frontBow = (seededRandom(shapeSeed, 101) - 0.5) * 6;
 
-    // Random bow amount for front and back (can bow inward or outward)
-    // Use seeded random for consistent shapes in multiplayer (indices 100-107 to avoid collision with green)
-    const backBow = (seededRandom(shapeSeed, 100) - 0.5) * 6; // ±3m bow
-    const frontBow = (seededRandom(shapeSeed, 101) - 0.5) * 6; // ±3m bow
-
-    // Start at back-left corner
     fairwayShape.moveTo(-fairwayWidth / 2 * leftWidthMultiplier, -fairwayLength / 2);
 
-    // Back edge (curved/bowed) from left to right
     for (let i = 1; i < endSegments; i++) {
         const t = i / endSegments;
         const xLeft = -fairwayWidth / 2 * leftWidthMultiplier;
         const xRight = fairwayWidth / 2 * rightWidthMultiplier;
         const x = xLeft + (xRight - xLeft) * t;
-        // Parabolic curve for bow effect
-        const bowOffset = -backBow * 4 * t * (1 - t); // Peak at middle
+        const bowOffset = -backBow * 4 * t * (1 - t);
         fairwayShape.lineTo(x, -fairwayLength / 2 + bowOffset);
     }
 
-    // Right edge with slight variations
     for (let i = 0; i <= lengthSegments; i++) {
         const t = i / lengthSegments;
         const y = -fairwayLength / 2 + fairwayLength * t;
-        const widthVariation = (seededRandom(shapeSeed, 102 + i) - 0.5) * 4; // ±2m variation
+        const widthVariation = (seededRandom(shapeSeed, 102 + i) - 0.5) * 4;
         fairwayShape.lineTo(fairwayWidth / 2 * rightWidthMultiplier + widthVariation, y);
     }
 
-    // Front edge (curved/bowed) from right to left
     for (let i = 1; i < endSegments; i++) {
         const t = i / endSegments;
         const xRight = fairwayWidth / 2 * rightWidthMultiplier;
         const xLeft = -fairwayWidth / 2 * leftWidthMultiplier;
         const x = xRight + (xLeft - xRight) * t;
-        // Parabolic curve for bow effect
-        const bowOffset = frontBow * 4 * t * (1 - t); // Peak at middle
+        const bowOffset = frontBow * 4 * t * (1 - t);
         fairwayShape.lineTo(x, fairwayLength / 2 + bowOffset);
     }
 
-    // Left edge with slight variations (going back to start)
     for (let i = lengthSegments; i > 0; i--) {
         const t = i / lengthSegments;
         const y = -fairwayLength / 2 + fairwayLength * t;
-        const widthVariation = (seededRandom(shapeSeed, 106 + i) - 0.5) * 4; // ±2m variation
+        const widthVariation = (seededRandom(shapeSeed, 106 + i) - 0.5) * 4;
         fairwayShape.lineTo(-fairwayWidth / 2 * leftWidthMultiplier + widthVariation, y);
     }
 
@@ -239,12 +226,11 @@ function createTargetElements() {
     const fairwayGeometry = new THREE.ShapeGeometry(fairwayShape);
     const fairwayMaterial = new THREE.MeshLambertMaterial({ color: FAIRWAY_COLOR, side: THREE.DoubleSide });
     fairwayMesh = new THREE.Mesh(fairwayGeometry, fairwayMaterial);
-    fairwayMesh.rotation.x = Math.PI / 2; // Lay flat (note: ShapeGeometry needs different rotation than PlaneGeometry)
-    fairwayMesh.rotation.z = angleToGreen; // Rotate around Z axis to angle towards green
+    fairwayMesh.rotation.x = Math.PI / 2;
+    fairwayMesh.rotation.z = angleToGreen;
 
-    // Position fairway - center point should be halfway to green, offset towards green position
     const fairwayCenterZ = fairwayStartZ + (fairwayLength / 2);
-    const fairwayCenterX = greenOffsetMeters * (fairwayCenterZ / targetZ); // Proportional offset
+    const fairwayCenterX = greenOffsetMeters * (fairwayCenterZ / targetZ);
     fairwayMesh.position.set(fairwayCenterX, Y_OFFSET_FAIRWAY, fairwayCenterZ);
     targetGroup.add(fairwayMesh);
 
