@@ -161,15 +161,18 @@ export function ctfConfigToHoleLayout(holeConfig) {
     const fairwayEndZ = distance + fairwayExtension;
 
     // Add large background area (thick rough) so balls don't go OOB
-    const margin = 100; // 100m margin on each side
+    // Make it very large to catch all possible shots in CTF mode
+    const margin = 300; // 300m margin on each side (catches wide shots)
+    const backMargin = 100; // Behind tee
+    const frontMargin = 200; // Beyond target (catches long shots)
     layout.background = {
         vertices: [
-            { x: -margin, z: -50 },
-            { x: margin, z: -50 },
-            { x: margin, z: distance + 50 },
-            { x: -margin, z: distance + 50 }
+            { x: -margin, z: -backMargin },
+            { x: margin, z: -backMargin },
+            { x: margin, z: distance + frontMargin },
+            { x: -margin, z: distance + frontMargin }
         ],
-        surface: 'THICK_ROUGH'
+        surface: { name: 'THICK_ROUGH' }
     };
 
     // Add fairway (simplified rectangle, with width adjustments if water present)
