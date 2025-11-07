@@ -74,6 +74,8 @@ const summaryClubspeedItem = document.getElementById('summary-clubspeed-item');
 const summaryClubspeedSpan = document.getElementById('summary-clubspeed');
 const summaryBallspeedItem = document.getElementById('summary-ballspeed-item');
 const summaryBallspeedSpan = document.getElementById('summary-ballspeed');
+const summarySmashfactorItem = document.getElementById('summary-smashfactor-item');
+const summarySmashfactorSpan = document.getElementById('summary-smashfactor');
 const summaryBackspinItem = document.getElementById('summary-backspin-item');
 const summaryBackspinSpan = document.getElementById('summary-backspin');
 const summarySidespinItem = document.getElementById('summary-sidespin-item');
@@ -423,6 +425,11 @@ function showShotImpactData(resultData, formatNum) {
         summaryBallspeedSpan.textContent = formatNum(resultData.ballSpeed, 1);
         summaryBallspeedItem.style.display = 'block';
     }
+    if (summarySmashfactorItem && summarySmashfactorSpan) {
+        const smashFactor = resultData.clubHeadSpeed > 0 ? resultData.ballSpeed / resultData.clubHeadSpeed : 0;
+        summarySmashfactorSpan.textContent = formatNum(smashFactor, 2);
+        summarySmashfactorItem.style.display = 'block';
+    }
     if (summaryBackspinItem && summaryBackspinSpan) {
         summaryBackspinSpan.textContent = formatNum(resultData.backSpin, 0);
         summaryBackspinItem.style.display = 'block';
@@ -455,7 +462,7 @@ export function showShotFinalData() {
 // Hide all summary items (for reset)
 function hideAllShotSummaryItems() {
     const items = [
-        summaryClubspeedItem, summaryBallspeedItem, summaryBackspinItem, summarySidespinItem,
+        summaryClubspeedItem, summaryBallspeedItem, summarySmashfactorItem, summaryBackspinItem, summarySidespinItem,
         summaryLaunchAngleItem, summaryPeakHeightItem, summaryCarryItem, summaryRollItem,
         summaryTotalItem, summaryMessageItem
     ];

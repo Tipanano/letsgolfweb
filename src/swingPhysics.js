@@ -55,7 +55,7 @@ const MAX_NON_TEE_AOA_BONUS = 1.0; // Max degrees positive AoA bonus from ball p
 // Strike & Smash Factor
 const FAT_STRIKE_SMASH_PENALTY = 0.25; // % smash factor reduction
 const THIN_STRIKE_SMASH_PENALTY = 0.20; // % smash factor reduction
-const FLIP_STRIKE_SMASH_PENALTY = 0.10; // % smash factor reduction (early release)
+const FLIP_STRIKE_SMASH_PENALTY = 0.05; // % smash factor reduction (early release, displays as "High")
 const PUNCH_STRIKE_SMASH_PENALTY = 0.05; // % smash factor reduction (late release)
 const BUNKER_FAT_STRIKE_SMASH_PENALTY = 0.10; // Reduced penalty for fat shots from sand
 
@@ -313,7 +313,7 @@ function calculateStrikeQuality(wristsDev, attackAngle, baseAoA, swingSpeed) {
 
     // Check intermediate wrist timing for Flip/Punch
     // Use half the threshold?
-    if (wristsDev < -scaledFatThinThreshold / 2) return "High"; // Early-ish
+    if (wristsDev < -scaledFatThinThreshold / 2) return "Flip"; // Early-ish (was "High")
     if (wristsDev > scaledFatThinThreshold / 2) return "Punch"; // Late-ish
 
     return "Center";
@@ -321,27 +321,35 @@ function calculateStrikeQuality(wristsDev, attackAngle, baseAoA, swingSpeed) {
 
 /**
  * Calculates the Smash Factor based on base club smash, strike quality penalty, and surface.
+ * Adds random variation to make contact feel more natural.
  * @param {number} baseSmash - Club's base smash factor.
  * @param {string} strikeQuality - Calculated strike quality ("Fat", "Thin", etc.).
  * @param {string} currentSurface - The surface the ball is on.
  * @returns {number} The final smash factor.
  */
 function calculateSmashFactor(baseSmash, strikeQuality, currentSurface) {
-    let penalty = 0;
+    let basePenalty = 0;
     // Special handling for fat shots from bunker
     if (strikeQuality === "Fat" && currentSurface.toUpperCase() === 'BUNKER') {
-        penalty = BUNKER_FAT_STRIKE_SMASH_PENALTY;
+        basePenalty = BUNKER_FAT_STRIKE_SMASH_PENALTY;
     } else {
         // Standard penalties
         switch (strikeQuality) {
-            case "Fat": penalty = FAT_STRIKE_SMASH_PENALTY; break;
-        case "Thin": penalty = THIN_STRIKE_SMASH_PENALTY; break;
-        case "Flip": penalty = FLIP_STRIKE_SMASH_PENALTY; break;
-        case "Punch": penalty = PUNCH_STRIKE_SMASH_PENALTY; break;
-            default: penalty = 0; break; // Center
+            case "Fat": basePenalty = FAT_STRIKE_SMASH_PENALTY; break;
+        case "Thin": basePenalty = THIN_STRIKE_SMASH_PENALTY; break;
+        case "Flip": basePenalty = FLIP_STRIKE_SMASH_PENALTY; break;
+        case "Punch": basePenalty = PUNCH_STRIKE_SMASH_PENALTY; break;
+            default: basePenalty = 0; break; // Center
         }
     }
-    const smash = baseSmash * (1 - penalty);
+
+    // Add random variation to penalty (±30% of base penalty)
+    // This makes contact feel less rigid - e.g., "High" could be 3.5% to 6.5% penalty instead of always 5%
+    const variationRange = basePenalty * 0.3;
+    const randomVariation = (Math.random() - 0.5) * 2 * variationRange; // -30% to +30%
+    const finalPenalty = Math.max(0, basePenalty + randomVariation); // Ensure penalty doesn't go negative
+
+    const smash = baseSmash * (1 - finalPenalty);
     return smash;
 }
 
@@ -351,13 +359,22 @@ function calculateBallSpeed(actualCHS, smashFactor) {
 }
 
 /**
- * Calculates the initial Launch Angle based on dynamic loft and attack angle.
- * Uses a 75/25 blend.
+ * Calculates the initial Launch Angle based on dynamic loft, attack angle, and club speed.
+ * High club speed on high-lofted clubs increases launch (ball goes more vertical).
  */
-function calculateLaunchAngle(dynamicLoft, attackAngle) {
-    // Blend dynamic loft (75%) and attack angle (25%)
-    const launchAngle = dynamicLoft * 0.7 + attackAngle * 1;
-    // Add clamping based on club type later if needed (e.g., min/max launch)
+function calculateLaunchAngle(dynamicLoft, attackAngle, actualCHS, baseLoft) {
+    // Base launch from loft and attack angle
+    let launchAngle = dynamicLoft * 0.7 + attackAngle * 1;
+
+    // High-lofted clubs (wedges) with high club speed add vertical launch
+    if (baseLoft >= 45) {
+        // For wedges (45°+), add launch based on club speed above 80 mph
+        const speedAboveBase = Math.max(0, actualCHS - 80);
+        const loftFactor = (baseLoft - 45) / 15; // 0 at PW (45°), 1.0 at LW (60°)
+        const launchBonus = speedAboveBase * 0.08 * loftFactor; // Up to ~0.8° per mph over 80
+        launchAngle += launchBonus;
+    }
+
     return launchAngle;
 }
 
@@ -576,7 +593,7 @@ export function calculateImpactPhysics(timingInputs, club, swingSpeed, ballPosit
     // Pass surface to smash factor and backspin calculations
     const smashFactor = calculateSmashFactor(club.baseSmash, strikeQuality, currentSurface);
     let ballSpeed = calculateBallSpeed(actualCHS, smashFactor); // Calculate initial ball speed
-    let launchAngle = calculateLaunchAngle(dynamicLoft, attackAngle); // Calculate initial launch angle
+    let launchAngle = calculateLaunchAngle(dynamicLoft, attackAngle, actualCHS, club.loft); // Calculate initial launch angle
     let backSpin = calculateBackSpin(dynamicLoft, actualCHS, attackAngle, strikeQuality, currentSurface, club.loft);
 
 

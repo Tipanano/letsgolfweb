@@ -106,7 +106,8 @@ export function calculateFullSwingShot() {
     const launchAngle = impactResult.launchAngle;
     const backSpin = impactResult.backSpin;
     const sideSpin = impactResult.sideSpin;
-    const strikeQuality = impactResult.strikeQuality;
+    // Map "Flip" to "High" for full swings (Flip is used internally for penalty calculation)
+    const strikeQuality = impactResult.strikeQuality === "Flip" ? "High" : impactResult.strikeQuality;
     let peakHeight = 0;
     let carryDistance = 0;
     let totalDistance = 0;
@@ -272,7 +273,7 @@ export function calculateFullSwingShot() {
         clubPathAngle: impactResult.clubPathAngle,
         absoluteFaceAngle: impactResult.absoluteFaceAngle,
         faceAngleRelPath: impactResult.faceAngleRelPath,
-        strikeQuality: impactResult.strikeQuality,
+        strikeQuality: strikeQuality, // Use mapped value (Flip -> High for full swings)
         potentialCHS: impactResult.potentialCHS,
         dynamicLoft: impactResult.dynamicLoft,
         smashFactor: impactResult.smashFactor,
@@ -545,7 +546,7 @@ export function calculateChipShot() {
         clubPathAngle: impactResult.clubPathAngle,
         absoluteFaceAngle: impactResult.absoluteFaceAngle,
         faceAngleRelPath: impactResult.faceAngleRelPath,
-        strikeQuality: impactResult.strikeQuality,
+        strikeQuality: strikeQuality, // Use mapped value (Flip -> High for full swings)
         potentialCHS: impactResult.potentialCHS,
         dynamicLoft: impactResult.dynamicLoft,
         smashFactor: impactResult.smashFactor,
@@ -688,7 +689,7 @@ export function calculatePuttShot() {
         clubPathAngle: 0,
         absoluteFaceAngle: horizontalLaunchAngleDeg, // Initial push/pull angle
         faceAngleRelPath: 0,
-        strikeQuality: impactResult.strikeQuality,
+        strikeQuality: strikeQuality, // Use mapped value (Flip -> High for full swings)
         potentialCHS: 0,
         dynamicLoft: 0,
         smashFactor: 0,

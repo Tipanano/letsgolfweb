@@ -52,25 +52,25 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club, 
     const LOG_INTERVAL_METERS = 25;
 
 
-    // Get the club-specific effective Cl for backspin
-    const club_Cl_backspin_eff = club.clBackspinEff || 0.1; // Use club's value, or a default if undefined
+    // Lift coefficient for cross-product Magnus formula F ∝ (ω × V)
+    // Cross product inherently includes ball radius effects through geometry
+    // Empirically tuned with spin ratio scaling
+    const Cl_backspin_base = 0.035; // Empirically tuned
 
-    // Calculate the lift constant for backspin using the club's specific Cl
-    // This will now be constant throughout the simulation for this shot,
-    // as it's based on the selected club, not dynamically changing with spin.
+    // Will be scaled dynamically based on spin rate during simulation
+    // (high spin reduces lift efficiency due to boundary layer effects)
  
     // --- Simulation Constants (Tunable) ---
     //const Cd = 0.26; // Drag coefficient (placeholder)
 
     // const SPIN_TO_DRAG_FACTOR = 0.000005//2; // START POSITIVE e.g. 0.0000005 to see drag reduction with spin // REPLACED by non-linear logic
-    const Cd_base = 0.207; // Start with your current working value from the "old code" DRAG COEFFICIENT
+    const Cd_base = 0.28; // Increased from 0.207 after fixing Z-component Magnus force to reduce overall distance
     const MINIMUM_EFFECTIVE_CD = 0.0001; // Minimum allowed effective drag coefficient
 
-    // Non-linear Spin-to-Drag Effect Constants
-    const SPIN_DRAG_EFFECT_THRESHOLD_RPM = 8400; // RPM above which drag reduction starts
-    const SPIN_DRAG_RPM_FOR_MAX_EFFECT = 11000;  // RPM at which the maximum drag reduction is achieved
-    const SPIN_DRAG_MAX_CD_REDUCTION = 0.1;     // Maximum amount Cd_base can be reduced by spin
-    const SPIN_DRAG_EFFECT_POWER = 0.1;          // Exponent for the curve (2.0 = quadratic)
+    // Spin-to-Drag Effect Constants
+    // Low-spin shots (driver) get small drag reduction, high-spin shots (wedges) are neutral
+    const LOW_SPIN_DRAG_BENEFIT_RPM = 3000;      // Below this RPM, get drag reduction (driver territory)
+    const LOW_SPIN_MAX_CD_REDUCTION = 0.015;     // Max drag reduction for low-spin shots (driver at 2500 RPM)
 
 
     // const Cl = 0.03; // Lift coefficient (placeholder, related to spin). Reduced from 0.1, still higher than original 0.002. // Replaced by separate Cl values
@@ -82,14 +82,15 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club, 
     const temperatureKelvin = currentTemperature + 273.15;
     const airDensity = pressure / (specificGasConstant * temperatureKelvin);
     // const airDensity = 1.225; // kg/m^3 (standard air density) - REPLACED
-    const ballArea = Math.PI * (0.04267 / 2) * (0.04267 / 2); // Cross-sectional area of golf ball (m^2)
+    const ballRadius = 0.04267 / 2; // Golf ball radius in meters (0.02135 m)
+    const ballArea = Math.PI * ballRadius * ballRadius; // Cross-sectional area of golf ball (m^2)
     const ballMass = 0.04593; // kg (standard golf ball mass)
     // Pre-calculate constant part of drag/lift force calculation (now uses calculated airDensity)
     //const dragConst = -0.5 * airDensity * ballArea * Cd / ballMass;
     // const liftConst = 0.5 * airDensity * ballArea * Cl / ballMass; // Replaced by separate lift constants
     //const liftConst_backspin = 0.5 * airDensity * ballArea * Cl_backspin / ballMass;
     const liftConst_sidespin = 0.5 * airDensity * ballArea * Cl_sidespin / ballMass;
-    const club_liftConst_backspin = 0.5 * airDensity * ballArea * club_Cl_backspin_eff / ballMass;
+    const baseLiftConst_backspin = 0.5 * airDensity * ballArea * Cl_backspin_base / ballMass;
 
 
     // Air Spin Decay Constants (Percentage-based, realistic)
@@ -102,11 +103,15 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club, 
     // Convert wind speed (m/s) and direction (degrees from North) to a velocity vector
     // Wind direction is where it comes FROM. So a 90deg (East) wind blows West (-X).
     const windAngleRad = currentWind.direction * Math.PI / 180;
-    const windVel = {
+    const baseWindVel = {
         x: -currentWind.speed * Math.sin(windAngleRad), // Negative sin for X component
         y: 0, // Assume horizontal wind
         z: -currentWind.speed * Math.cos(windAngleRad)  // Negative cos for Z component
     };
+
+    // Wind gradient parameters - wind is stronger at higher altitudes
+    const WIND_HEIGHT_REFERENCE = 20; // meters (height where reported wind speed applies)
+    const GROUND_WIND_FACTOR = 0.3;   // 30% of full wind at ground level
 
     // Convert spin from RPM to rad/s - Use 'let' to allow decay
     // Assuming side spin is around Y axis, back spin around X axis relative to path
@@ -119,7 +124,22 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club, 
 
 
      while (position.y > queryTerrainHeight(position.x, position.z) + 0.01 || time === 0) { // Loop until ball is near/below ground (allow at least one step)
-        // 1. Calculate Relative Velocity (Ball Velocity - Wind Velocity)
+        // 1. Calculate Height-Adjusted Wind (wind gradient - stronger at higher altitudes)
+        let heightFactor;
+        if (position.y >= WIND_HEIGHT_REFERENCE) {
+            heightFactor = 1.0; // Full wind above reference height
+        } else {
+            // Linear interpolation from GROUND_WIND_FACTOR at y=0 to 1.0 at WIND_HEIGHT_REFERENCE
+            heightFactor = GROUND_WIND_FACTOR + (1.0 - GROUND_WIND_FACTOR) * (position.y / WIND_HEIGHT_REFERENCE);
+        }
+
+        const windVel = {
+            x: baseWindVel.x * heightFactor,
+            y: 0,
+            z: baseWindVel.z * heightFactor
+        };
+
+        // 2. Calculate Relative Velocity (Ball Velocity - Wind Velocity)
         const relativeVel = {
             x: velocity.x - windVel.x,
             y: velocity.y - windVel.y, // windVel.y is usually 0
@@ -156,22 +176,38 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club, 
         // We are ignoring rifle spin decay (spinRadPerSec.z) for now
 
         // --- Calculate Effective Drag Coefficient for this step ---
+        // Low-spin shots (driver) get drag reduction benefit
         let spinInducedDragReduction = 0;
         const currentBackspinRPM = Math.abs(spinRadPerSec.x) * (60 / (2 * Math.PI));
 
-        if (currentBackspinRPM > SPIN_DRAG_EFFECT_THRESHOLD_RPM) {
-            const rangeOfEffectRPM = SPIN_DRAG_RPM_FOR_MAX_EFFECT - SPIN_DRAG_EFFECT_THRESHOLD_RPM;
-            if (rangeOfEffectRPM > 0) { // Avoid division by zero
-                const progressInEffectRange = (currentBackspinRPM - SPIN_DRAG_EFFECT_THRESHOLD_RPM) / rangeOfEffectRPM;
-                const clampedProgress = Math.max(0, Math.min(1, progressInEffectRange));
-                spinInducedDragReduction = Math.pow(clampedProgress, SPIN_DRAG_EFFECT_POWER) * SPIN_DRAG_MAX_CD_REDUCTION;
-            }
+        if (currentBackspinRPM < LOW_SPIN_DRAG_BENEFIT_RPM && LOW_SPIN_DRAG_BENEFIT_RPM > 0) {
+            // Below threshold: linear drag reduction (max benefit at 0 RPM, decreases to 0 at threshold)
+            const spinRatio = currentBackspinRPM / LOW_SPIN_DRAG_BENEFIT_RPM;
+            spinInducedDragReduction = (1 - spinRatio) * LOW_SPIN_MAX_CD_REDUCTION;
         }
 
         let effectiveCd = Cd_base - spinInducedDragReduction;
         effectiveCd = Math.max(MINIMUM_EFFECTIVE_CD, effectiveCd); // Clamp to minimum
-        
-        // For debugging:
+
+        // --- Calculate Effective Lift Coefficient based on Spin Ratio ---
+        // Research shows CL depends on spin ratio S = ωR/V, not just spin rate
+        // Use horizontal velocity for spin ratio (relevant for Magnus lift)
+        const horizontalVelMag = Math.sqrt(relativeVel.x**2 + relativeVel.z**2);
+        const spinRatio = horizontalVelMag > 0.01
+            ? (Math.abs(spinRadPerSec.x) * ballRadius) / horizontalVelMag
+            : 0;
+
+        let spinLiftMultiplier = 1.0;
+        if (spinRatio > 0.12) {
+            // Spin ratio > 0.12: start reducing lift efficiency
+            // Steeper curve to control long/mid irons while keeping driver strong
+            const excessRatio = spinRatio - 0.12;
+            // Use power falloff - lower exponent = steeper curve in mid-range
+            const normalizedRatio = Math.min(excessRatio / 0.40, 1.0); // Normalize to 0-1 over range 0.12-0.52
+            spinLiftMultiplier = 1.0 - Math.pow(normalizedRatio, 1.0) * 0.75; // Linear 75% reduction
+            spinLiftMultiplier = Math.max(0.25, Math.min(1.0, spinLiftMultiplier));
+        }
+        const effectiveLiftConst_backspin = baseLiftConst_backspin * spinLiftMultiplier;
 
         // --- Pre-calculate drag force factor for THIS step using effectiveCd ---
         const currentDragForceFactor = -0.5 * airDensity * ballArea * effectiveCd / ballMass;
@@ -212,13 +248,13 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club, 
         };
         const accel_lift = {
             x: liftConst_sidespin * crossProd.x,
-            y: club_liftConst_backspin * crossProd.y,
+            y: effectiveLiftConst_backspin * crossProd.y,
             // Z-component of acceleration due to lift/Magnus:
-            // This version uses the Z-component of the (spin x relativeVel) cross product,
-            // and typically this would be scaled by liftConst_sidespin as it contributes to lateral deviation.
-            z: liftConst_sidespin * crossProd.z
+            // Uses backspin constant since this is primarily backspin × vertical velocity
+            // affecting forward/backward acceleration (carry distance)
+            z: effectiveLiftConst_backspin * crossProd.z
             // which expands to:
-            // z: liftConst_sidespin * (spinRadPerSec.x * relativeVel.y - spinRadPerSec.y * relativeVel.x)
+            // z: effectiveLiftConst_backspin * (spinRadPerSec.x * relativeVel.y - spinRadPerSec.y * relativeVel.x)
         };
 
         // Additive "cheat" lift (Identical to your old code)
@@ -339,7 +375,7 @@ const MAX_BOUNCES = 8; // Safety limit
 const BOUNCE_TIME_STEP = 0.005; // seconds - Smaller step for accuracy during bounces
 const BASE_HORIZONTAL_SCRUB_FACTOR = 0.15; // Base horizontal velocity loss per bounce (0-1)
 const SPIN_ENHANCED_SCRUB_FACTOR = 0.35; // Additional scrub at max backspin (10000 RPM) - tuned for realistic spin checking
-const ANGLE_ENHANCED_SCRUB_FACTOR = 0.35; // Additional scrub for steep landing angles (at 90°)
+const ANGLE_ENHANCED_SCRUB_FACTOR = 0.25; // Additional scrub for steep landing angles (at 90°)
 const SPIN_TO_VELOCITY_TRANSFER = 0.007; // How backspin converts to horizontal velocity change on bounce - tuned for realistic spin-backs
 const MAX_SPIN_COR_REDUCTION = 0.40; // Max % reduction in CoR from high backspin (40% at 10k RPM)
 const SPIN_COR_FIRMNESS_FACTOR = 1.2; // Multiplier for firm surfaces (green responds more to spin than rough)
