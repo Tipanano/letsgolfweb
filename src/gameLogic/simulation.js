@@ -64,13 +64,13 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club, 
     //const Cd = 0.26; // Drag coefficient (placeholder)
 
     // const SPIN_TO_DRAG_FACTOR = 0.000005//2; // START POSITIVE e.g. 0.0000005 to see drag reduction with spin // REPLACED by non-linear logic
-    const Cd_base = 0.28; // Increased from 0.207 after fixing Z-component Magnus force to reduce overall distance
+    const Cd_base = 0.285; // Increased from 0.207 after fixing Z-component Magnus force to reduce overall distance
     const MINIMUM_EFFECTIVE_CD = 0.0001; // Minimum allowed effective drag coefficient
 
     // Spin-to-Drag Effect Constants
     // Low-spin shots (driver) get small drag reduction, high-spin shots (wedges) are neutral
     const LOW_SPIN_DRAG_BENEFIT_RPM = 3000;      // Below this RPM, get drag reduction (driver territory)
-    const LOW_SPIN_MAX_CD_REDUCTION = 0.015;     // Max drag reduction for low-spin shots (driver at 2500 RPM)
+    const LOW_SPIN_MAX_CD_REDUCTION = 0.045;     // Max drag reduction for low-spin shots (driver at 2500 RPM)
 
 
     // const Cl = 0.03; // Lift coefficient (placeholder, related to spin). Reduced from 0.1, still higher than original 0.002. // Replaced by separate Cl values
