@@ -91,6 +91,13 @@ export function connect(sessionId, authToken) {
         }
     });
 
+    // Listen for game:preparing event (flip the peg phase)
+    socket.on('game:preparing', (data) => {
+        if (customEventCallbacks['game:preparing']) {
+            customEventCallbacks['game:preparing'](data);
+        }
+    });
+
     socket.on('game:started', (data) => {
         if (onGameStartCallback) onGameStartCallback(data);
     });

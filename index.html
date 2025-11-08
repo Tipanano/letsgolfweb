@@ -144,13 +144,15 @@
         <p>After 'j' is pressed and 'w' is released, press 'a' (rotation), 'd' (arms), 'i' (wrists) to sequence the downswing.</p> <!-- UPDATED KEYS -->
     </div>
 
-    <!-- Multiplayer Scoreboard (Fixed position above game interface) -->
-    <div id="multiplayer-scoreboard" style="display: none;">
-        <h3 style="margin: 0 0 10px 0; color: #4CAF50; font-size: 1.1em;">Multiplayer</h3>
-        <div id="multiplayer-player-list" style="font-size: 0.95em;">
+    <!-- Multiplayer Scoreboard (Fixed position top-left, below buttons) -->
+    <div id="multiplayer-scoreboard" style="display: none; position: fixed; top: 80px; left: 20px; background: rgba(0, 0, 0, 0.7); color: white; padding: 15px; border-radius: 8px; font-family: 'Arial', sans-serif; z-index: 100; min-width: 250px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <h3 style="margin: 0; color: #4CAF50; font-size: 1em; font-weight: bold;">Players</h3>
+            <button id="game-leave-btn" style="padding: 4px 12px; background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85em; font-weight: bold;">Leave</button>
+        </div>
+        <div id="multiplayer-player-list" style="font-size: 0.9em;">
             <!-- Player scores will be added here -->
         </div>
-        <button id="game-leave-btn" style="width: 100%; margin-top: 10px; padding: 8px; background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">Leave Game</button>
     </div>
 
     <!-- NEW Game Interface Wrapper -->
@@ -356,8 +358,7 @@
         </div>
 
         <div style="margin-bottom: 15px;">
-            <strong>Mode:</strong> <span id="lobby-game-mode">Closest to Flag</span><br>
-            <strong>Target:</strong> <span id="lobby-target-distance">150</span> yards
+            <strong>Mode:</strong> <span id="lobby-game-mode">Closest to Flag</span>
         </div>
 
         <div style="text-align: center;">

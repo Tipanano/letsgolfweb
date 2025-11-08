@@ -97,6 +97,15 @@ export async function submitScore(authToken, sessionId, scoreDetails) {
 }
 
 /**
+ * Checks if the player has an active multiplayer game session.
+ * @param {string} authToken - The auth token.
+ * @returns {Promise<object>} { hasActiveGame: boolean, session: {...} | null }
+ */
+export async function checkActiveGame(authToken) {
+    return fetchWithAuth('/game/active', 'GET', null, authToken);
+}
+
+/**
  * Retrieves the game history for the authenticated player.
  * @param {string} authToken - The auth token.
  * @returns {Promise<object>} Server response with player's game history.

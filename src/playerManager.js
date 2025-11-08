@@ -32,8 +32,15 @@ class PlayerManager {
           // Note: verifySessionWithServer updates currentPlayer.isAdmin internally
         }
       } else {
-        // Guest player
-        this.currentPlayer = stored;
+        // Guest player - check if migration needed
+        if (stored.guestId && stored.guestId.length < 10) {
+          // Old format (6-character random string) - migrate to UUID
+          console.log('🔄 Migrating guest to UUID format...');
+          this.createGuestPlayer(); // Create new guest with UUID
+        } else {
+          // Already using UUID format
+          this.currentPlayer = stored;
+        }
       }
     } else {
       // First time - create guest
@@ -150,6 +157,20 @@ class PlayerManager {
       return this.currentPlayer.userId || this.currentPlayer.nanoAddress;
     }
     return this.currentPlayer?.guestId; // Use guest UUID
+  }
+
+  /**
+   * Get session token for API authentication
+   * For guests, this creates a dev token that INCLUDES their UUID
+   */
+  getSessionToken() {
+    if (this.currentPlayer?.playerType === 'registered') {
+      return this.currentPlayer.sessionToken; // JWT token
+    }
+    // For guests, create a dev token with embedded UUID
+    // Format: dev-token-{guestId}
+    // This allows server to extract the UUID from the token
+    return `dev-token-${this.currentPlayer?.guestId}`;
   }
 
   /**

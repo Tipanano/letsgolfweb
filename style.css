@@ -321,6 +321,8 @@ body.fullscreen-mode #top-center-status {
 body.fullscreen-mode #swing-arc-overlay {
     top: 60px;
     height: calc(100% - 60px);
+    background: transparent; /* Remove dark overlay in fullscreen */
+    backdrop-filter: none; /* Remove blur effect in fullscreen */
 }
 
 
@@ -367,6 +369,7 @@ body.fullscreen-mode .overlay-top {
 
 .overlay-top-right {
     text-align: right;
+    margin-left: auto; /* Keep on right side even when left is hidden */
 }
 
 /* Remove individual styling if .overlay-text-item is applied directly to child divs */
@@ -637,6 +640,7 @@ body.fullscreen-mode #visuals-container {
     border: none;
     margin: 0;
     padding: 0;
+    background-color: transparent; /* Remove gray background in fullscreen */
 }
 
 body.fullscreen-mode #golf-canvas {

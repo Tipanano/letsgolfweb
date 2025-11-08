@@ -84,9 +84,12 @@ class ModalManager {
    */
   prompt(message, title = '', defaultValue = '', placeholder = '') {
     return new Promise((resolve) => {
-      // Remove existing modal if any
+      // Remove existing modal if any (immediately, no animation)
       if (this.currentModal) {
-        this.hide();
+        if (this.currentModal.parentNode) {
+          this.currentModal.parentNode.removeChild(this.currentModal);
+        }
+        this.currentModal = null;
       }
 
       const type = 'info';
@@ -232,9 +235,12 @@ class ModalManager {
    * @param {object} options - { title, message, type, buttons }
    */
   show(options) {
-    // Remove existing modal if any
+    // Remove existing modal if any (immediately, no animation)
     if (this.currentModal) {
-      this.hide();
+      if (this.currentModal.parentNode) {
+        this.currentModal.parentNode.removeChild(this.currentModal);
+      }
+      this.currentModal = null;
     }
 
     const { title, message, type = 'info', buttons = [] } = options;

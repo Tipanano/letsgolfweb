@@ -27,15 +27,14 @@ let holeConfig = null; // Server-provided hole configuration
 let currentPlayerIndex = -1; // Index of the player whose turn it is (-1 = not started)
 let isWatchingOtherPlayerShot = false; // Track if we're animating someone else's shot
 let isGameFinished = false; // Track if the game has finished
+let isFirstTurnOfGame = false; // Track if this is the first turn (skip duplicate modal)
+let pendingTurnChange = null; // Queue turn:changed events that arrive during animations
 
 // Wagering state
 let isWageringGame = false;
 let wagerAmount = null;
 let escrowStatus = null;
 let paymentStatusPollInterval = null;
-
-// Mock token for development
-const generateDevToken = () => 'dev-token-' + Math.random().toString(36).substring(7);
 
 // UI Elements
 const lobby = document.getElementById('multiplayer-lobby');
@@ -88,21 +87,120 @@ export function init() {
         ui.showMainMenu();
     });
 
-    // Check for active game session on page load
-    checkAndRejoinActiveGame();
+    // DON'T auto-rejoin on page load - this was causing single-player CTF to trigger multiplayer
+    // Instead, we'll check for active games and show a "Resume Game" button in the UI
+}
+
+/**
+ * Check if player has an active multiplayer game session on the server
+ * @returns {Promise<object>} { hasActiveGame: boolean, session: {...} | null }
+ */
+export async function checkForActiveGame() {
+    try {
+        const player = playerManager.getPlayerData();
+        const token = player.sessionToken || playerManager.getSessionToken();
+
+        const result = await apiClient.checkActiveGame(token);
+        return result;
+    } catch (error) {
+        console.error('Error checking for active game:', error);
+        return { hasActiveGame: false, session: null };
+    }
+}
+
+/**
+ * Resume an active multiplayer game
+ * @param {object} sessionInfo - Session info from checkForActiveGame()
+ */
+export async function resumeGame(sessionInfo) {
+    try {
+        console.log('📥 Resuming game session:', sessionInfo);
+
+        // Restore state from session info
+        currentSessionId = sessionInfo.sessionId;
+        currentRoomCode = sessionInfo.roomCode;
+        localPlayerId = playerManager.getPlayerId();
+
+        const player = playerManager.getPlayerData();
+        localPlayerToken = player.sessionToken || playerManager.getSessionToken();
+
+        isHost = sessionInfo.isHost;
+        isWageringGame = sessionInfo.isWageringGame;
+        wagerAmount = sessionInfo.wagerAmount;
+
+        // Fetch full session data from server
+        const { API_BASE_URL } = await import('./config.js');
+        const response = await fetch(`${API_BASE_URL}/game/session/${currentSessionId}`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localPlayerToken}`
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch session data');
+        }
+
+        const sessionData = await response.json();
+        players = sessionData.players;
+
+        // Reconnect WebSocket
+        wsManager.connect(currentSessionId, localPlayerToken);
+
+        // Show appropriate UI based on game state
+        if (sessionInfo.gameState === 'waiting') {
+            // Game hasn't started yet - show lobby
+            showLobby();
+            updateLobbyDisplay();
+            toast.success('Rejoined game lobby!');
+        } else if (sessionInfo.gameState === 'playing') {
+            // Game in progress - rejoin gameplay
+            hideLobby();
+            startMultiplayerGame();
+            toast.success('Rejoined your active game!');
+        }
+
+        return true;
+    } catch (error) {
+        console.error('Error resuming game:', error);
+        toast.error('Failed to resume game: ' + error.message);
+        return false;
+    }
 }
 
 export async function hostGame(mode = 'closest-to-flag', settings = {}) {
     try {
+        // Check if player is already in a game
+        const activeCheck = await checkForActiveGame();
+        if (activeCheck.hasActiveGame) {
+            const confirmed = await modal.confirm(
+                'You are already in an active game. Leave that game to start a new one?',
+                'Already in Game',
+                'warning'
+            );
+            if (!confirmed) {
+                return null;
+            }
+            // Leave the existing game
+            await handleLeaveCurrentGame();
+        }
+
         // Use playerManager for ID and name
         localPlayerId = playerManager.getPlayerId();
+        console.log('🆔 [HOST] Player IDs:', {
+            localPlayerId,
+            playerData: playerManager.getPlayerData(),
+            sessionToken: playerManager.getSessionToken ? playerManager.getSessionToken() : 'N/A'
+        });
 
         // Use real session token for registered users, dev token for guests
         const player = playerManager.getPlayerData();
-        localPlayerToken = player.sessionToken || generateDevToken();
+        localPlayerToken = player.sessionToken || playerManager.getSessionToken();
 
         gameMode = mode;
         isHost = true;
+        isReady = false; // Reset ready state for new game
 
         // Store wagering state
         isWageringGame = settings.wagerAmount ? true : false;
@@ -138,16 +236,81 @@ export async function hostGame(mode = 'closest-to-flag', settings = {}) {
     }
 }
 
+async function handleLeaveCurrentGame() {
+    // Disconnect from current game
+    wsManager.disconnect();
+    resetState();
+}
+
+/**
+ * Leave active game from main menu (without being in the game UI)
+ */
+export async function handleLeaveActiveGameFromMenu() {
+    try {
+        console.log('🚪 [LEAVE] Starting leave game process...');
+        const player = playerManager.getPlayerData();
+        const token = player.sessionToken || playerManager.getSessionToken();
+        console.log('🚪 [LEAVE] Got token:', token ? 'present' : 'missing');
+
+        // Get current session ID from server
+        console.log('🚪 [LEAVE] Checking for active game...');
+        const activeCheck = await checkForActiveGame();
+        console.log('🚪 [LEAVE] Active game check result:', activeCheck);
+
+        if (!activeCheck.hasActiveGame) {
+            console.log('🚪 [LEAVE] No active game, returning true');
+            return true; // Already not in a game
+        }
+
+        // Call server to leave game (triggers refunds if applicable)
+        console.log('🚪 [LEAVE] Calling server to leave game:', activeCheck.session.sessionId);
+        const leaveResult = await apiClient.leaveGame(token, activeCheck.session.sessionId);
+        console.log('🚪 [LEAVE] Server response:', leaveResult);
+
+        // Reset local state
+        console.log('🚪 [LEAVE] Resetting local state...');
+        resetState();
+
+        // Refresh the main menu UI to show Host/Join buttons
+        console.log('🚪 [LEAVE] Refreshing main menu UI...');
+        const ui = await import('./ui.js');
+        await ui.showMainMenu(); // This calls updateMultiplayerMenuState()
+        console.log('🚪 [LEAVE] UI refresh complete');
+
+        return true;
+    } catch (error) {
+        console.error('🚪 [LEAVE] Error leaving game from menu:', error);
+        toast.error('Failed to leave game: ' + error.message);
+        return false;
+    }
+}
+
 export async function joinGame(roomCode) {
     try {
+        // Check if player is already in a game
+        const activeCheck = await checkForActiveGame();
+        if (activeCheck.hasActiveGame) {
+            const confirmed = await modal.confirm(
+                'You are already in an active game. Leave that game to join a new one?',
+                'Already in Game',
+                'warning'
+            );
+            if (!confirmed) {
+                return null;
+            }
+            // Leave the existing game
+            await handleLeaveCurrentGame();
+        }
+
         // Use playerManager for ID and name
         localPlayerId = playerManager.getPlayerId();
 
         // Use real session token for registered users, dev token for guests
         const player = playerManager.getPlayerData();
-        localPlayerToken = player.sessionToken || generateDevToken();
+        localPlayerToken = player.sessionToken || playerManager.getSessionToken();
 
         isHost = false;
+        isReady = false; // Reset ready state when joining new game
 
         const response = await apiClient.joinGameSession(
             localPlayerToken,
@@ -208,6 +371,11 @@ function setupWebSocketHandlers() {
         }
     });
 
+    // Listen for game preparing (flip the peg phase)
+    wsManager.setOnCustomEventCallback('game:preparing', (data) => {
+        handleGamePreparing(data);
+    });
+
     wsManager.setOnGameStartCallback((data) => {
 
         // Store hole configuration from server (server sends meters, keep in meters internally)
@@ -226,7 +394,26 @@ function setupWebSocketHandlers() {
         saveActiveGameSession();
 
         hideLobby();
-        startMultiplayerGame();
+        hideFlipThePegModal(); // Hide the flip the peg animation
+
+        // Show "First player" announcement before starting game
+        if (data.firstPlayerName) {
+            const isYou = data.firstPlayerId === localPlayerId;
+            const message = isYou
+                ? `🎯 You go first!`
+                : `🎯 ${data.firstPlayerName} goes first!`;
+
+            // Mark that we showed the first player modal
+            isFirstTurnOfGame = true;
+
+            modal.alert(message, 'Starting Game', 'info').then(() => {
+                startMultiplayerGame();
+            });
+        } else {
+            // Legacy: no first player announcement
+            isFirstTurnOfGame = false;
+            startMultiplayerGame();
+        }
     });
 
     wsManager.setOnErrorCallback((error) => {
@@ -270,11 +457,14 @@ function setupWebSocketHandlers() {
 
     // Listen for game reset to lobby (after game finishes, for play again)
     wsManager.setOnCustomEventCallback('game:resetToLobby', (data) => {
+        console.log('🔄 [RESET TO LOBBY] Received game:resetToLobby event', data);
         // Update players list with new ready statuses
         players = data.players || players;
+        console.log('🔄 [RESET TO LOBBY] Updated players, showing lobby...');
         // Show lobby
         showLobby();
         updateLobbyDisplay();
+        console.log('🔄 [RESET TO LOBBY] Lobby should now be visible');
     });
 
     // Listen for escrow created (wagering games)
@@ -310,9 +500,183 @@ function setupWebSocketHandlers() {
     });
 }
 
+function handleGamePreparing(data) {
+    console.log('🎲 [PREPARING] Game preparing - flipping the peg!', data);
+
+    // Store hole configuration if provided
+    if (data.holeConfig) {
+        holeConfig = data.holeConfig;
+        targetDistance = data.holeConfig.distanceMeters;
+        console.log('🎲 [PREPARING] Hole config stored, distance:', targetDistance);
+    }
+
+    // IMMEDIATELY show flip the peg modal with "Loading..." message
+    // This provides instant feedback so users know something is happening
+    console.log('🎲 [PREPARING] Showing flip the peg modal...');
+    showFlipThePegModal(data.countdown, true); // Pass true for loading state
+
+    // Hide lobby
+    console.log('🎲 [PREPARING] Hiding lobby...');
+    hideLobby();
+
+    // Initialize the game view so players can see the hole
+    // This makes the flip the peg more exciting - they see what they're about to play!
+    console.log('🎲 [PREPARING] Starting async imports...');
+    import('./modes/closestToFlag.js').then(async (ctfMode) => {
+        console.log('🎲 [PREPARING] CTF mode imported');
+        const { setGameMode, GAME_MODES } = await import('./main.js');
+        console.log('🎲 [PREPARING] main.js imported');
+
+        // Set game mode to CTF (will show the hole)
+        gameMode = 'closest-to-flag';
+        console.log('🎲 [PREPARING] Calling setGameMode...');
+        await setGameMode(GAME_MODES.CLOSEST_TO_FLAG, null, targetDistance);
+        console.log('🎲 [PREPARING] setGameMode complete');
+
+        // Show the game view
+        const ui = await import('./ui.js');
+        console.log('🎲 [PREPARING] Calling showGameView...');
+        ui.showGameView();
+        console.log('🎲 [PREPARING] showGameView complete');
+
+        // Update flip the peg modal to show the actual animation (remove loading state)
+        console.log('🎲 [PREPARING] Updating modal to ready state...');
+        updateFlipThePegModalReady();
+        console.log('🎲 [PREPARING] Modal updated - hole should be visible now!');
+    }).catch(error => {
+        console.error('🎲 [PREPARING] ERROR during game preparation:', error);
+    });
+}
+
+function showFlipThePegModal(countdownSeconds, isLoading = false) {
+    // Create modal HTML with animated peg flipping
+    const modalHTML = `
+        <div class="flip-peg-modal-overlay" id="flip-peg-overlay">
+            <div class="flip-peg-modal">
+                <h2>🎲 ${isLoading ? 'Starting Game' : 'Flipping the Peg'}</h2>
+                <p class="flip-peg-message" id="flip-peg-message">${isLoading ? 'Loading hole...' : 'Determining who goes first...'}</p>
+                <div class="flip-peg-animation" id="flip-peg-animation" style="${isLoading ? 'display: none;' : ''}">
+                    <div class="peg"></div>
+                </div>
+                <p class="flip-peg-countdown" id="flip-peg-countdown-container" style="${isLoading ? 'display: none;' : ''}"><span id="flip-countdown">${countdownSeconds}</span> seconds</p>
+            </div>
+        </div>
+    `;
+
+    // Insert modal into document
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+    // Add CSS for the animation
+    const style = document.createElement('style');
+    style.textContent = `
+        .flip-peg-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+        }
+        .flip-peg-modal {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 40px;
+            border-radius: 15px;
+            text-align: center;
+            color: white;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            max-width: 400px;
+        }
+        .flip-peg-modal h2 {
+            margin: 0 0 15px 0;
+            font-size: 32px;
+        }
+        .flip-peg-message {
+            margin: 10px 0;
+            font-size: 18px;
+            opacity: 0.9;
+        }
+        .flip-peg-animation {
+            margin: 30px 0;
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .peg {
+            width: 60px;
+            height: 60px;
+            background: white;
+            border-radius: 50%;
+            animation: flip 0.6s infinite;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        @keyframes flip {
+            0%, 100% { transform: rotateY(0deg) scale(1); }
+            50% { transform: rotateY(180deg) scale(1.2); }
+        }
+        .flip-peg-countdown {
+            margin: 20px 0 0 0;
+            font-size: 20px;
+            font-weight: bold;
+        }
+        #flip-countdown {
+            font-size: 32px;
+            color: #ffd700;
+        }
+    `;
+    document.head.appendChild(style);
+
+    // Countdown timer
+    let remaining = countdownSeconds;
+    const countdownElement = document.getElementById('flip-countdown');
+    const countdownInterval = setInterval(() => {
+        remaining--;
+        if (countdownElement) {
+            countdownElement.textContent = remaining;
+        }
+        if (remaining <= 0) {
+            clearInterval(countdownInterval);
+        }
+    }, 1000);
+
+    // Store interval ID for cleanup if needed
+    window.flipPegCountdownInterval = countdownInterval;
+}
+
+function updateFlipThePegModalReady() {
+    // Update the modal to show the actual animation (game loaded)
+    const messageEl = document.getElementById('flip-peg-message');
+    const animationEl = document.getElementById('flip-peg-animation');
+    const countdownEl = document.getElementById('flip-peg-countdown-container');
+    const titleEl = document.querySelector('.flip-peg-modal h2');
+
+    if (messageEl) messageEl.textContent = 'Determining who goes first...';
+    if (animationEl) animationEl.style.display = 'flex';
+    if (countdownEl) countdownEl.style.display = 'block';
+    if (titleEl) titleEl.textContent = '🎲 Flipping the Peg';
+}
+
+function hideFlipThePegModal() {
+    const overlay = document.getElementById('flip-peg-overlay');
+    if (overlay) {
+        overlay.remove();
+    }
+    if (window.flipPegCountdownInterval) {
+        clearInterval(window.flipPegCountdownInterval);
+        window.flipPegCountdownInterval = null;
+    }
+}
+
 function handleGameCancelled(data) {
     // Hide payment modal if showing
     wageringManager.hideModal();
+
+    // Hide flip the peg modal if showing
+    hideFlipThePegModal();
 
     // Show alert
     modal.alert(data.message, 'Game Cancelled', 'warning').then(() => {
@@ -412,7 +776,13 @@ function handleGameFinished(data) {
         payoutData,
         isWageringGame,
         onPlayAgain: () => {
+            console.log('🔄 [PLAY AGAIN] onPlayAgain called, showing lobby and sending player:ready');
+            // Immediately show lobby for this player
+            showLobby();
+            updateLobbyDisplay();
+            // Mark ourselves as ready and notify server
             wsManager.sendPlayerReady();
+            console.log('🔄 [PLAY AGAIN] Lobby shown, player:ready sent to server');
         },
         onReturnToMenu: returnToMenu
     });
@@ -521,6 +891,12 @@ async function handleStartClick() {
     }
 
     // Regular game - start immediately
+    // Disable button to prevent double-clicks
+    lobbyStartBtn.disabled = true;
+    lobbyStartBtn.textContent = 'Starting...';
+    lobbyStartBtn.style.opacity = '0.6';
+    lobbyStartBtn.style.cursor = 'not-allowed';
+
     wsManager.sendGameStart();
 }
 
@@ -577,6 +953,23 @@ function showLobby() {
         lobby.style.display = 'block';
         const mainMenu = document.getElementById('main-menu');
         if (mainMenu) mainMenu.style.display = 'none';
+        // Hide game view when returning to lobby
+        const gameView = document.getElementById('game-view');
+        if (gameView) gameView.style.display = 'none';
+        // Remove any lingering game summary modal
+        const summaryModal = document.getElementById('game-summary-overlay');
+        if (summaryModal) summaryModal.remove();
+
+        // Reset start button state
+        if (lobbyStartBtn) {
+            lobbyStartBtn.disabled = false;
+            lobbyStartBtn.textContent = 'Start Game';
+            lobbyStartBtn.style.opacity = '1';
+            lobbyStartBtn.style.cursor = 'pointer';
+        }
+
+        // Refresh lobby display to show correct button state
+        updateLobbyDisplay();
     }
 }
 
@@ -629,7 +1022,19 @@ function updateLobbyDisplay() {
 
     // Update game mode display
     if (lobbyGameMode) lobbyGameMode.textContent = 'Closest to Flag';
-    if (lobbyTargetDistance) lobbyTargetDistance.textContent = targetDistance;
+    // Target distance is removed - it's randomly set when game starts
+
+    // Update ready button state based on current isReady status
+    if (lobbyReadyBtn) {
+        const localPlayer = players.find(p => p.id === localPlayerId);
+        if (localPlayer) {
+            // Sync with server state if player data is available
+            isReady = localPlayer.isReady;
+        }
+        // Always update button to reflect current isReady state
+        lobbyReadyBtn.textContent = isReady ? 'Not Ready' : 'Ready';
+        lobbyReadyBtn.style.background = isReady ? '#ff9800' : '#4CAF50';
+    }
 
     // Show/hide start button (ONLY for host)
     const allReady = players.every(p => p.isReady);
@@ -647,6 +1052,8 @@ function updateLobbyDisplay() {
         } else {
             updateStatus('All players ready! Waiting for host to start...');
         }
+    } else if (players.length < 2) {
+        updateStatus('Waiting for more players (minimum 2)...');
     } else {
         const readyCount = players.filter(p => p.isReady).length;
         updateStatus(`${readyCount}/${players.length} players ready`);
@@ -670,6 +1077,12 @@ function showScoreboard() {
     if (ctfInfoPanel) {
         ctfInfoPanel.style.display = 'none';
     }
+
+    // Hide the visual overlay top-left info (Hole/Par/Shot) during multiplayer CTF
+    const overlayTopLeft = document.querySelector('.overlay-top-left.mode-closest-to-flag');
+    if (overlayTopLeft) {
+        overlayTopLeft.style.display = 'none';
+    }
 }
 
 function hideScoreboard() {
@@ -682,6 +1095,12 @@ function hideScoreboard() {
     if (ctfInfoPanel) {
         ctfInfoPanel.style.display = 'block';
     }
+
+    // Show the visual overlay top-left info again when leaving multiplayer
+    const overlayTopLeft = document.querySelector('.overlay-top-left.mode-closest-to-flag');
+    if (overlayTopLeft) {
+        overlayTopLeft.style.display = 'block';
+    }
 }
 
 function updateScoreboard() {
@@ -691,7 +1110,7 @@ function updateScoreboard() {
 
     players.forEach(player => {
         const playerDiv = document.createElement('div');
-        playerDiv.style.cssText = 'padding: 8px; margin: 5px 0; background: #f9f9f9; border-radius: 4px; border-left: 3px solid ' + (player.id === localPlayerId ? '#4CAF50' : '#ddd');
+        playerDiv.style.cssText = 'padding: 8px; margin: 5px 0; background: rgba(255, 255, 255, 0.1); border-radius: 4px; border-left: 3px solid ' + (player.id === localPlayerId ? '#4CAF50' : 'rgba(255, 255, 255, 0.3)');
 
         const isYou = player.id === localPlayerId;
         const isCurrent = players.indexOf(player) === currentPlayerIndex;
@@ -771,16 +1190,31 @@ async function startMultiplayerGame() {
     // Find our local player index
     const localPlayerIdx = players.findIndex(p => p.id === localPlayerId);
 
+    console.log('🎯 [TURN CHECK] Starting game - Player turn check:', {
+        localPlayerId,
+        localPlayerIdx,
+        currentPlayerIndex,
+        isMyTurn: localPlayerIdx === currentPlayerIndex,
+        allPlayers: players.map(p => ({ id: p.id, name: p.name }))
+    });
+
     // Only start timer if it's this player's turn
     if (localPlayerIdx === currentPlayerIndex) {
-        // Show alert modal with sound notification
+        // Play sound notification
         playTurnNotificationSound();
-        modal.alert('It\'s your turn! Take your shot.', 'Your Turn!', 'success');
+
+        // Only show modal if this is NOT the first turn (we already showed "You go first!")
+        if (!isFirstTurnOfGame) {
+            modal.alert('It\'s your turn! Take your shot.', 'Your Turn!', 'success');
+        } else {
+            // Reset flag after first turn
+            isFirstTurnOfGame = false;
+        }
+
         startShotTimer('Your shot, {time} seconds left');
 
-        // Switch to camera 1 (static behind ball) for your turn
-        const { activateHoleViewCamera } = await import('./visuals.js');
-        activateHoleViewCamera();
+        // Switch to static camera (properly resets controls for player's turn)
+        visuals.switchToStaticCamera();
     } else {
         // Show waiting message for other players
         const currentPlayer = players[currentPlayerIndex];
@@ -788,8 +1222,11 @@ async function startMultiplayerGame() {
         startWatchingTimer(playerName);
 
         // Switch to camera 3 (reverse angle) for watching
-        const { activateReverseCamera } = await import('./visuals.js');
-        activateReverseCamera();
+        // Also need delay for camera to work properly
+        setTimeout(async () => {
+            const { activateReverseCamera } = await import('./visuals.js');
+            activateReverseCamera();
+        }, 150);
     }
 }
 
@@ -798,6 +1235,15 @@ function handleTurnChange(data) {
     if (isGameFinished) {
         return;
     }
+
+    // If we're watching another player's shot animation, queue this turn change
+    if (isWatchingOtherPlayerShot) {
+        console.log('🔄 [TURN CHANGE] Animation in progress, queuing turn change');
+        pendingTurnChange = data;
+        return;
+    }
+
+    console.log('🔄 [TURN CHANGE] Processing turn change', data);
 
     // Update the current turn index
     if (data.currentPlayerIndex !== undefined) {
@@ -812,15 +1258,18 @@ function handleTurnChange(data) {
 
     // Check if it's now our turn
     if (localPlayerIdx === currentPlayerIndex) {
+        console.log('🔄 [TURN CHANGE] It\'s our turn - resetting swing state');
+        // Reset swing state to prepare for input (sets gameState to 'ready')
+        logic.resetSwing();
+        console.log('🔄 [TURN CHANGE] After resetSwing, gameState:', logic.getGameState());
+
         // Show alert modal with sound notification
         playTurnNotificationSound();
         modal.alert('It\'s your turn! Take your shot.', 'Your Turn!', 'success');
         startShotTimer('Your shot, {time} seconds left');
 
-        // Switch to camera 1 (static behind ball) for your turn
-        import('./visuals.js').then(({ activateHoleViewCamera }) => {
-            activateHoleViewCamera();
-        });
+        // Switch to static camera (properly resets controls for player's turn)
+        visuals.switchToStaticCamera();
     } else {
         // Stop timer if it was running
         shotTimer.stopTimer();
@@ -866,6 +1315,12 @@ function handlePlayerShot(data) {
 
     // Animate the other player's shot with their color
     if (shotData && shotData.trajectory) {
+        console.log('🎬 [REPLAY] Starting animation for other player:', {
+            playerName,
+            trajectoryLength: shotData.trajectory.length,
+            timeOfFlight: shotData.timeOfFlight,
+            hasTrajectory: !!shotData.trajectory
+        });
         visuals.animateBallFlightWithLanding(shotData, playerColor);
 
         // After animation completes (handled by callback), wait a bit then update status
@@ -971,6 +1426,18 @@ export function onBallStopped(shotData) {
 
         isWatchingOtherPlayerShot = false;
         shotTimer.setStatusMessage('Waiting for next turn...');
+
+        // Wait 2 seconds after animation completes to let player see where the ball landed
+        setTimeout(() => {
+            // Process any pending turn change that arrived during the animation
+            if (pendingTurnChange) {
+                console.log('🔄 [ANIMATION COMPLETE] Processing queued turn change after pause');
+                const queuedData = pendingTurnChange;
+                pendingTurnChange = null;
+                handleTurnChange(queuedData);
+            }
+        }, 2000); // 2 second pause to see the final position
+
         return;
     }
 
@@ -985,6 +1452,7 @@ export function onBallStopped(shotData) {
             rolloutDistance: shotData.rolloutDistance,
             isHoledOut: shotData.isHoledOut || false,
             trajectory: shotData.trajectory, // Include trajectory for other players to animate
+            timeOfFlight: shotData.timeOfFlight, // Include timing for proper animation speed
             distanceFromHoleMeters: shotData.distanceFromHoleMeters, // CTF distance
             distanceFromHoleYards: shotData.distanceFromHoleYards // CTF distance
         };
@@ -1126,6 +1594,7 @@ function resetState() {
     playerScores = {};
     currentPlayerIndex = -1;
     isGameFinished = false;
+    isFirstTurnOfGame = false;
     hideScoreboard();
     clearActiveGameSession();
 }
@@ -1145,7 +1614,17 @@ export function isLocalPlayerTurn() {
 
     // Check if it's our turn based on currentPlayerIndex
     const localPlayerIdx = players.findIndex(p => p.id === localPlayerId);
-    return localPlayerIdx === currentPlayerIndex;
+    const isMyTurn = localPlayerIdx === currentPlayerIndex;
+
+    console.log('🎯 [TURN CHECK] isLocalPlayerTurn called:', {
+        localPlayerId,
+        localPlayerIdx,
+        currentPlayerIndex,
+        isMyTurn,
+        players: players.map(p => p.id)
+    });
+
+    return isMyTurn;
 }
 
 function showGameSummaryModal({ isLocalWinner, winner, winnerDistance, sortedPlayers, payoutData, isWageringGame, onPlayAgain, onReturnToMenu }) {
@@ -1192,7 +1671,9 @@ function showGameSummaryModal({ isLocalWinner, winner, winnerDistance, sortedPla
 
     // Add event listeners
     document.getElementById('btn-play-again').addEventListener('click', () => {
+        console.log('🔄 [PLAY AGAIN] Button clicked, removing modal and calling onPlayAgain');
         document.getElementById('game-summary-overlay').remove();
+        console.log('🔄 [PLAY AGAIN] Modal removed, calling onPlayAgain callback');
         onPlayAgain();
     });
 

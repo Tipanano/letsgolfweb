@@ -292,8 +292,20 @@ export function animateBallFlightWithLanding(shotData, trajectoryColor = 0xffff0
     const onAnimationComplete = () => {
         handleLandingAnimation(shotData);
 
-        // Set game state to 'result' now that animation is complete (allows 'n' key to work)
-        setGameState('result');
+        // Only set game state to 'result' if this is the local player's shot
+        // In multiplayer, don't change state when watching other players
+        const isMultiplayer = multiplayerManager.getCurrentSessionId() !== null;
+        const isLocalPlayerShot = !isMultiplayer || multiplayerManager.isLocalPlayerTurn();
+
+        console.log('🎬 [ANIMATION] Animation complete - isMultiplayer:', isMultiplayer, 'isLocalPlayerShot:', isLocalPlayerShot);
+
+        if (isLocalPlayerShot) {
+            console.log('🎬 [ANIMATION] Setting gameState to result');
+            // Set game state to 'result' now that animation is complete (allows 'n' key to work)
+            setGameState('result');
+        } else {
+            console.log('🎬 [ANIMATION] NOT setting gameState (watching other player)');
+        }
 
         // Update overlay "To Flag" distance after animation in CTF mode
         const currentMode = getCurrentGameMode();

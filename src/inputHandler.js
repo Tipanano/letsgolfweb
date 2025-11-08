@@ -201,7 +201,7 @@ function handleResetKey() {
         import('./modes/closestToFlag.js').then(ctfMode => {
             const targetDistanceMeters = ctfMode.getTargetDistanceMeters(); // Get current target in meters
             ctfMode.prepareForNextShot(); // Update UI overlay
-            Visuals.switchToTargetView(targetDistanceMeters);
+            Visuals.switchToStaticCamera(); // Use switchToStaticCamera instead to properly re-enable controls
             Visuals.showBallAtAddress();
         });
     } else {
@@ -214,12 +214,22 @@ function handleResetKey() {
 function handleFullSwingKeyDown(event, gameState) {
     const swingSpeed = GameLogic.getSwingSpeed(); // Get swing speed here as it's only needed for full swing markers
     // Start Backswing with 'w'
-    if (event.key === 'w' && gameState === 'ready') {
+    if (event.key === 'w') {
+        console.log('🎯 [INPUT] W key pressed - gameState:', gameState, 'isLocalPlayerTurn:', isLocalPlayerTurn());
+
+        if (gameState !== 'ready') {
+            console.log('❌ [INPUT] Cannot start swing - gameState is not ready:', gameState);
+            return;
+        }
+
         // Check if it's the player's turn in multiplayer
         if (!isLocalPlayerTurn()) {
+            console.log('❌ [INPUT] Cannot start swing - not player turn');
             updateStatus('Wait for your turn!');
             return;
         }
+
+        console.log('✅ [INPUT] Starting backswing');
         GameLogic.startBackswing(); // Call action function in GameLogic
     }
 

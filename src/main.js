@@ -94,6 +94,7 @@ export async function setGameMode(newMode, initialHoleName = null, targetDistanc
     } else if (currentMode === GAME_MODES.CLOSEST_TO_FLAG) {
         const actualTargetDistance = closestToFlag.initializeMode(targetDistance);
         visuals.switchToTargetView(actualTargetDistance);
+        logic.resetSwing(); // Reset swing state for CTF mode (sets gameState to 'ready')
         visuals.showBallAtAddress(); // Ensure ball is shown
     } else if (currentMode === GAME_MODES.PLAY_HOLE) {
         // If initialHoleName is provided (e.g. from switchGameToHole calling setGameMode), use it.
@@ -221,21 +222,68 @@ ui.addNextShotClickListener(() => {
 });
 
 // --- Connect Mode Selection Buttons ---
-document.getElementById('mode-btn-range')?.addEventListener('click', () => {
-    ui.showGameView();
-    setGameMode(GAME_MODES.RANGE);
-});
-document.getElementById('mode-btn-closest')?.addEventListener('click', () => {
-    ui.showGameView();
-    setGameMode(GAME_MODES.CLOSEST_TO_FLAG);
-});
-document.getElementById('mode-btn-hole')?.addEventListener('click', () => {
-    // Show hole selection modal
-    playHoleModal.showModal((holeData) => {
-        // Hole selected, start game
+// Helper function to check if player is in active multiplayer before starting single-player
+async function checkMultiplayerBeforeSinglePlayer() {
+    const { checkForActiveGame, handleLeaveActiveGameFromMenu } = await import('./multiplayerManager.js');
+    const { modal } = await import('./ui/modal.js');
+    const { toast } = await import('./ui/toast.js');
+
+    const activeCheck = await checkForActiveGame();
+
+    if (activeCheck.hasActiveGame) {
+        const gameState = activeCheck.session.gameState === 'waiting' ? 'lobby' : 'game';
+        const wagerInfo = activeCheck.session.isWageringGame
+            ? `\n\nThis is a wagering game. ${gameState === 'lobby' ? 'You will be refunded your wager.' : 'You will lose your wager of ' + activeCheck.session.wagerAmount + ' NANO.'}`
+            : '';
+
+        const confirmed = await modal.confirm(
+            `You are currently in an active multiplayer ${gameState} (Room: ${activeCheck.session.roomCode}).${wagerInfo}\n\nLeave the multiplayer game to play single-player?`,
+            'Leave Multiplayer Game?',
+            'warning'
+        );
+
+        if (confirmed) {
+            const success = await handleLeaveActiveGameFromMenu();
+            if (success) {
+                toast.success('Left multiplayer game');
+                return true; // Proceed with single-player
+            } else {
+                return false; // Failed to leave, don't start single-player
+            }
+        } else {
+            return false; // User cancelled, don't start single-player
+        }
+    }
+
+    return true; // No active game, proceed with single-player
+}
+
+document.getElementById('mode-btn-range')?.addEventListener('click', async () => {
+    const canProceed = await checkMultiplayerBeforeSinglePlayer();
+    if (canProceed) {
         ui.showGameView();
-        setGameMode(GAME_MODES.PLAY_HOLE);
-    });
+        setGameMode(GAME_MODES.RANGE);
+    }
+});
+
+document.getElementById('mode-btn-closest')?.addEventListener('click', async () => {
+    const canProceed = await checkMultiplayerBeforeSinglePlayer();
+    if (canProceed) {
+        ui.showGameView();
+        setGameMode(GAME_MODES.CLOSEST_TO_FLAG);
+    }
+});
+
+document.getElementById('mode-btn-hole')?.addEventListener('click', async () => {
+    const canProceed = await checkMultiplayerBeforeSinglePlayer();
+    if (canProceed) {
+        // Show hole selection modal
+        playHoleModal.showModal((holeData) => {
+            // Hole selected, start game
+            ui.showGameView();
+            setGameMode(GAME_MODES.PLAY_HOLE);
+        });
+    }
 });
 
 // --- Connect "Back to Menu" Button ---

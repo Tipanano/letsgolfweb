@@ -1217,10 +1217,94 @@ export function hideAllDistanceLabels() {
 }
 
 // --- View Switching Functions ---
-export function showMainMenu() {
+export async function showMainMenu() {
     if (mainMenuDiv) mainMenuDiv.style.display = 'flex'; // Or 'block' based on its CSS
     if (gameViewDiv) gameViewDiv.style.display = 'none';
     if (shotResultDiv) shotResultDiv.style.display = 'none'; // Ensure shot result is hidden
+
+    // Check for active multiplayer game and update menu accordingly
+    await updateMultiplayerMenuState();
+}
+
+/**
+ * Update the multiplayer section of the main menu based on active game status
+ */
+async function updateMultiplayerMenuState() {
+    const multiplayerSection = document.getElementById('multiplayer-section');
+    if (!multiplayerSection) return;
+
+    try {
+        // Dynamically import multiplayerManager to avoid circular deps
+        const { checkForActiveGame } = await import('./multiplayerManager.js');
+        const activeGameCheck = await checkForActiveGame();
+
+        if (activeGameCheck.hasActiveGame) {
+            // Player has an active game - show Resume/Leave buttons
+            multiplayerSection.innerHTML = `
+                <strong>Multiplayer (Active Game)</strong><br>
+                <div style="background: #fff3cd; padding: 8px; border-radius: 4px; margin: 8px 0; border-left: 3px solid #ffc107;">
+                    <div style="font-size: 0.9em; margin-bottom: 6px;">
+                        <strong>Room:</strong> ${activeGameCheck.session.roomCode}<br>
+                        <strong>Status:</strong> ${activeGameCheck.session.gameState === 'waiting' ? 'In Lobby' : 'Playing'}<br>
+                        <strong>Players:</strong> ${activeGameCheck.session.playerCount}
+                        ${activeGameCheck.session.isWageringGame ? `<br><strong>Wager:</strong> ${activeGameCheck.session.wagerAmount} NANO` : ''}
+                    </div>
+                </div>
+                <button id="resume-game-btn" style="background: #4CAF50; color: white;">Resume Game</button>
+                <button id="leave-active-game-btn" style="background: #f44336; color: white;">Leave Game</button>
+                <div id="connection-status" style="margin-top: 5px; font-size: 0.9em;">Active game found</div>
+            `;
+
+            // Add event listeners to new buttons
+            const resumeBtn = document.getElementById('resume-game-btn');
+            const leaveBtn = document.getElementById('leave-active-game-btn');
+
+            if (resumeBtn) {
+                resumeBtn.addEventListener('click', async () => {
+                    const { resumeGame } = await import('./multiplayerManager.js');
+                    await resumeGame(activeGameCheck.session);
+                });
+            }
+
+            if (leaveBtn) {
+                leaveBtn.addEventListener('click', async () => {
+                    const { modal } = await import('./ui/modal.js');
+                    const { toast } = await import('./ui/toast.js');
+
+                    const message = activeGameCheck.session.isWageringGame
+                        ? `Are you sure you want to leave this game?\n\nYou will forfeit the game${activeGameCheck.session.gameState === 'waiting' ? ' and be refunded your wager' : ' and lose your wager of ' + activeGameCheck.session.wagerAmount + ' NANO'}.`
+                        : 'Are you sure you want to leave this game? You will forfeit the match.';
+
+                    const confirmed = await modal.confirm(message, 'Leave Game', 'warning');
+
+                    if (confirmed) {
+                        const { handleLeaveActiveGameFromMenu } = await import('./multiplayerManager.js');
+                        const success = await handleLeaveActiveGameFromMenu();
+                        if (success) {
+                            toast.success('Left the game');
+                            // Refresh menu state
+                            await updateMultiplayerMenuState();
+                        }
+                    }
+                });
+            }
+        } else {
+            // No active game - show normal Host/Join buttons
+            multiplayerSection.innerHTML = `
+                <strong>Multiplayer (Beta)</strong><br>
+                <button id="test-connection-btn">Test Connection</button>
+                <button id="host-game-btn">Host Game</button>
+                <button id="join-game-btn">Join Game</button>
+                <div id="connection-status" style="margin-top: 5px; font-size: 0.9em;">Not connected</div>
+            `;
+
+            // Re-initialize multiplayer buttons (they need to be re-attached)
+            const { initMultiplayerUI } = await import('./multiplayerTest.js');
+            initMultiplayerUI();
+        }
+    } catch (error) {
+        console.error('Error updating multiplayer menu state:', error);
+    }
 }
 
 export function showGameView() {

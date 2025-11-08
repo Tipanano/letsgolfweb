@@ -64,7 +64,7 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club, 
     //const Cd = 0.26; // Drag coefficient (placeholder)
 
     // const SPIN_TO_DRAG_FACTOR = 0.000005//2; // START POSITIVE e.g. 0.0000005 to see drag reduction with spin // REPLACED by non-linear logic
-    const Cd_base = 0.285; // Increased from 0.207 after fixing Z-component Magnus force to reduce overall distance
+    const Cd_base = 0.283; // Increased from 0.207 after fixing Z-component Magnus force to reduce overall distance
     const MINIMUM_EFFECTIVE_CD = 0.0001; // Minimum allowed effective drag coefficient
 
     // Spin-to-Drag Effect Constants
