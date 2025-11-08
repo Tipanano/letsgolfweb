@@ -150,13 +150,36 @@ class PlayerManager {
 
   /**
    * Get player ID for multiplayer
+   * IMPORTANT: This must match what the server extracts from the token
    */
   getPlayerId() {
     if (this.currentPlayer?.playerType === 'registered') {
-      // Return UUID if available, fallback to nanoAddress for legacy players
+      // For registered users, decode JWT to get user_id (same as server does)
+      // This ensures client and server use the same player ID
+      const decoded = this.decodeJWT(this.currentPlayer.sessionToken);
+      if (decoded && decoded.user_id) {
+        return decoded.user_id; // UUID from JWT
+      }
+      // Fallback to stored userId or nanoAddress for legacy players
       return this.currentPlayer.userId || this.currentPlayer.nanoAddress;
     }
     return this.currentPlayer?.guestId; // Use guest UUID
+  }
+
+  /**
+   * Decode JWT token (client-side only, for extracting user_id)
+   */
+  decodeJWT(token) {
+    if (!token) return null;
+    try {
+      const parts = token.split('.');
+      if (parts.length !== 3) return null;
+      const payload = JSON.parse(atob(parts[1]));
+      return payload;
+    } catch (e) {
+      console.error('Failed to decode JWT:', e);
+      return null;
+    }
   }
 
   /**

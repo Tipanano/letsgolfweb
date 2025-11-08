@@ -188,11 +188,13 @@ export async function hostGame(mode = 'closest-to-flag', settings = {}) {
 
         // Use playerManager for ID and name
         localPlayerId = playerManager.getPlayerId();
+        const debugPlayerData = playerManager.getPlayerData();
         console.log('🆔 [HOST] Player IDs:', {
             localPlayerId,
-            playerData: playerManager.getPlayerData(),
+            playerData: debugPlayerData,
             sessionToken: playerManager.getSessionToken ? playerManager.getSessionToken() : 'N/A'
         });
+        console.log('🆔 [DEBUG] Full player object:', JSON.stringify(debugPlayerData, null, 2));
 
         // Use real session token for registered users, dev token for guests
         const player = playerManager.getPlayerData();
