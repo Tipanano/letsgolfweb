@@ -70,7 +70,7 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club, 
     // Spin-to-Drag Effect Constants
     // Low-spin shots (driver) get small drag reduction, high-spin shots (wedges) are neutral
     const LOW_SPIN_DRAG_BENEFIT_RPM = 3000;      // Below this RPM, get drag reduction (driver territory)
-    const LOW_SPIN_MAX_CD_REDUCTION = 0.045;     // Max drag reduction for low-spin shots (driver at 2500 RPM)
+    const LOW_SPIN_MAX_CD_REDUCTION = 0.05;     // Max drag reduction for low-spin shots (driver at 2500 RPM)
 
 
     // const Cl = 0.03; // Lift coefficient (placeholder, related to spin). Reduced from 0.1, still higher than original 0.002. // Replaced by separate Cl values

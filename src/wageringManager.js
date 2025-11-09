@@ -23,6 +23,16 @@ class WageringManager {
   }
 
   init() {
+    console.log('🎯 [WAGERING] init() called');
+    console.trace('🎯 [WAGERING] init() call stack');
+
+    // Prevent multiple initializations
+    if (this.initialized) {
+      console.warn('⚠️ [WAGERING] Already initialized, skipping event listener attachment');
+      return;
+    }
+    this.initialized = true;
+
     // Get DOM elements
     this.modal = document.getElementById('wager-modal');
     this.setupSection = document.getElementById('wager-setup-section');
@@ -82,11 +92,21 @@ class WageringManager {
    * Create wagering game (host only)
    */
   async createWagerGame() {
+    console.log('🎯 [WAGERING] createWagerGame called');
+
+    // Prevent multiple calls
+    if (this.isCreatingGame) {
+      console.warn('⚠️ [WAGERING] Already creating game, ignoring duplicate call');
+      return;
+    }
+    this.isCreatingGame = true;
+
     const wagerInput = document.getElementById('wager-amount-input');
     const wagerAmount = parseFloat(wagerInput.value);
 
     if (!wagerAmount || wagerAmount < 0.001) {
       modal.alert('Wager amount must be at least 0.001 NANO', 'Invalid Amount', 'warning');
+      this.isCreatingGame = false;
       return;
     }
 
@@ -98,8 +118,10 @@ class WageringManager {
     // Import multiplayerManager dynamically to avoid circular dependency
     const { hostGame } = await import('./multiplayerManager.js');
 
+    console.log('🎯 [WAGERING] Calling hostGame...');
     // Create game with wagering enabled
     const result = await hostGame('closest-to-flag', { wagerAmount });
+    console.log('🎯 [WAGERING] hostGame returned:', result);
 
     if (result) {
       // Update status
@@ -111,6 +133,8 @@ class WageringManager {
       // Close the modal - payment UI will be shown later when all players join
       this.hideModal();
     }
+
+    this.isCreatingGame = false;
   }
 
   /**
@@ -289,8 +313,13 @@ class WageringManager {
         const balance = parseFloat(prepaidBalance);
         const required = parseFloat(wagerAmount || this.wagerAmount);
 
-        if (balance >= required) {
-          // Has enough - show balance
+        if (hasPaid) {
+          // Already paid - show remaining balance (if any)
+          balanceHTML = `<div style="font-size: 12px; color: #4CAF50; margin-top: 4px;">
+                          💰 Remaining balance: ${prepaidBalance} NANO
+                        </div>`;
+        } else if (balance >= required) {
+          // Has enough to pay - show balance
           balanceHTML = `<div style="font-size: 12px; color: #4CAF50; margin-top: 4px;">
                           💰 Your balance: ${prepaidBalance} NANO
                         </div>`;

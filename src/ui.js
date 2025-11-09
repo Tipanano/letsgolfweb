@@ -4,6 +4,13 @@ import { getWind, getTemperature, getCurrentShotType } from './gameLogic/state.j
 import { toast } from './ui/toast.js';
 import { modal } from './ui/modal.js';
 import * as playHoleModal from './playHoleModal.js';
+import { DEBUG_MODE } from './config.js'; // Import debug mode setting
+
+// --- Initialize Debug Mode ---
+// Apply debug-mode class to body if DEBUG_MODE is enabled
+if (DEBUG_MODE) {
+    document.body.classList.add('debug-mode');
+}
 
 // --- DOM Element References ---
 // --- DOM Element References ---
@@ -673,6 +680,9 @@ export function setShotTypeRadio(shotType) {
             btn.classList.remove('selected');
         }
     });
+
+    // Update help button text
+    updateHelpButtonText(shotType);
 }
 
 export function setSwingSpeedControlState(enabled) {
@@ -1750,4 +1760,103 @@ export function updatePlayerDisplay(playerName, playerType = 'guest') {
     if (logoutBtn) {
         logoutBtn.style.display = playerType === 'registered' ? 'inline-block' : 'none';
     }
+}
+
+// --- Shot Instructions Modal ---
+
+const fsHelpBtn = document.getElementById('fs-help-btn');
+const fsHelpBtnText = document.getElementById('fs-help-btn-text');
+const shotInstructionsModal = document.getElementById('shot-instructions-modal');
+const shotInstructionsTitle = document.getElementById('shot-instructions-title');
+const fullSwingInstructions = document.getElementById('full-swing-instructions');
+const chipInstructions = document.getElementById('chip-instructions');
+const puttInstructions = document.getElementById('putt-instructions');
+const closeShotInstructionsBtn = document.getElementById('close-shot-instructions-btn');
+
+/**
+ * Update the help button text based on the current shot type
+ * @param {string} shotType - 'full', 'chip', or 'putt'
+ */
+export function updateHelpButtonText(shotType) {
+    if (!fsHelpBtnText) return;
+
+    switch (shotType) {
+        case 'chip':
+            fsHelpBtnText.textContent = 'How to Chip';
+            break;
+        case 'putt':
+            fsHelpBtnText.textContent = 'How to Putt';
+            break;
+        case 'full':
+        default:
+            fsHelpBtnText.textContent = 'How to Swing';
+            break;
+    }
+}
+
+/**
+ * Show the shot instructions modal based on the current shot type
+ * @param {string} shotType - 'full', 'chip', or 'putt'
+ */
+function showShotInstructions(shotType) {
+    if (!shotInstructionsModal) return;
+
+    // Hide all instruction sections
+    if (fullSwingInstructions) fullSwingInstructions.style.display = 'none';
+    if (chipInstructions) chipInstructions.style.display = 'none';
+    if (puttInstructions) puttInstructions.style.display = 'none';
+
+    // Show the appropriate section and update title
+    switch (shotType) {
+        case 'chip':
+            if (shotInstructionsTitle) shotInstructionsTitle.textContent = 'How to Chip';
+            if (chipInstructions) chipInstructions.style.display = 'block';
+            break;
+        case 'putt':
+            if (shotInstructionsTitle) shotInstructionsTitle.textContent = 'How to Putt';
+            if (puttInstructions) puttInstructions.style.display = 'block';
+            break;
+        case 'full':
+        default:
+            if (shotInstructionsTitle) shotInstructionsTitle.textContent = 'How to Swing';
+            if (fullSwingInstructions) fullSwingInstructions.style.display = 'block';
+            break;
+    }
+
+    // Show the modal
+    shotInstructionsModal.style.display = 'flex';
+}
+
+/**
+ * Hide the shot instructions modal
+ */
+function hideShotInstructions() {
+    if (shotInstructionsModal) {
+        shotInstructionsModal.style.display = 'none';
+    }
+}
+
+// Event listeners for help button and modal
+if (fsHelpBtn) {
+    fsHelpBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const currentType = getShotType();
+        showShotInstructions(currentType);
+    });
+}
+
+if (closeShotInstructionsBtn) {
+    closeShotInstructionsBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        hideShotInstructions();
+    });
+}
+
+// Close modal when clicking outside of it
+if (shotInstructionsModal) {
+    shotInstructionsModal.addEventListener('click', (e) => {
+        if (e.target === shotInstructionsModal) {
+            hideShotInstructions();
+        }
+    });
 }

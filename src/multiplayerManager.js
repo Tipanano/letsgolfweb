@@ -324,6 +324,10 @@ export async function joinGame(roomCode) {
         currentRoomCode = roomCode;
         players = response.players || [];
 
+        // Extract wagering info from response
+        isWageringGame = response.isWageringGame || false;
+        wagerAmount = response.wagerAmount || null;
+
         // Connect WebSocket
         wsManager.connect(currentSessionId, localPlayerToken);
 
@@ -703,6 +707,7 @@ function handleEscrowCreated(data) {
 }
 
 function handlePaymentStatus(data) {
+    console.log('💰 [PAYMENT] Received payment:status:', data);
 
     // Update players with payment status
     if (data.players && Array.isArray(data.players)) {
@@ -710,6 +715,9 @@ function handlePaymentStatus(data) {
             const player = players.find(p => p.nanoAddress === paymentPlayer.address);
             if (player) {
                 player.hasPaid = paymentPlayer.hasPaid;
+                console.log(`💰 [PAYMENT] Updated player ${player.name}: hasPaid=${player.hasPaid}`);
+            } else {
+                console.log(`⚠️ [PAYMENT] Could not find player with address ${paymentPlayer.address}`);
             }
         });
     }
@@ -1127,7 +1135,13 @@ function updateScoreboard() {
         } else if (isCurrent) {
             scoreText = '<em>shooting...</em>';
         } else {
-            scoreText = '<em>waiting...</em>';
+            // Check if player has distance data (already shot)
+            if (player.distanceFromHole !== undefined && player.distanceFromHole !== null) {
+                const distanceYards = (player.distanceFromHole * 1.09361).toFixed(1);
+                scoreText = `<strong>${distanceYards} yd</strong>`;
+            } else {
+                scoreText = '<em>waiting...</em>';
+            }
         }
 
         // Add player color indicator

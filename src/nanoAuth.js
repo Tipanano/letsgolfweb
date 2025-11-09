@@ -202,13 +202,7 @@ async function submitUsername() {
 async function handleLoginSuccess(data) {
     statusMessage.textContent = '✅ Success! Logging in...';
 
-    // Log user ID for admin setup
-    console.log('='.repeat(60));
-    console.log('🔑 USER ID (for admin setup):');
-    console.log(data.user_id);
-    console.log('='.repeat(60));
-    console.log('Add this to your .env file: ADMIN_USER_IDS=' + data.user_id);
-    console.log('='.repeat(60));
+    // User ID available in data.user_id if needed for admin setup
 
     // Upgrade player to registered
     await playerManager.upgradeToRegistered(

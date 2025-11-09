@@ -59,10 +59,21 @@
 
         <!-- Fullscreen top bar (only visible in fullscreen mode) -->
         <div id="fullscreen-top-bar">
-            <button id="fs-exit-fullscreen-btn" class="fullscreen-bar-btn exit">Exit Fullscreen</button>
+            <!-- Left side: Main buttons -->
             <button id="fs-menu-btn" class="fullscreen-bar-btn">Menu</button>
             <button id="fs-switch-hole-btn" class="fullscreen-bar-btn">Switch Hole</button>
-            <button id="fs-reset-data-btn" class="fullscreen-bar-btn danger">Reset Game Data</button>
+            <button id="fs-help-btn" class="fullscreen-bar-btn help">
+                <span id="fs-help-btn-text">How to Swing</span>
+            </button>
+
+            <!-- Spacer to push debug buttons to the right -->
+            <div style="flex-grow: 1;"></div>
+
+            <!-- Right side: Debug buttons -->
+            <div id="fs-debug-buttons">
+                <button id="fs-exit-fullscreen-btn" class="fullscreen-bar-btn exit">Exit Fullscreen</button>
+                <button id="fs-reset-data-btn" class="fullscreen-bar-btn danger">Reset Game Data</button>
+            </div>
         </div>
 
         <!-- Fullscreen bottom-right controls (only visible in fullscreen mode) -->
@@ -413,9 +424,11 @@
                         <li><strong>Hip Initiation (j):</strong> Too early or too late loses power. Ideal is about 150ms before releasing 'w'.</li>
                         <li><strong>Rotation vs Arms (a & d):</strong>
                             <ul>
-                                <li>If 'a' comes BEFORE 'd' (rotation first): Promotes fade spin, out-to-in path</li>
-                                <li>If 'd' comes BEFORE 'a' (arms first): Promotes draw spin, in-to-out path</li>
-                                <li>The bigger the gap between them, the more pronounced the effect</li>
+                                <li>Both the TIMING and the GAP between 'a' and 'd' affect club path</li>
+                                <li>Ideal: 'a' first, then 'd' about 50ms later (watch the timing bars!)</li>
+                                <li>Both too early (or together) = in-to-out path (hook/draw)</li>
+                                <li>Proper timing with small gap = straighter</li>
+                                <li>Both late OR large gap = out-to-in path (slice/fade)</li>
                             </ul>
                         </li>
                         <li><strong>Wrist Release (i):</strong>
@@ -432,10 +445,10 @@
                     <h4 style="margin-top: 0; color: #e65100;">💡 Tips:</h4>
                     <ul style="line-height: 1.8; color: #37474f;">
                         <li>Want more power? Longer backswing, but remember the timing windows scale with it.</li>
-                        <li>Want a draw? Press 'd' well before 'a'.</li>
-                        <li>Want a fade? Press 'a' before 'd'.</li>
+                        <li>Want straighter shots? Aim for the green zones on both 'a' and 'd' timing bars.</li>
+                        <li>Hooking? You're hitting both 'a' and 'd' too early. Wait for the timing bars!</li>
+                        <li>Slicing? Either both are late, or too much gap between them.</li>
                         <li>Struggle with timing? Reduce swing speed (power slider) - the windows get easier.</li>
-                        <li>The yellow zone on the backswing bar shows ideal 'j' press timing - aim for the middle.</li>
                     </ul>
                 </div>
             </div>
@@ -610,6 +623,84 @@
                 <button id="create-wagering-game-choice-btn" style="padding: 15px 30px; background: #FF9800; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; font-weight: bold; flex: 1;">Wagering Game</button>
             </div>
             <button id="cancel-game-type-btn" style="margin-top: 20px; padding: 10px 25px; background: #999; color: white; border: none; border-radius: 5px; cursor: pointer;">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Shot Instructions Modal -->
+    <div id="shot-instructions-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 10002; justify-content: center; align-items: center; overflow-y: auto;">
+        <div style="background: white; padding: 25px; border-radius: 10px; max-width: 500px; width: 90%; max-height: 85vh; overflow-y: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.3); margin: 20px;">
+            <h2 id="shot-instructions-title" style="margin-top: 0; color: #1b5e20; border-bottom: 2px solid #a5d6a7; padding-bottom: 10px;">How to Swing</h2>
+
+            <!-- Full Swing Instructions -->
+            <div id="full-swing-instructions" style="display: none;">
+                <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 15px;">
+                    <h4 style="margin-top: 0; color: #1b5e20;">The Sequence:</h4>
+                    <ol style="line-height: 1.8; color: #37474f; padding-left: 20px;">
+                        <li><strong>'w'</strong> - Hold to build backswing</li>
+                        <li><strong>'j'</strong> - Press ~150ms before releasing 'w' (hip initiation)</li>
+                        <li><strong>Release 'w'</strong> - Finish backswing</li>
+                        <li><strong>'a'</strong> - Body rotation</li>
+                        <li><strong>'d'</strong> - Arms release</li>
+                        <li><strong>'i'</strong> - Wrist release (impact)</li>
+                    </ol>
+                </div>
+                <div style="background: #fff3e0; padding: 12px; border-radius: 5px;">
+                    <h4 style="margin-top: 0; color: #e65100;">Quick Tips:</h4>
+                    <ul style="line-height: 1.6; color: #37474f; padding-left: 20px; margin: 0;">
+                        <li><strong>Hooking?</strong> You're too early - wait for timing bars</li>
+                        <li><strong>Slicing?</strong> Too late OR too big gap between 'a' and 'd'</li>
+                        <li><strong>Straighter?</strong> Hit green zones on both 'a' and 'd'</li>
+                        <li><strong>Easier timing:</strong> Lower power %</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Chip Instructions -->
+            <div id="chip-instructions" style="display: none;">
+                <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 15px;">
+                    <h4 style="margin-top: 0; color: #1b5e20;">The Sequence:</h4>
+                    <ol style="line-height: 1.8; color: #37474f; padding-left: 20px;">
+                        <li><strong>Set ball position</strong> - Forward = high/soft, Back = low/running</li>
+                        <li><strong>'w'</strong> - Hold for desired distance</li>
+                        <li><strong>Release 'w'</strong> - Start downswing</li>
+                        <li><strong>'a'</strong> - Body rotation</li>
+                        <li><strong>'i'</strong> - Strike the ball</li>
+                    </ol>
+                </div>
+                <div style="background: #e8f5e9; padding: 12px; border-radius: 5px;">
+                    <h4 style="margin-top: 0; color: #1b5e20;">Ball Position:</h4>
+                    <ul style="line-height: 1.6; color: #37474f; padding-left: 20px; margin: 0;">
+                        <li><strong>Forward:</strong> Higher loft, easier to thin</li>
+                        <li><strong>Back:</strong> Lower loft, steeper attack, easier to fat</li>
+                        <li>Adjust 'i' timing based on position!</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Putt Instructions -->
+            <div id="putt-instructions" style="display: none;">
+                <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 15px;">
+                    <h4 style="margin-top: 0; color: #1b5e20;">The Sequence:</h4>
+                    <ol style="line-height: 1.8; color: #37474f; padding-left: 20px;">
+                        <li><strong>'w'</strong> - Backswing length = distance</li>
+                        <li><strong>Release 'w'</strong> - Start downswing</li>
+                        <li><strong>'i'</strong> - Strike in green zone</li>
+                    </ol>
+                </div>
+                <div style="background: #e8f5e9; padding: 12px; border-radius: 5px;">
+                    <h4 style="margin-top: 0; color: #1b5e20;">Timing:</h4>
+                    <ul style="line-height: 1.6; color: #37474f; padding-left: 20px; margin: 0;">
+                        <li><strong>Too Early:</strong> Push (right)</li>
+                        <li><strong>Perfect (green):</strong> Straight</li>
+                        <li><strong>Too Late:</strong> Pull (left)</li>
+                        <li>Press spacebar to see putting guide</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div style="text-align: center; margin-top: 20px;">
+                <button id="close-shot-instructions-btn" style="padding: 10px 25px; background: #4CAF50; color: white; border: none; border-radius: 5px; font-size: 14px; cursor: pointer; font-weight: bold;">Got It!</button>
+            </div>
         </div>
     </div>
 

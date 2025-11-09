@@ -1223,3 +1223,25 @@ body.fullscreen-mode #fullscreen-toggle-btn {
     background: #616161;
     transform: translateY(-1px);
 }
+
+/* Help button in top bar */
+.fullscreen-bar-btn.help {
+    background: rgba(76, 175, 80, 0.9);
+    border-color: rgba(76, 175, 80, 1);
+}
+
+.fullscreen-bar-btn.help:hover {
+    background: rgba(76, 175, 80, 1);
+    border-color: rgba(102, 187, 106, 1);
+}
+
+/* Debug buttons container */
+#fs-debug-buttons {
+    display: flex;
+    gap: 15px;
+}
+
+/* Hide debug buttons when debug mode is disabled */
+body:not(.debug-mode) #fs-debug-buttons {
+    display: none;
+}

@@ -264,13 +264,7 @@ class PlayerManager {
       if (response.ok) {
         const userData = await response.json();
 
-        // Log user ID for admin setup
-        console.log('='.repeat(60));
-        console.log('🔑 USER ID (for admin setup):');
-        console.log(userData.userId);
-        console.log('='.repeat(60));
-        console.log('Add this to your .env file: ADMIN_USER_IDS=' + userData.userId);
-        console.log('='.repeat(60));
+        // User ID available in userData.userId if needed for admin setup
 
         // Update current player with latest data from server (including isAdmin)
         if (this.currentPlayer) {

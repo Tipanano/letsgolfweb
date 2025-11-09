@@ -2,6 +2,7 @@
 import * as ui from '../ui.js'; // Import UI functions
 import { metersToYards, yardsToMeters } from '../utils/unitConversions.js'; // Import conversion utilities
 import { getSurfaceProperties } from '../surfaces.js'; // Import surface properties
+import { getFlagPosition } from '../visuals/targetView.js'; // Import flag position
 
 // --- State ---
 let targetDistanceMeters = 0; // Store internally in meters
@@ -63,13 +64,24 @@ export function handleShotResult(shotData) {
 
     shotsTaken++;
 
-    // Calculate distance from hole (simple 2D for now)
-    // shotData distances are now in meters
-    const sideDistanceMeters = shotData.sideDistance || 0;
-    const endDistanceMeters = shotData.totalDistance; // Use total distance in meters
+    // Calculate actual distance from hole using real flag position
+    const flagPosition = getFlagPosition();
+    const ballPosition = shotData.finalPosition;
 
-    const distanceRemainingMeters = Math.abs(targetDistanceMeters - endDistanceMeters);
-    const distanceFromHoleMeters = Math.sqrt(distanceRemainingMeters**2 + sideDistanceMeters**2);
+    let distanceFromHoleMeters;
+    if (flagPosition && ballPosition) {
+        // Use actual 3D positions (accounting for green offset and hole position within green)
+        const dx = ballPosition.x - flagPosition.x;
+        const dz = ballPosition.z - flagPosition.z;
+        distanceFromHoleMeters = Math.sqrt(dx*dx + dz*dz);
+    } else {
+        // Fallback to old simplified calculation if positions not available
+        console.warn('Flag or ball position not available, using simplified distance calculation');
+        const sideDistanceMeters = shotData.sideDistance || 0;
+        const endDistanceMeters = shotData.totalDistance;
+        const distanceRemainingMeters = Math.abs(targetDistanceMeters - endDistanceMeters);
+        distanceFromHoleMeters = Math.sqrt(distanceRemainingMeters**2 + sideDistanceMeters**2);
+    }
 
     // Check if the shot landed on a penalty surface
     const surfaceName = shotData.surfaceName;
