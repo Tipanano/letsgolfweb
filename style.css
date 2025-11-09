@@ -1245,3 +1245,75 @@ body.fullscreen-mode #fullscreen-toggle-btn {
 body:not(.debug-mode) #fs-debug-buttons {
     display: none;
 }
+
+/* Profile View Styles */
+#profile-view {
+    max-width: 800px;
+    margin: 20px auto;
+    padding: 20px;
+}
+
+#profile-view h2 {
+    color: #2e7d32;
+    margin-bottom: 20px;
+}
+
+#profile-view h3 {
+    color: #37474f;
+    font-size: 1.2em;
+}
+
+/* Profile buttons - match main menu style */
+#profile-view button {
+    padding: 12px 20px;
+    font-size: 1em;
+    font-weight: 600;
+    margin: 8px 4px;
+    cursor: pointer;
+    border: none;
+    border-radius: 6px;
+    background-color: #4caf50;
+    color: white;
+    transition: background-color 0.3s ease, transform 0.1s ease;
+}
+
+#profile-view button:hover {
+    background-color: #388e3c;
+    transform: translateY(-1px);
+}
+
+#profile-view button:active {
+    transform: translateY(0px);
+}
+
+/* Back button - slightly different color */
+#profile-back-btn {
+    background-color: #66bb6a !important;
+}
+
+#profile-back-btn:hover {
+    background-color: #57a05a !important;
+}
+
+/* Cancel button - grey */
+#cancel-username-btn {
+    background-color: #757575 !important;
+}
+
+#cancel-username-btn:hover {
+    background-color: #616161 !important;
+}
+
+/* Username input */
+#username-input {
+    padding: 10px;
+    font-size: 1em;
+    border: 2px solid #ddd;
+    border-radius: 6px;
+    margin-right: 8px;
+}
+
+#username-input:focus {
+    outline: none;
+    border-color: #4caf50;
+}

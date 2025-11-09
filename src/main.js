@@ -348,6 +348,15 @@ if (logoutBtn) {
     });
 }
 
+// Hook up "Profile" button
+const profileBtn = document.getElementById('profile-btn');
+if (profileBtn) {
+    profileBtn.addEventListener('click', async () => {
+        const { initProfile } = await import('./profileManager.js');
+        await initProfile();
+    });
+}
+
 // Hook up "View Manual" button
 const manualBtn = document.getElementById('manual-btn-placeholder');
 const manualModal = document.getElementById('manual-modal');

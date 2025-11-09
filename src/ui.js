@@ -1250,15 +1250,24 @@ async function updateMultiplayerMenuState() {
 
         if (activeGameCheck.hasActiveGame) {
             // Player has an active game - show Resume/Leave buttons
+            const session = activeGameCheck.session;
+            const refundInfoHTML = session.refundInfo ? `
+                <div style="background: ${session.refundInfo.canRefund ? '#d4edda' : '#f8d7da'}; padding: 6px 8px; border-radius: 4px; margin-top: 6px; font-size: 0.85em; border-left: 3px solid ${session.refundInfo.canRefund ? '#28a745' : '#dc3545'};">
+                    <strong>Refund:</strong> ${session.refundInfo.refundReason}
+                    ${session.refundInfo.prepaidBalance > 0 ? `<br><strong>Balance:</strong> ${session.refundInfo.prepaidBalance} NANO` : ''}
+                </div>
+            ` : '';
+
             multiplayerSection.innerHTML = `
                 <strong>Multiplayer (Active Game)</strong><br>
                 <div style="background: #fff3cd; padding: 8px; border-radius: 4px; margin: 8px 0; border-left: 3px solid #ffc107;">
                     <div style="font-size: 0.9em; margin-bottom: 6px;">
-                        <strong>Room:</strong> ${activeGameCheck.session.roomCode}<br>
-                        <strong>Status:</strong> ${activeGameCheck.session.gameState === 'waiting' ? 'In Lobby' : 'Playing'}<br>
-                        <strong>Players:</strong> ${activeGameCheck.session.playerCount}
-                        ${activeGameCheck.session.isWageringGame ? `<br><strong>Wager:</strong> ${activeGameCheck.session.wagerAmount} NANO` : ''}
+                        <strong>Room:</strong> ${session.roomCode}<br>
+                        <strong>Status:</strong> ${session.gameState === 'waiting' ? 'In Lobby' : 'Playing'}<br>
+                        <strong>Players:</strong> ${session.playerCount}
+                        ${session.isWageringGame ? `<br><strong>Wager:</strong> ${session.wagerAmount} NANO` : ''}
                     </div>
+                    ${refundInfoHTML}
                 </div>
                 <button id="resume-game-btn" style="background: #4CAF50; color: white;">Resume Game</button>
                 <button id="leave-active-game-btn" style="background: #f44336; color: white;">Leave Game</button>
@@ -1736,6 +1745,7 @@ export function updatePlayerDisplay(playerName, playerType = 'guest') {
     const playerTypeBadge = document.getElementById('player-type-badge');
     const registerBtn = document.getElementById('register-btn-placeholder');
     const logoutBtn = document.getElementById('logout-btn');
+    const profileBtn = document.getElementById('profile-btn');
 
     if (playerNameElement) {
         playerNameElement.textContent = playerName;
@@ -1759,6 +1769,9 @@ export function updatePlayerDisplay(playerName, playerType = 'guest') {
     }
     if (logoutBtn) {
         logoutBtn.style.display = playerType === 'registered' ? 'inline-block' : 'none';
+    }
+    if (profileBtn) {
+        profileBtn.style.display = playerType === 'registered' ? 'inline-block' : 'none';
     }
 }
 
