@@ -36,8 +36,8 @@ const FLAGSTICK_COLOR = 0xcccccc; // White/Gray
 import { YARDS_TO_METERS } from '../utils/unitConversions.js';
 
 const Y_OFFSET_GROUND = 0;
-const Y_OFFSET_WATER = 0.005; // Water below fairway (matches surfaces.js - fairway wins)
-const Y_OFFSET_FAIRWAY = 0.01;
+const Y_OFFSET_FAIRWAY = 0.005;
+const Y_OFFSET_WATER = 0.01; // Water above fairway for visual clarity
 const Y_OFFSET_TEE = 0.03; // Tee box slightly above fairway
 const Y_OFFSET_GREEN = 0.02; // Green above fairway and water
 const Y_OFFSET_FLAGSTICK = 0.02; // Base of flagstick on green level
@@ -175,9 +175,20 @@ function createTargetElements() {
     let fairwayApproachDistance = fairwayAdjustments?.approachDistance ?? 40;
     const leftWidthMultiplier = fairwayAdjustments?.leftWidthMultiplier ?? 1.0;
     const rightWidthMultiplier = fairwayAdjustments?.rightWidthMultiplier ?? 1.0;
+    const behindWater = fairwayAdjustments?.behindWater ?? false;
 
-    const fairwayStartZ = targetZ - fairwayApproachDistance;
-    const fairwayLength = fairwayApproachDistance + fairwayExtension;
+    // Calculate fairway position based on whether it's behind water or approaching green
+    let fairwayStartZ, fairwayLength;
+    if (behindWater) {
+        // Water is in front - fairway ends before the water
+        fairwayLength = fairwayApproachDistance;
+        fairwayStartZ = 0; // Start from tee
+    } else {
+        // Normal case - fairway approaches green
+        fairwayStartZ = targetZ - fairwayApproachDistance;
+        fairwayLength = fairwayApproachDistance + fairwayExtension;
+    }
+
     const angleToGreen = Math.atan2(greenOffsetMeters, targetZ);
 
     // Create organic fairway shape

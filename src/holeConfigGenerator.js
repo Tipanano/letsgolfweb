@@ -80,28 +80,33 @@ function generateWaterHazard(distanceMeters, greenOffsetMeters, greenWidthMeters
     }
 
     // Calculate fairway adjustments based on water position
-    let fairwayApproachDistance, fairwayExtension, leftWidthMultiplier, rightWidthMultiplier;
+    let fairwayApproachDistance, fairwayExtension, leftWidthMultiplier, rightWidthMultiplier, fairwayBehindWater;
 
     if (position === 'front') {
-        fairwayApproachDistance = 30;
+        // Water is in front of green - fairway should be behind the water
+        fairwayApproachDistance = centerZ - radiusZ - 10; // Fairway ends 10m before water starts
         fairwayExtension = 0;
         leftWidthMultiplier = 1.0;
         rightWidthMultiplier = 1.0;
+        fairwayBehindWater = true; // Flag to position fairway correctly
     } else if (position === 'behind') {
         fairwayApproachDistance = 40;
         fairwayExtension = 12;
         leftWidthMultiplier = 1.0;
         rightWidthMultiplier = 1.0;
+        fairwayBehindWater = false;
     } else if (position === 'left') {
         fairwayApproachDistance = 40;
         fairwayExtension = 10;
         leftWidthMultiplier = 0.65;
         rightWidthMultiplier = 1.0;
+        fairwayBehindWater = false;
     } else { // right
         fairwayApproachDistance = 40;
         fairwayExtension = 10;
         leftWidthMultiplier = 1.0;
         rightWidthMultiplier = 0.65;
+        fairwayBehindWater = false;
     }
 
     return {
@@ -119,7 +124,8 @@ function generateWaterHazard(distanceMeters, greenOffsetMeters, greenWidthMeters
             approachDistance: fairwayApproachDistance,
             extension: fairwayExtension,
             leftWidthMultiplier: leftWidthMultiplier,
-            rightWidthMultiplier: rightWidthMultiplier
+            rightWidthMultiplier: rightWidthMultiplier,
+            behindWater: fairwayBehindWater // Flag for fairway positioning
         }
     };
 }

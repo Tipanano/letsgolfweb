@@ -269,6 +269,8 @@ document.getElementById('mode-btn-range')?.addEventListener('click', async () =>
 document.getElementById('mode-btn-closest')?.addEventListener('click', async () => {
     const canProceed = await checkMultiplayerBeforeSinglePlayer();
     if (canProceed) {
+        // Clear any existing hole config from multiplayer to generate a fresh random hole
+        visuals.clearTargetViewConfig();
         ui.showGameView();
         setGameMode(GAME_MODES.CLOSEST_TO_FLAG);
     }

@@ -47,10 +47,10 @@ const BASE_CHIP_SMASH = 1.25;
 const STRIKE_QUALITY_MISMATCH_THRESHOLD = 250; // ms mismatch between ideal and actual for Fat/Duff/Thin
 
 // Spin Calculation
-const CHIP_BASE_BACKSPIN = 900;
-const CHIP_BACKSPIN_LOFT_FACTOR = 35;   // RPM per degree of dynamic loft (lowered for more realistic bump and run)
-const CHIP_BACKSPIN_SPEED_FACTOR = 40;  // RPM per mph of clubhead speed (increased to reward harder swings)
-const CHIP_BACKSPIN_AOA_FACTOR = -80;   // RPM per degree of AoA (negative AoA = more spin)
+const CHIP_BASE_BACKSPIN = 400;  // Reduced - most chips should have minimal spin
+const CHIP_BACKSPIN_LOFT_FACTOR = 20;   // RPM per degree of dynamic loft (reduced for realistic bump and run)
+const CHIP_BACKSPIN_SPEED_FACTOR = 25;  // RPM per mph of clubhead speed (reduced - chips don't generate much spin)
+const CHIP_BACKSPIN_AOA_FACTOR = -40;   // RPM per degree of AoA (reduced - shallow AoA doesn't create much spin)
 const CHIP_SIDESPIN_FACE_FACTOR = 120;  // RPM per degree of face angle
 const CHIP_SIDESPIN_SPEED_FACTOR = 8;   // Additional RPM per mph when face is open/closed
 const MAX_CHIP_SIDESPIN_RPM = 800;      // Max sidespin RPM

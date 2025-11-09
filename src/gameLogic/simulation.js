@@ -94,7 +94,7 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club, 
 
 
     // Air Spin Decay Constants (Percentage-based, realistic)
-    const AIR_BACKSPIN_DECAY_PERCENT_PER_SECOND = 3.5; // 3-4% per second based on real golf ball data
+    const AIR_BACKSPIN_DECAY_PERCENT_PER_SECOND = 4.0; // 3-4% per second based on real golf ball data
     const AIR_SIDESPIN_DECAY_PERCENT_PER_SECOND = 4.5; // Slightly faster decay than backspin
     const MIN_AIR_SPIN_EFFECT_RPM = 50; // Spin below this has no effect (avoids tiny calculations)
     // --- End Constants ---
