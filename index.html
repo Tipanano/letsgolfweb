@@ -94,6 +94,9 @@
             <button id="fs-help-btn" class="fullscreen-bar-btn help">
                 <span id="fs-help-btn-text">How to Swing</span>
             </button>
+            <button id="fs-controls-btn" class="fullscreen-bar-btn help">
+                <span>Controls</span>
+            </button>
 
             <!-- Spacer to push debug buttons to the right -->
             <div style="flex-grow: 1;"></div>
@@ -729,6 +732,38 @@
 
             <div style="text-align: center; margin-top: 20px;">
                 <button id="close-shot-instructions-btn" style="padding: 10px 25px; background: #4CAF50; color: white; border: none; border-radius: 5px; font-size: 14px; cursor: pointer; font-weight: bold;">Got It!</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Controls Modal -->
+    <div id="controls-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 10002; justify-content: center; align-items: center; overflow-y: auto;">
+        <div style="background: white; padding: 25px; border-radius: 10px; max-width: 500px; width: 90%; max-height: 85vh; overflow-y: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.3); margin: 20px;">
+            <h2 style="margin-top: 0; color: #1b5e20; border-bottom: 2px solid #a5d6a7; padding-bottom: 10px;">Camera & Controls</h2>
+
+            <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 15px;">
+                <h4 style="margin-top: 0; color: #1b5e20;">Camera Views:</h4>
+                <ul style="line-height: 1.8; color: #37474f; padding-left: 20px; list-style: none;">
+                    <li><strong>0</strong> - Measurement camera</li>
+                    <li><strong>1</strong> - Static camera (hole view in Play Hole mode)</li>
+                    <li><strong>2</strong> - Follow ball camera</li>
+                    <li><strong>3</strong> - Reverse camera</li>
+                    <li><strong>4</strong> - Green camera</li>
+                </ul>
+            </div>
+
+            <div style="background: #e8f5e9; padding: 15px; border-radius: 5px; margin-bottom: 15px;">
+                <h4 style="margin-top: 0; color: #1b5e20;">Camera Controls:</h4>
+                <ul style="line-height: 1.8; color: #37474f; padding-left: 20px; list-style: none;">
+                    <li><strong>Mouse Scroll</strong> - Zoom in/out</li>
+                    <li><strong>Mouse Drag</strong> - Rotate camera and adjust aim (in camera mode 1)</li>
+                    <li><strong>+ / =</strong> - Zoom in</li>
+                    <li><strong>-</strong> - Zoom out</li>
+                </ul>
+            </div>
+
+            <div style="text-align: center; margin-top: 20px;">
+                <button id="close-controls-btn" style="padding: 10px 25px; background: #4CAF50; color: white; border: none; border-radius: 5px; font-size: 14px; cursor: pointer; font-weight: bold;">Got It!</button>
             </div>
         </div>
     </div>

@@ -1433,6 +1433,30 @@ if (fsResetDataBtn) {
     });
 }
 
+// Controls modal
+const fsControlsBtn = document.getElementById('fs-controls-btn');
+const controlsModal = document.getElementById('controls-modal');
+const closeControlsBtn = document.getElementById('close-controls-btn');
+
+if (fsControlsBtn && controlsModal) {
+    fsControlsBtn.addEventListener('click', () => {
+        controlsModal.style.display = 'flex';
+    });
+}
+
+if (closeControlsBtn && controlsModal) {
+    closeControlsBtn.addEventListener('click', () => {
+        controlsModal.style.display = 'none';
+    });
+
+    // Close when clicking outside
+    controlsModal.addEventListener('click', (e) => {
+        if (e.target === controlsModal) {
+            controlsModal.style.display = 'none';
+        }
+    });
+}
+
 // --- Fullscreen Control Panels ---
 const fsClubBtn = document.getElementById('fs-club-btn');
 const fsShotTypeBtn = document.getElementById('fs-shot-type-btn');
