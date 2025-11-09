@@ -1726,12 +1726,20 @@ if (fsSwitchHoleBtn) {
 export function updateSwitchHoleButton(gameMode, isMultiplayer = false) {
     if (!switchHoleButton) return;
 
-    // For now, just show the button in play-hole mode
+    // Show the button only in play-hole mode
     if (gameMode === 'play-hole') {
         switchHoleButton.style.display = 'block';
         switchHoleButton.textContent = 'Switch Hole';
+        // Also show fullscreen version
+        if (fsSwitchHoleBtn) {
+            fsSwitchHoleBtn.style.display = 'block';
+        }
     } else {
         switchHoleButton.style.display = 'none';
+        // Also hide fullscreen version
+        if (fsSwitchHoleBtn) {
+            fsSwitchHoleBtn.style.display = 'none';
+        }
     }
 }
 
