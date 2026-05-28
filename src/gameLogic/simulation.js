@@ -1,409 +1,366 @@
-import { getWind, getTemperature } from './state.js'; // Import environment state getters
-import { handleObstacleCollision } from '../obstaclePhysics.js'; // Import obstacle collision
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js'; // For Vector3 operations
-import { getSurfaceProperties } from '../surfaces.js'; // Import getSurfaceProperties
-import { getFlagPosition } from '../visuals/holeView.js'; // To get hole coordinates
-import { BALL_RADIUS } from '../visuals/core.js'; // For ground check, hole interaction, and obstacle collision
-import { getSurfaceTypeAtPoint } from '../utils/gameUtils.js'; // For dynamic surface detection
-import { queryTerrainHeight } from '../visuals.js'; // For terrain height lookups
+import { getWind, getTemperature } from './state.js';
+import { handleObstacleCollision } from '../obstaclePhysics.js';
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
+import { getSurfaceProperties } from '../surfaces.js';
+import { getFlagPosition } from '../visuals/holeView.js';
+import { BALL_RADIUS } from '../visuals/core.js';
+import { getSurfaceTypeAtPoint } from '../utils/gameUtils.js';
+import { queryTerrainHeight } from '../visuals.js';
+
+// ============================================================
+// Physical constants (sea level, regulation golf ball)
+// ============================================================
+const BALL_DIAMETER  = 0.04267;            // m (1.68 in)
+const BALL_R         = BALL_DIAMETER / 2;  // m
+const BALL_AREA      = Math.PI * BALL_R * BALL_R;
+const BALL_MASS      = 0.04593;            // kg
+const BALL_I         = (2 / 5) * BALL_MASS * BALL_R * BALL_R; // sphere moment of inertia
+const GRAVITY        = 9.81;               // m/s^2
+const AIR_VISCOSITY  = 1.81e-5;            // Pa·s, dynamic viscosity of air at ~15 °C
+
+// ============================================================
+// Aerodynamic coefficient curves (physically motivated)
+// ============================================================
 
 /**
- * Helper function to get the correct ball Y position based on surface type AND terrain height
- * @param {string} surfaceType - The surface type name
- * @param {number} x - Ball X position
- * @param {number} z - Ball Z position
- * @returns {number} The Y position for the ball
+ * Drag coefficient for a dimpled golf ball as a function of Reynolds number
+ * and spin ratio. Curve fit to Bearman & Harvey (1976) and Aoki (2009)
+ * wind-tunnel data on real dimpled balls:
+ *   Re < 40k:           Cd ~ 0.50  (subcritical)
+ *   40k–70k:            drag crisis, drops to ~0.21
+ *   > 70k:              flat post-critical trough at ~0.21
+ *                       (dimples keep boundary layer turbulent; unlike a smooth
+ *                        sphere which rises again at very high Re, real golf
+ *                        balls stay in the trough)
+ *   + 0.04·S            small spin-induced drag rise (Aoki 2009 measured ~5%)
  */
-function getBallYPositionForSurface(surfaceType, x = 0, z = 0) {
-    // Get terrain height at this XZ position
-    const terrainHeight = queryTerrainHeight(x, z);
+function dragCoefficient(reynolds, spinRatio) {
+    let cd;
+    if (reynolds < 4e4)       cd = 0.50;
+    else if (reynolds < 7e4)  cd = 0.50 - 0.29 * (reynolds - 4e4) / 3e4;
+    else                       cd = 0.21;
+    return cd + 0.04 * Math.min(spinRatio, 0.5);
+}
 
-    // Get surface lie offset
+/**
+ * Lift coefficient for a dimpled golf ball as a function of spin ratio S = ωR/v.
+ * Saturates near 0.25 at S ≥ 0.30. Within published range from Aoki (2009)
+ * and Lyman (2013); chosen at the high end so driver gets enough lift to
+ * carry tour-realistic distance. Tradeoff: irons fly a little longer than
+ * tour averages (~10-15% above tour pro carry) because high-spin shots
+ * saturate to the same CL plateau.
+ */
+function liftCoefficient(spinRatio) {
+    return 0.25 * (1 - Math.exp(-spinRatio / 0.10));
+}
+
+/** Helper: Y-position of ball on the ground for a given surface and XZ. */
+function getBallYPositionForSurface(surfaceType, x = 0, z = 0) {
+    const terrainHeight = queryTerrainHeight(x, z);
     const surfaceProps = getSurfaceProperties(surfaceType);
     const lieOffset = (surfaceProps && typeof surfaceProps.ballLieOffset === 'number' && surfaceProps.ballLieOffset !== -1)
         ? surfaceProps.ballLieOffset
         : 0;
-
     return terrainHeight + BALL_RADIUS + lieOffset;
 }
 
-// --- Step-by-Step Flight Simulation ---
-// Takes initial position, velocity, spin vector (RPM), and the selected club object.
-// Returns simulation results including landing position, carry distance, peak height, time of flight, landing angle, and trajectory points.
+// ============================================================
+// FLIGHT SIMULATION (RK4 integrator)
+// ============================================================
+
+/**
+ * Simulate ball flight from launch to ground contact.
+ * Inputs:
+ *   initialPos: {x,y,z} (m)
+ *   initialVel: {x,y,z} (m/s)
+ *   spinVec:    {x,y,z} (RPM) — game convention:
+ *                  +x = backspin magnitude (will be stored as negative ωx, so Magnus lifts the ball)
+ *                  +y = slice sidespin (right-curve for a right-handed shot)
+ *                  +z = rifle spin (unused)
+ *   club:       club object (only used for obstacle collision wiring)
+ *   obstacles:  obstacle array
+ */
 export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club, obstacles = []) {
-    // --- Get Environment Conditions at Start of Shot ---
-    let currentWind = getWind(); // { speed, direction }
-    const currentTemperature = getTemperature(); // degrees C
+    const wind = getWind();
+    const tempC = getTemperature();
 
-    //currentWind.speed = 0 // Temporarily disable wind for testing
+    // Air density from ideal gas at sea level pressure
+    const airDensity = 101325 / (287.05 * (tempC + 273.15));
 
-
-    const trajectoryPoints = [{ ...initialPos, time: 0 }]; // Add timestamp to initial point
-    let position = { ...initialPos }; // Current position (copy)
-    let velocity = { ...initialVel }; // Current velocity (copy)
-    let lastVelocityBeforeLanding = { ...initialVel }; // Store velocity before impact
-    let time = 0;
-    const dt = 0.01; // Time step in seconds
-    const gravity = 9.81;
-    let peakHeight = initialPos.y;
-
-    // Flight logging tracking
-    let lastLoggedDistance = 0;
-    const LOG_INTERVAL_METERS = 25;
-
-
-    // Lift coefficient for cross-product Magnus formula F ∝ (ω × V)
-    // Cross product inherently includes ball radius effects through geometry
-    // Empirically tuned with spin ratio scaling
-    const Cl_backspin_base = 0.035; // Empirically tuned
-
-    // Will be scaled dynamically based on spin rate during simulation
-    // (high spin reduces lift efficiency due to boundary layer effects)
- 
-    // --- Simulation Constants (Tunable) ---
-    //const Cd = 0.26; // Drag coefficient (placeholder)
-
-    // const SPIN_TO_DRAG_FACTOR = 0.000005//2; // START POSITIVE e.g. 0.0000005 to see drag reduction with spin // REPLACED by non-linear logic
-    const Cd_base = 0.283; // Increased from 0.207 after fixing Z-component Magnus force to reduce overall distance
-    const MINIMUM_EFFECTIVE_CD = 0.0001; // Minimum allowed effective drag coefficient
-
-    // Spin-to-Drag Effect Constants
-    // Low-spin shots (driver) get small drag reduction, high-spin shots (wedges) are neutral
-    const LOW_SPIN_DRAG_BENEFIT_RPM = 3000;      // Below this RPM, get drag reduction (driver territory)
-    const LOW_SPIN_MAX_CD_REDUCTION = 0.05;     // Max drag reduction for low-spin shots (driver at 2500 RPM)
-
-
-    // const Cl = 0.03; // Lift coefficient (placeholder, related to spin). Reduced from 0.1, still higher than original 0.002. // Replaced by separate Cl values
-    //const Cl_backspin = 0.025; // Controls vertical lift (tune for height)
-    const Cl_sidespin = 0.040; // Controls side force (tune for curve)
-    // Calculate air density based on temperature (using simplified Ideal Gas Law)
-    const pressure = 101325; // Standard pressure in Pa
-    const specificGasConstant = 287.05; // J/(kg·K) for dry air
-    const temperatureKelvin = currentTemperature + 273.15;
-    const airDensity = pressure / (specificGasConstant * temperatureKelvin);
-    // const airDensity = 1.225; // kg/m^3 (standard air density) - REPLACED
-    const ballRadius = 0.04267 / 2; // Golf ball radius in meters (0.02135 m)
-    const ballArea = Math.PI * ballRadius * ballRadius; // Cross-sectional area of golf ball (m^2)
-    const ballMass = 0.04593; // kg (standard golf ball mass)
-    // Pre-calculate constant part of drag/lift force calculation (now uses calculated airDensity)
-    //const dragConst = -0.5 * airDensity * ballArea * Cd / ballMass;
-    // const liftConst = 0.5 * airDensity * ballArea * Cl / ballMass; // Replaced by separate lift constants
-    //const liftConst_backspin = 0.5 * airDensity * ballArea * Cl_backspin / ballMass;
-    const liftConst_sidespin = 0.5 * airDensity * ballArea * Cl_sidespin / ballMass;
-    const baseLiftConst_backspin = 0.5 * airDensity * ballArea * Cl_backspin_base / ballMass;
-
-
-    // Air Spin Decay Constants (Percentage-based, realistic)
-    const AIR_BACKSPIN_DECAY_PERCENT_PER_SECOND = 4.0; // 3-4% per second based on real golf ball data
-    const AIR_SIDESPIN_DECAY_PERCENT_PER_SECOND = 4.5; // Slightly faster decay than backspin
-    const MIN_AIR_SPIN_EFFECT_RPM = 50; // Spin below this has no effect (avoids tiny calculations)
-    // --- End Constants ---
-
-
-    // Convert wind speed (m/s) and direction (degrees from North) to a velocity vector
-    // Wind direction is where it comes FROM. So a 90deg (East) wind blows West (-X).
-    const windAngleRad = currentWind.direction * Math.PI / 180;
+    // Wind vector (direction is where wind blows FROM, per existing convention)
+    const windAngleRad = wind.direction * Math.PI / 180;
     const baseWindVel = {
-        x: -currentWind.speed * Math.sin(windAngleRad), // Negative sin for X component
-        y: 0, // Assume horizontal wind
-        z: -currentWind.speed * Math.cos(windAngleRad)  // Negative cos for Z component
+        x: -wind.speed * Math.sin(windAngleRad),
+        y: 0,
+        z: -wind.speed * Math.cos(windAngleRad),
+    };
+    const WIND_HEIGHT_REF = 20;     // m — height where reported wind applies
+    const GROUND_WIND_FACTOR = 0.3; // ground level fraction
+
+    // Convert spin to rad/s. Note backspin component is stored negative so that
+    // F_lift ∝ (ω × v) points up when the ball travels in +Z.
+    const RPM_TO_RAD = 2 * Math.PI / 60;
+    let spin = {
+        x: -(spinVec.x || 0) * RPM_TO_RAD,
+        y:  (spinVec.y || 0) * RPM_TO_RAD,
+        z:  (spinVec.z || 0) * RPM_TO_RAD,
     };
 
-    // Wind gradient parameters - wind is stronger at higher altitudes
-    const WIND_HEIGHT_REFERENCE = 20; // meters (height where reported wind speed applies)
-    const GROUND_WIND_FACTOR = 0.3;   // 30% of full wind at ground level
+    let position = { ...initialPos };
+    let velocity = { ...initialVel };
+    let peakHeight = position.y;
+    let lastVelocityBeforeLanding = { ...velocity };
 
-    // Convert spin from RPM to rad/s - Use 'let' to allow decay
-    // Assuming side spin is around Y axis, back spin around X axis relative to path
-    // This needs refinement based on how side/back spin are defined relative to world coords
-    let spinRadPerSec = {
-        x: -(spinVec.x || 0) * (2 * Math.PI / 60), // Backspin around X (Negated to produce upward lift)
-        y: (spinVec.y || 0) * (2 * Math.PI / 60), // Sidespin around Y
-        z: (spinVec.z || 0) * (2 * Math.PI / 60)  // Rifle spin? (Assume 0 for now)
-    };
+    const dt = 0.01;
+    let time = 0;
 
+    const trajectoryPoints = [{ ...position, time: 0 }];
 
-     while (position.y > queryTerrainHeight(position.x, position.z) + 0.01 || time === 0) { // Loop until ball is near/below ground (allow at least one step)
-        // 1. Calculate Height-Adjusted Wind (wind gradient - stronger at higher altitudes)
-        let heightFactor;
-        if (position.y >= WIND_HEIGHT_REFERENCE) {
-            heightFactor = 1.0; // Full wind above reference height
-        } else {
-            // Linear interpolation from GROUND_WIND_FACTOR at y=0 to 1.0 at WIND_HEIGHT_REFERENCE
-            heightFactor = GROUND_WIND_FACTOR + (1.0 - GROUND_WIND_FACTOR) * (position.y / WIND_HEIGHT_REFERENCE);
-        }
+    // Flight logging
+    let lastLoggedDistance = 0;
+    const LOG_INTERVAL_M = 25;
 
-        const windVel = {
-            x: baseWindVel.x * heightFactor,
-            y: 0,
-            z: baseWindVel.z * heightFactor
-        };
+    // Spin decay: dω/dt = -k * |v| * ω. Tuned so at v=30 m/s decay ≈ 3.8%/s,
+    // which matches measured PGA Tour drives losing ~25% spin over ~6 s.
+    const SPIN_DECAY_K = 0.00125; // 1/m  (per metre travelled per radian)
 
-        // 2. Calculate Relative Velocity (Ball Velocity - Wind Velocity)
-        const relativeVel = {
-            x: velocity.x - windVel.x,
-            y: velocity.y - windVel.y, // windVel.y is usually 0
-            z: velocity.z - windVel.z
-        };
-        const relativeVelMag = Math.sqrt(relativeVel.x**2 + relativeVel.y**2 + relativeVel.z**2);
-        if (relativeVelMag < 0.01) {
-            // If relative velocity is negligible, forces are minimal.
-            const absVelMag = Math.sqrt(velocity.x**2 + velocity.y**2 + velocity.z**2);
-            if (absVelMag < 0.01) break; // Stop if absolute velocity is also negligible
-        }
+    // -- Acceleration field --------------------------------------------------
+    // Returns acceleration vector for a given position/velocity/spin state.
+    function accel(pos, vel, omega) {
+        // Wind at this height
+        let hf;
+        if (pos.y >= WIND_HEIGHT_REF) hf = 1.0;
+        else hf = GROUND_WIND_FACTOR + (1 - GROUND_WIND_FACTOR) * Math.max(0, pos.y) / WIND_HEIGHT_REF;
+        const w = { x: baseWindVel.x * hf, y: 0, z: baseWindVel.z * hf };
 
-        // --- Air Spin Decay (Percentage-based) ---
-        const minSpinRad = (MIN_AIR_SPIN_EFFECT_RPM * (2 * Math.PI / 60));
+        // Air-relative velocity
+        const rv = { x: vel.x - w.x, y: vel.y - w.y, z: vel.z - w.z };
+        const vMag = Math.sqrt(rv.x * rv.x + rv.y * rv.y + rv.z * rv.z);
 
-        // Calculate percentage decay multiplier for this timestep
-        // Decay percentage is per second, so multiply by dt for this small step
-        const backspinDecayMultiplier = 1 - (AIR_BACKSPIN_DECAY_PERCENT_PER_SECOND / 100 * dt);
-        const sidespinDecayMultiplier = 1 - (AIR_SIDESPIN_DECAY_PERCENT_PER_SECOND / 100 * dt);
+        let a = { x: 0, y: -GRAVITY, z: 0 };
 
-        // Decay backspin (spinRadPerSec.x) by percentage
-        if (Math.abs(spinRadPerSec.x) > minSpinRad) {
-            spinRadPerSec.x *= backspinDecayMultiplier;
-        } else {
-            spinRadPerSec.x = 0;
-        }
+        if (vMag < 0.01) return a; // gravity only when nearly still
 
-        // Decay sidespin (spinRadPerSec.y) by percentage
-        if (Math.abs(spinRadPerSec.y) > minSpinRad) {
-            spinRadPerSec.y *= sidespinDecayMultiplier;
-        } else {
-            spinRadPerSec.y = 0;
-        }
-        // We are ignoring rifle spin decay (spinRadPerSec.z) for now
+        // Reynolds number, and spin ratio used by both Cd (drag rise) and CL
+        const Re = airDensity * vMag * BALL_DIAMETER / AIR_VISCOSITY;
+        const ox = omega.x, oy = omega.y, oz = omega.z;
+        const omegaMag = Math.sqrt(ox * ox + oy * oy + oz * oz);
+        const spinRatio = omegaMag > 0.1 ? (omegaMag * BALL_R / vMag) : 0;
+        const Cd = dragCoefficient(Re, spinRatio);
 
-        // --- Calculate Effective Drag Coefficient for this step ---
-        // Low-spin shots (driver) get drag reduction benefit
-        let spinInducedDragReduction = 0;
-        const currentBackspinRPM = Math.abs(spinRadPerSec.x) * (60 / (2 * Math.PI));
+        // Drag: F = -0.5 ρ A Cd |v| v_rel
+        const dragK = -0.5 * airDensity * BALL_AREA * Cd / BALL_MASS;
+        a.x += dragK * vMag * rv.x;
+        a.y += dragK * vMag * rv.y;
+        a.z += dragK * vMag * rv.z;
 
-        if (currentBackspinRPM < LOW_SPIN_DRAG_BENEFIT_RPM && LOW_SPIN_DRAG_BENEFIT_RPM > 0) {
-            // Below threshold: linear drag reduction (max benefit at 0 RPM, decreases to 0 at threshold)
-            const spinRatio = currentBackspinRPM / LOW_SPIN_DRAG_BENEFIT_RPM;
-            spinInducedDragReduction = (1 - spinRatio) * LOW_SPIN_MAX_CD_REDUCTION;
-        }
-
-        let effectiveCd = Cd_base - spinInducedDragReduction;
-        effectiveCd = Math.max(MINIMUM_EFFECTIVE_CD, effectiveCd); // Clamp to minimum
-
-        // --- Calculate Effective Lift Coefficient based on Spin Ratio ---
-        // Research shows CL depends on spin ratio S = ωR/V, not just spin rate
-        // Use horizontal velocity for spin ratio (relevant for Magnus lift)
-        const horizontalVelMag = Math.sqrt(relativeVel.x**2 + relativeVel.z**2);
-        const spinRatio = horizontalVelMag > 0.01
-            ? (Math.abs(spinRadPerSec.x) * ballRadius) / horizontalVelMag
-            : 0;
-
-        let spinLiftMultiplier = 1.0;
-        if (spinRatio > 0.12) {
-            // Spin ratio > 0.12: start reducing lift efficiency
-            // Steeper curve to control long/mid irons while keeping driver strong
-            const excessRatio = spinRatio - 0.12;
-            // Use power falloff - lower exponent = steeper curve in mid-range
-            const normalizedRatio = Math.min(excessRatio / 0.40, 1.0); // Normalize to 0-1 over range 0.12-0.52
-            spinLiftMultiplier = 1.0 - Math.pow(normalizedRatio, 1.0) * 0.75; // Linear 75% reduction
-            spinLiftMultiplier = Math.max(0.25, Math.min(1.0, spinLiftMultiplier));
-        }
-        const effectiveLiftConst_backspin = baseLiftConst_backspin * spinLiftMultiplier;
-
-        // --- Pre-calculate drag force factor for THIS step using effectiveCd ---
-        const currentDragForceFactor = -0.5 * airDensity * ballArea * effectiveCd / ballMass;
-
-        // 2. Calculate Forces (as accelerations)
-        const accel_gravity = { x: 0, y: -gravity, z: 0 };
-
-        // Drag Force:
-        let accel_drag = { x: 0, y: 0, z: 0 };
-        if (relativeVelMag > 0.01) { // Only apply drag if there's significant relative velocity
-            accel_drag = {
-                x: currentDragForceFactor * relativeVelMag * relativeVel.x,
-                y: currentDragForceFactor * relativeVelMag * relativeVel.y,
-                z: currentDragForceFactor * relativeVelMag * relativeVel.z
-            };
-        }
-
-        // Lift (Magnus) Force: (Using your "old code" structure EXACTLY for lift)
-        /*
-        const crossProd = {
-            x: spinRadPerSec.y * relativeVel.z - spinRadPerSec.z * relativeVel.y,
-            y: spinRadPerSec.z * relativeVel.x - spinRadPerSec.x * relativeVel.z,
-            z: spinRadPerSec.x * relativeVel.y - spinRadPerSec.y * relativeVel.x
-        };
-        const accel_lift = {
-            x: liftConst_sidespin * crossProd.x,
-            y: liftConst_backspin * crossProd.y,
-            // THIS IS EXACTLY FROM YOUR "OLD" WORKING CODE'S LIFT.Z CALCULATION:
-            z: liftConst_backspin * (spinRadPerSec.x * velocity.y) - liftConst_sidespin * (spinRadPerSec.y * velocity.x)
-        };
-        */
-
-        // Lift (Magnus) Force - Alternative for Z-component
-        const crossProd = {
-            x: spinRadPerSec.y * relativeVel.z - spinRadPerSec.z * relativeVel.y,
-            y: spinRadPerSec.z * relativeVel.x - spinRadPerSec.x * relativeVel.z,
-            z: spinRadPerSec.x * relativeVel.y - spinRadPerSec.y * relativeVel.x // This is (spin x relativeVel)_z
-        };
-        const accel_lift = {
-            x: liftConst_sidespin * crossProd.x,
-            y: effectiveLiftConst_backspin * crossProd.y,
-            // Z-component of acceleration due to lift/Magnus:
-            // Uses backspin constant since this is primarily backspin × vertical velocity
-            // affecting forward/backward acceleration (carry distance)
-            z: effectiveLiftConst_backspin * crossProd.z
-            // which expands to:
-            // z: effectiveLiftConst_backspin * (spinRadPerSec.x * relativeVel.y - spinRadPerSec.y * relativeVel.x)
-        };
-
-        // Additive "cheat" lift (Identical to your old code)
-        const cheatLiftAccelY = (club?.liftFactor || 0) * 0.25;
-
-        // 3. Net Acceleration
-        const accel_net = {
-            x: accel_gravity.x + accel_drag.x + accel_lift.x,
-            y: accel_gravity.y + accel_drag.y + accel_lift.y, //+ cheatLiftAccelY, experimental
-            z: accel_gravity.z + accel_drag.z + accel_lift.z
-        };
-
-        // 4. Update Velocity (Euler integration)
-        velocity.x += accel_net.x * dt;
-        velocity.y += accel_net.y * dt;
-        velocity.z += accel_net.z * dt;
-
-        // 5. Update Position
-        position.x += velocity.x * dt;
-        position.y += velocity.y * dt;
-        position.z += velocity.z * dt;
-
-        // 5b. Check for obstacle collision with full 3D height checking
-        // Trees/bushes affect ball when it's at their height (foliage for trees, full height for bushes)
-        if (obstacles.length > 0) {
-            const obstacleResult = handleObstacleCollision(
-                position.x,
-                position.y,
-                position.z,
-                BALL_RADIUS,
-                velocity.x,
-                velocity.z,
-                obstacles
-            );
-
-            if (obstacleResult.collided) {
-                velocity.x = obstacleResult.velocityX;
-                velocity.z = obstacleResult.velocityZ;
+        // Magnus / lift: F = 0.5 ρ A C_L |v|^2 (ω̂ × v̂)
+        if (omegaMag > 0.1) {
+            const Cl = liftCoefficient(spinRatio);
+            const cx = oy * rv.z - oz * rv.y;
+            const cy = oz * rv.x - ox * rv.z;
+            const cz = ox * rv.y - oy * rv.x;
+            const crossMag = Math.sqrt(cx * cx + cy * cy + cz * cz);
+            if (crossMag > 1e-6) {
+                const liftScale = 0.5 * airDensity * BALL_AREA * Cl * vMag * vMag / (BALL_MASS * crossMag);
+                a.x += liftScale * cx;
+                a.y += liftScale * cy;
+                a.z += liftScale * cz;
             }
         }
 
-        // 6. Track Peak Height
-        if (position.y > peakHeight) {
-            peakHeight = position.y;
+        return a;
+    }
+
+    // -- Main RK4 loop -------------------------------------------------------
+    while (position.y > queryTerrainHeight(position.x, position.z) + 0.01 || time === 0) {
+
+        // k1
+        const a1 = accel(position, velocity, spin);
+        const k1v = { x: a1.x * dt, y: a1.y * dt, z: a1.z * dt };
+        const k1x = { x: velocity.x * dt, y: velocity.y * dt, z: velocity.z * dt };
+
+        // k2
+        const p2 = { x: position.x + k1x.x / 2, y: position.y + k1x.y / 2, z: position.z + k1x.z / 2 };
+        const v2 = { x: velocity.x + k1v.x / 2, y: velocity.y + k1v.y / 2, z: velocity.z + k1v.z / 2 };
+        const a2 = accel(p2, v2, spin);
+        const k2v = { x: a2.x * dt, y: a2.y * dt, z: a2.z * dt };
+        const k2x = { x: v2.x * dt, y: v2.y * dt, z: v2.z * dt };
+
+        // k3
+        const p3 = { x: position.x + k2x.x / 2, y: position.y + k2x.y / 2, z: position.z + k2x.z / 2 };
+        const v3 = { x: velocity.x + k2v.x / 2, y: velocity.y + k2v.y / 2, z: velocity.z + k2v.z / 2 };
+        const a3 = accel(p3, v3, spin);
+        const k3v = { x: a3.x * dt, y: a3.y * dt, z: a3.z * dt };
+        const k3x = { x: v3.x * dt, y: v3.y * dt, z: v3.z * dt };
+
+        // k4
+        const p4 = { x: position.x + k3x.x, y: position.y + k3x.y, z: position.z + k3x.z };
+        const v4 = { x: velocity.x + k3v.x, y: velocity.y + k3v.y, z: velocity.z + k3v.z };
+        const a4 = accel(p4, v4, spin);
+        const k4v = { x: a4.x * dt, y: a4.y * dt, z: a4.z * dt };
+        const k4x = { x: v4.x * dt, y: v4.y * dt, z: v4.z * dt };
+
+        // Combine
+        velocity.x += (k1v.x + 2 * k2v.x + 2 * k3v.x + k4v.x) / 6;
+        velocity.y += (k1v.y + 2 * k2v.y + 2 * k3v.y + k4v.y) / 6;
+        velocity.z += (k1v.z + 2 * k2v.z + 2 * k3v.z + k4v.z) / 6;
+        position.x += (k1x.x + 2 * k2x.x + 2 * k3x.x + k4x.x) / 6;
+        position.y += (k1x.y + 2 * k2x.y + 2 * k3x.y + k4x.y) / 6;
+        position.z += (k1x.z + 2 * k2x.z + 2 * k3x.z + k4x.z) / 6;
+
+        // Velocity-coupled spin decay over this step
+        const vNow = Math.sqrt(velocity.x * velocity.x + velocity.y * velocity.y + velocity.z * velocity.z);
+        const decay = Math.exp(-SPIN_DECAY_K * vNow * dt);
+        spin.x *= decay;
+        spin.y *= decay;
+        spin.z *= decay;
+
+        // Obstacle collision (kept from original)
+        if (obstacles.length > 0) {
+            const r = handleObstacleCollision(position.x, position.y, position.z,
+                                              BALL_RADIUS, velocity.x, velocity.z, obstacles);
+            if (r.collided) {
+                velocity.x = r.velocityX;
+                velocity.z = r.velocityZ;
+            }
         }
 
-        // 6b. Log flight data every 25 meters
-        const horizontalDistance = Math.sqrt(
-            (position.x - initialPos.x) ** 2 +
-            (position.z - initialPos.z) ** 2
-        );
-        if (horizontalDistance - lastLoggedDistance >= LOG_INTERVAL_METERS) {
-            const currentBackspinRPM = Math.abs(spinRadPerSec.x) * (60 / (2 * Math.PI));
-            const currentSidespinRPM = Math.abs(spinRadPerSec.y) * (60 / (2 * Math.PI));
+        if (position.y > peakHeight) peakHeight = position.y;
+
+        // Periodic logging
+        const dxh = position.x - initialPos.x;
+        const dzh = position.z - initialPos.z;
+        const horizDist = Math.sqrt(dxh * dxh + dzh * dzh);
+        if (horizDist - lastLoggedDistance >= LOG_INTERVAL_M) {
             const speed = Math.sqrt(velocity.x ** 2 + velocity.y ** 2 + velocity.z ** 2);
-            const horizontalSpeed = Math.sqrt(velocity.x ** 2 + velocity.z ** 2);
-
-            console.log(`\n✈️  FLIGHT @ ${horizontalDistance.toFixed(0)}m:`);
-            console.log(`   Speed: ${speed.toFixed(1)} m/s (H: ${horizontalSpeed.toFixed(1)}, V: ${velocity.y.toFixed(1)})`);
+            const hSpeed = Math.sqrt(velocity.x ** 2 + velocity.z ** 2);
+            const Re = airDensity * speed * BALL_DIAMETER / AIR_VISCOSITY;
+            const oMag = Math.sqrt(spin.x ** 2 + spin.y ** 2 + spin.z ** 2);
+            const S = (speed > 0.01) ? (oMag * BALL_R / speed) : 0;
+            const Cd = dragCoefficient(Re, S);
+            const Cl = liftCoefficient(S);
+            const bsRPM = Math.abs(spin.x) * 60 / (2 * Math.PI);
+            const ssRPM = Math.abs(spin.y) * 60 / (2 * Math.PI);
+            console.log(`\n✈️  FLIGHT @ ${horizDist.toFixed(0)}m:`);
+            console.log(`   Speed: ${speed.toFixed(1)} m/s (H: ${hSpeed.toFixed(1)}, V: ${velocity.y.toFixed(1)})`);
             console.log(`   Height: ${position.y.toFixed(1)} m`);
-            console.log(`   Backspin: ${currentBackspinRPM.toFixed(0)} rpm`);
-            console.log(`   Sidespin: ${currentSidespinRPM.toFixed(0)} rpm`);
-            console.log(`   Drag Cd: ${effectiveCd.toFixed(4)} (base: ${Cd_base}, reduction: ${spinInducedDragReduction.toFixed(4)})`);
-            console.log(`   Wind effect: ${currentWind.speed.toFixed(1)} m/s from ${currentWind.direction}°`);
-
-            lastLoggedDistance = horizontalDistance;
+            console.log(`   Backspin: ${bsRPM.toFixed(0)} rpm   Sidespin: ${ssRPM.toFixed(0)} rpm`);
+            console.log(`   Re: ${(Re / 1000).toFixed(0)}k  Cd: ${Cd.toFixed(3)}  S: ${S.toFixed(3)}  CL: ${Cl.toFixed(3)}`);
+            console.log(`   Wind: ${wind.speed.toFixed(1)} m/s from ${wind.direction}°`);
+            lastLoggedDistance = horizDist;
         }
 
-        // 7. Store Point with timestamp
-        trajectoryPoints.push({ ...position, time: time });
-
-        // 8. Increment Time
+        trajectoryPoints.push({ ...position, time });
         time += dt;
+        lastVelocityBeforeLanding = { ...velocity };
 
-        // Safety break
         if (time > 20) {
-            console.warn("Simulation exceeded 20 seconds, breaking loop.");
+            console.warn("Flight sim exceeded 20s, breaking.");
             break;
         }
-        // Store the velocity from the step *before* potential termination
-        lastVelocityBeforeLanding = { ...velocity };
     }
 
-    const landingPosition = trajectoryPoints.length > 1 ? trajectoryPoints[trajectoryPoints.length - 1] : initialPos;
-
-    // Calculate landing angle
+    // Landing kinematics
+    const landingPosition = trajectoryPoints.length > 1
+        ? trajectoryPoints[trajectoryPoints.length - 1]
+        : initialPos;
     const finalVel = lastVelocityBeforeLanding;
-    const horizontalVelMag = Math.sqrt(finalVel.x**2 + finalVel.z**2);
-    let landingAngleRadians = Math.PI / 2; // Default to 90 deg if horizontal speed is near zero
-    if (horizontalVelMag > 0.01) {
-        landingAngleRadians = Math.atan2(Math.abs(finalVel.y), horizontalVelMag);
-    }
+    const horizMag = Math.sqrt(finalVel.x ** 2 + finalVel.z ** 2);
+    const landingAngleRadians = horizMag > 0.01
+        ? Math.atan2(Math.abs(finalVel.y), horizMag)
+        : Math.PI / 2;
 
-
-    // Calculate carry based on X/Z distance between initialPos and landingPosition
     const dx = landingPosition.x - initialPos.x;
     const dz = landingPosition.z - initialPos.z;
-    const carryDistanceMeters = Math.sqrt(dx*dx + dz*dz);
+    const carryDistanceMeters = Math.sqrt(dx * dx + dz * dz);
 
     return {
-        landingPosition: landingPosition,
-        carryDistance: carryDistanceMeters, // Keep in meters
-        peakHeight: peakHeight, // Keep in meters
-        timeOfFlight: time, // Actual simulated time
-        landingAngleRadians: landingAngleRadians, // Add landing angle
-        landingVelocity: finalVel, // Return the velocity vector just before landing
-        landingSpinRadPerSec: spinRadPerSec, // Return final spin state in rad/s
-        trajectoryPoints: trajectoryPoints // Array of {x, y, z} objects
+        landingPosition,
+        carryDistance: carryDistanceMeters,
+        peakHeight,
+        timeOfFlight: time,
+        landingAngleRadians,
+        landingVelocity: finalVel,
+        landingSpinRadPerSec: spin,
+        trajectoryPoints,
     };
 }
 
 
-// --- Bounce Phase Simulation ---
+// ============================================================
+// BOUNCE PHASE — impulse-based with Coulomb friction
+// ============================================================
 
-// Bounce physics constants (Tunable)
-const MIN_BOUNCE_HEIGHT = 0.02; // meters - Below this, transition to pure roll
-const MAX_BOUNCES = 8; // Safety limit
-const BOUNCE_TIME_STEP = 0.005; // seconds - Smaller step for accuracy during bounces
-const BASE_HORIZONTAL_SCRUB_FACTOR = 0.15; // Base horizontal velocity loss per bounce (0-1)
-const SPIN_ENHANCED_SCRUB_FACTOR = 0.35; // Additional scrub at max backspin (10000 RPM) - tuned for realistic spin checking
-const ANGLE_ENHANCED_SCRUB_FACTOR = 0.25; // Additional scrub for steep landing angles (at 90°)
-const SPIN_TO_VELOCITY_TRANSFER = 0.007; // How backspin converts to horizontal velocity change on bounce - tuned for realistic spin-backs
-const MAX_SPIN_COR_REDUCTION = 0.40; // Max % reduction in CoR from high backspin (40% at 10k RPM)
-const SPIN_COR_FIRMNESS_FACTOR = 1.2; // Multiplier for firm surfaces (green responds more to spin than rough)
+const MIN_BOUNCE_VY      = 0.4;   // m/s — below this, drop into roll
+const BOUNCE_DT          = 0.005; // s — between-bounce ballistic dt
+const MAX_BOUNCES        = 8;
+const MIN_ROLL_SPEED     = 0.05;
 
 /**
- * Simulates the bouncing phase when ball first contacts ground.
- * Each bounce applies energy loss, spin effects, and brief flight physics between impacts.
- * Surface type is checked dynamically at each bounce point.
- *
- * @param {object} landingPosition - {x, y, z} position where ball first hits ground
- * @param {object} landingVelocity - {x, y, z} velocity at ground contact
- * @param {number} landingAngleRadians - Angle of descent
- * @param {object} spinRadPerSec - {x, y, z} current spin in rad/s
- * @param {string} surfaceType - Initial surface type (used if holeLayout not provided)
- * @param {number} startTime - Start time offset for animation
- * @param {object} holeLayout - Hole layout data for dynamic surface detection (optional)
- * @returns {object} Final state after bounces: {position: THREE.Vector3, velocity: THREE.Vector3, spin: {x, y, z} rad/s, bouncePoints: []}
+ * Derive an impact friction coefficient for the bounce surface.
+ * Uses surface.spinResponse (a "grippiness" knob already present on each surface):
+ * firmer / higher-spin-response surfaces grip more during contact.
  */
-export function simulateBouncePhase(landingPosition, landingVelocity, landingAngleRadians, spinRadPerSec, surfaceType, startTime = 0, holeLayout = null) {
+function impactFrictionFor(surfaceProps) {
+    const sr = surfaceProps?.spinResponse ?? 1.0;
+    return 0.35 + 0.20 * sr; // GREEN(1.5)=0.65, FAIRWAY(1.0)=0.55, ROUGH(0.5)=0.45, BUNKER(0.4)=0.43
+}
 
-    // Store initial landing angle for scrub calculations
-    const initialLandingAngleRadians = landingAngleRadians;
+/**
+ * Apply a single bounce impulse to ball velocity + spin.
+ * Returns updated {velocity, spin} (mutating local copies of inputs).
+ *
+ * Physics:
+ *   Normal impulse:    J_n = m (1+e) |v_y|
+ *   Slip velocity at contact patch:
+ *      v_slip_x = v_x + ω_z R
+ *      v_slip_z = v_z - ω_x R
+ *   Coulomb limit:     |J_t| ≤ μ J_n
+ *   Stick impulse:     J_t_stick = -(2/7) m v_slip   (sphere, I = 2/5 m R^2)
+ *   Spin update via torque τ = r × J_t with r = (0, -R, 0).
+ */
+function bounceImpulse(vel, omega, cor, mu) {
+    const Jn = BALL_MASS * (1 + cor) * Math.abs(vel.y);
 
-    // Check initial landing surface for penalty area
+    // Slip at contact patch
+    const sx = vel.x + omega.z * BALL_R;
+    const sz = vel.z - omega.x * BALL_R;
+    const sMag = Math.sqrt(sx * sx + sz * sz);
+
+    // Tangential impulse: stick if friction allows, else Coulomb slide.
+    let Jtx = 0, Jtz = 0;
+    if (sMag > 1e-6) {
+        const stickMag = (2 / 7) * BALL_MASS * sMag;
+        const slideMag = mu * Jn;
+        const useMag = Math.min(stickMag, slideMag);
+        Jtx = -useMag * (sx / sMag);
+        Jtz = -useMag * (sz / sMag);
+    }
+
+    // Apply impulses
+    const out = {
+        velocity: {
+            x: vel.x + Jtx / BALL_MASS,
+            y: -cor * vel.y,
+            z: vel.z + Jtz / BALL_MASS,
+        },
+        spin: {
+            // τ = (0,-R,0) × (Jtx, 0, Jtz) = (-R Jtz, 0, R Jtx); Δω = τ / I
+            x: omega.x + (-BALL_R * Jtz) / BALL_I,
+            y: omega.y, // y-axis spin (sidespin around vertical) unchanged by horizontal contact
+            z: omega.z + ( BALL_R * Jtx) / BALL_I,
+        },
+    };
+    return out;
+}
+
+export function simulateBouncePhase(landingPosition, landingVelocity, landingAngleRadians,
+                                    spinRadPerSec, surfaceType, startTime = 0, holeLayout = null) {
     const initialSurfaceProps = getSurfaceProperties(surfaceType);
-    const initialCoR = initialSurfaceProps?.bounce || 0.4;
+    const initialCoR = initialSurfaceProps?.bounce ?? 0.4;
 
-    // Check for special value -1.0 (water/penalty area): stop all physics immediately
+    // Penalty surface (water / OOB): stop immediately
     if (initialCoR < 0) {
         return {
             position: new THREE.Vector3(landingPosition.x, landingPosition.y, landingPosition.z),
@@ -411,550 +368,307 @@ export function simulateBouncePhase(landingPosition, landingVelocity, landingAng
             spin: spinRadPerSec,
             bouncePoints: [{ x: landingPosition.x, y: landingPosition.y, z: landingPosition.z, time: startTime }],
             bounceCount: 0,
-            endTime: startTime
+            endTime: startTime,
         };
     }
 
     let position = new THREE.Vector3(landingPosition.x, landingPosition.y, landingPosition.z);
     let velocity = new THREE.Vector3(landingVelocity.x, landingVelocity.y, landingVelocity.z);
-    let currentSpin = { ...spinRadPerSec };
+    let omega = { ...spinRadPerSec };
 
-    const bouncePoints = []; // Track all positions during bounces
+    const bouncePoints = [];
     let bounceCount = 0;
     let inAir = false;
     let airTime = 0;
-    let currentSurfaceType = surfaceType; // Track current surface type throughout bounces
-
-    // Constants for mini-flight between bounces (simplified from main flight sim)
-    const gravity = 9.81;
-    const dt = BOUNCE_TIME_STEP;
-    let time = startTime; // Start from the end of flight time
+    let time = startTime;
+    let currentSurfaceType = surfaceType;
 
     while (bounceCount < MAX_BOUNCES) {
         if (!inAir) {
-            // ===== IMPACT EVENT =====
             bounceCount++;
 
-            // Check surface at bounce point (dynamic detection)
-            currentSurfaceType = surfaceType; // Default to initial surface
+            // Dynamic surface detection at this bounce point
             if (holeLayout) {
-                const detectedSurface = getSurfaceTypeAtPoint({ x: position.x, z: position.z }, holeLayout);
-                if (detectedSurface) {
-                    currentSurfaceType = detectedSurface;
-                    if (bounceCount > 1 && detectedSurface !== surfaceType) {
-                    }
-                }
+                const detected = getSurfaceTypeAtPoint({ x: position.x, z: position.z }, holeLayout);
+                if (detected) currentSurfaceType = detected;
             }
-
-            // Get surface properties for this bounce
             const surfaceProps = getSurfaceProperties(currentSurfaceType);
-            const baseCoR = surfaceProps?.bounce || 0.4;
+            const cor = surfaceProps?.bounce ?? 0.4;
+            if (cor < 0) { // Hit penalty surface during bounce
+                velocity.set(0, 0, 0);
+                break;
+            }
+            const mu = impactFrictionFor(surfaceProps);
 
-            const impactSpeed = Math.sqrt(velocity.x**2 + velocity.y**2 + velocity.z**2);
-            const horizontalSpeed = Math.sqrt(velocity.x**2 + velocity.z**2);
-            const backspinRPM = Math.abs(currentSpin.x) * (60 / (2 * Math.PI));
+            // Log pre-impact state
+            const impactSpeed = velocity.length();
+            const hSpeed = Math.sqrt(velocity.x ** 2 + velocity.z ** 2);
+            const bsRPM = Math.abs(omega.x) * 60 / (2 * Math.PI);
 
+            const before = { x: velocity.x, y: velocity.y, z: velocity.z };
+            const beforeOmega = { ...omega };
 
-            // 1. Calculate spin-dependent CoR (backspin "grabs" surface, reducing bounce)
-            // Higher backspin + firmer surface = more grip = lower bounce
-            const spinGripRatio = Math.min(backspinRPM / 10000, 1.0); // 0 to 1 (caps at 10k RPM)
-            // Firmness factor: higher CoR surfaces (firmer) respond more to spin
-            const firmnessFactor = Math.pow(baseCoR / 0.4, SPIN_COR_FIRMNESS_FACTOR); // Normalized to 0.4 baseline
-            const spinCoRReduction = spinGripRatio * firmnessFactor * MAX_SPIN_COR_REDUCTION;
-            const effectiveCoR = baseCoR * (1 - spinCoRReduction);
+            // Apply impulse
+            const r = bounceImpulse({ x: velocity.x, y: velocity.y, z: velocity.z }, omega, cor, mu);
+            velocity.set(r.velocity.x, r.velocity.y, r.velocity.z);
+            omega = r.spin;
 
-
-            // 2. Apply effective coefficient of restitution to vertical velocity
-            const oldVerticalVel = velocity.y;
-            const oldHorizontalSpeed = horizontalSpeed;
-            const oldBackspinRPM = backspinRPM;
-            velocity.y = -velocity.y * effectiveCoR;
+            const newHSpeed = Math.sqrt(velocity.x ** 2 + velocity.z ** 2);
+            const newBsRPM = Math.abs(omega.x) * 60 / (2 * Math.PI);
 
             console.log(`\n⚾ BOUNCE #${bounceCount} (${currentSurfaceType}):`);
-            console.log(`   Impact speed: ${impactSpeed.toFixed(2)} m/s (H: ${horizontalSpeed.toFixed(2)}, V: ${Math.abs(oldVerticalVel).toFixed(2)})`);
-            console.log(`   Backspin: ${backspinRPM.toFixed(0)} rpm`);
-            console.log(`   Base CoR: ${baseCoR.toFixed(2)}, Spin reduction: ${(spinCoRReduction * 100).toFixed(1)}%, Effective: ${effectiveCoR.toFixed(2)}`);
-            console.log(`   Vertical vel: ${Math.abs(oldVerticalVel).toFixed(2)} → ${velocity.y.toFixed(2)} m/s`);
+            console.log(`   Impact: ${impactSpeed.toFixed(2)} m/s  (H: ${hSpeed.toFixed(2)}, V: ${Math.abs(before.y).toFixed(2)})`);
+            console.log(`   CoR: ${cor.toFixed(2)}  μ: ${mu.toFixed(2)}`);
+            console.log(`   Vy: ${Math.abs(before.y).toFixed(2)} → ${velocity.y.toFixed(2)} m/s`);
+            console.log(`   H-speed: ${hSpeed.toFixed(2)} → ${newHSpeed.toFixed(2)} m/s`);
+            console.log(`   Backspin: ${bsRPM.toFixed(0)} → ${newBsRPM.toFixed(0)} rpm`);
 
-            // 3. Horizontal velocity scrub from ground contact friction (scales with backspin AND landing angle)
-            // More backspin = more friction = more scrub
-            // Steeper landing angle (first bounce only) = more scrub
-            const spinScrubMultiplier = Math.min(backspinRPM / 10000, 1.0); // 0 to 1 based on spin (caps at 10k RPM)
-
-            // Angle scrub bonus: only applies significantly on first bounce
-            // 0° = 0 bonus, 45° = 0.5 bonus, 90° = 1.0 bonus
-            let angleScrubMultiplier = 0;
-            if (bounceCount === 1) { // First bounce uses initial landing angle
-                angleScrubMultiplier = Math.min(initialLandingAngleRadians / (Math.PI / 2), 1.0); // Normalize to 0-1 (0° to 90°)
-            }
-
-            const effectiveScrubFactor = BASE_HORIZONTAL_SCRUB_FACTOR
-                + (SPIN_ENHANCED_SCRUB_FACTOR * spinScrubMultiplier)
-                + (ANGLE_ENHANCED_SCRUB_FACTOR * angleScrubMultiplier);
-
-            const scrubAmount = horizontalSpeed * effectiveScrubFactor;
-            if (horizontalSpeed > 0.01) {
-                const horizontalDir = new THREE.Vector2(velocity.x, velocity.z).normalize();
-                velocity.x -= horizontalDir.x * scrubAmount;
-                velocity.z -= horizontalDir.y * scrubAmount;
-
-                let scrubLog = `Horizontal scrub: ${scrubAmount.toFixed(3)} m/s (${(effectiveScrubFactor * 100).toFixed(1)}% loss, `;
-                scrubLog += `base ${(BASE_HORIZONTAL_SCRUB_FACTOR*100).toFixed(0)}%`;
-                if (spinScrubMultiplier > 0) {
-                    scrubLog += ` + spin ${(spinScrubMultiplier * SPIN_ENHANCED_SCRUB_FACTOR * 100).toFixed(1)}%`;
-                }
-                if (angleScrubMultiplier > 0) {
-                    scrubLog += ` + angle ${(angleScrubMultiplier * ANGLE_ENHANCED_SCRUB_FACTOR * 100).toFixed(1)}%`;
-                }
-                scrubLog += `)`;
-            }
-
-            // 3. Spin affects horizontal velocity on bounce (grip effect)
-            // Backspin creates backward force (reduces forward velocity or reverses it)
-            // Topspin creates forward force (increases forward velocity)
-            let spinEffect = 0;
-            if (Math.abs(backspinRPM) > 100 && horizontalSpeed > 0.01) {
-                spinEffect = currentSpin.x * SPIN_TO_VELOCITY_TRANSFER;
-                const horizontalDir = new THREE.Vector2(velocity.x, velocity.z).normalize();
-                // Negative backspin (which we use) should reduce forward velocity
-                velocity.x += horizontalDir.x * spinEffect;
-                velocity.z += horizontalDir.y * spinEffect;
-
-                const newHorizontalSpeed = Math.sqrt(velocity.x**2 + velocity.z**2);
-
-                // Check if ball reversed direction due to extreme backspin
-                const newHorizontalDir = new THREE.Vector2(velocity.x, velocity.z).normalize();
-                const directionDot = horizontalDir.dot(newHorizontalDir);
-                if (directionDot < 0) {
-                }
-            }
-
-            // 4. Ground contact modifies spin
-            // High friction surfaces "grab" the ball more, reducing spin faster
-            const spinReductionFactor = 0.7 + (surfaceProps?.friction || 0.1) * 0.05; // Softer surfaces reduce spin more
-            const newBackspinRPM = Math.abs(currentSpin.x) * (60 / (2 * Math.PI)) * spinReductionFactor;
-            currentSpin.x *= spinReductionFactor;
-            currentSpin.y *= spinReductionFactor;
-
-            const newHorizontalSpeed = Math.sqrt(velocity.x**2 + velocity.z**2);
-            console.log(`   Horizontal vel: ${oldHorizontalSpeed.toFixed(2)} → ${newHorizontalSpeed.toFixed(2)} m/s (${((newHorizontalSpeed - oldHorizontalSpeed) / oldHorizontalSpeed * 100).toFixed(1)}%)`);
-            console.log(`   Spin: ${oldBackspinRPM.toFixed(0)} → ${newBackspinRPM.toFixed(0)} rpm (${(spinReductionFactor * 100).toFixed(0)}% retained)`);
-
-            // Calculate expected bounce height
-            const expectedHeight = (velocity.y ** 2) / (2 * gravity);
-
-            // Check if bounce is too small to continue
-            if (expectedHeight < MIN_BOUNCE_HEIGHT || velocity.y < 0.3) {
+            // Stop bouncing when upward velocity is too small to lift the ball clear
+            if (velocity.y < MIN_BOUNCE_VY) {
+                position.y = getBallYPositionForSurface(currentSurfaceType, position.x, position.z);
+                bouncePoints.push({ x: position.x, y: position.y, z: position.z, time });
                 break;
             }
 
-            // Set position on ground with correct lie offset and mark as airborne
             position.y = getBallYPositionForSurface(currentSurfaceType, position.x, position.z);
-            bouncePoints.push({ x: position.x, y: position.y, z: position.z, time: time });
+            bouncePoints.push({ x: position.x, y: position.y, z: position.z, time });
             inAir = true;
             airTime = 0;
 
         } else {
-            // ===== IN AIR BETWEEN BOUNCES =====
-            // Simple ballistic trajectory (could add drag/magnus but keep it simpler for bounces)
-            airTime += dt;
+            // Between-bounce ballistic flight (gravity only — Magnus negligible at this scale)
+            airTime += BOUNCE_DT;
+            velocity.y -= GRAVITY * BOUNCE_DT;
+            position.x += velocity.x * BOUNCE_DT;
+            position.y += velocity.y * BOUNCE_DT;
+            position.z += velocity.z * BOUNCE_DT;
+            time += BOUNCE_DT;
 
-            // Apply gravity
-            velocity.y -= gravity * dt;
+            bouncePoints.push({ x: position.x, y: position.y, z: position.z, time });
 
-            // Update position
-            position.x += velocity.x * dt;
-            position.y += velocity.y * dt;
-            position.z += velocity.z * dt;
-
-            // Increment time
-            time += dt;
-
-            bouncePoints.push({ x: position.x, y: position.y, z: position.z, time: time });
-
-            // Check for ground contact (get terrain height at current position)
             const groundY = getBallYPositionForSurface(currentSurfaceType, position.x, position.z);
             if (position.y <= groundY) {
                 position.y = groundY;
                 inAir = false;
-                // Continue to next impact
             }
-
-            // Safety: max airtime per bounce
             if (airTime > 2.0) {
-                console.warn("Bounce airtime exceeded 2s, forcing landing");
+                console.warn("Bounce airtime > 2s, forcing landing");
                 position.y = groundY;
                 inAir = false;
             }
         }
 
-        // Safety: check if ball is basically stopped
-        const currentSpeed = Math.sqrt(velocity.x**2 + velocity.y**2 + velocity.z**2);
-        if (currentSpeed < MIN_ROLL_SPEED && !inAir) {
-            break;
-        }
+        const speed = velocity.length();
+        if (speed < MIN_ROLL_SPEED && !inAir) break;
     }
-
-    if (bounceCount >= MAX_BOUNCES) {
-        console.warn(`Reached maximum bounces (${MAX_BOUNCES})`);
-    }
-
 
     return {
-        position: position,
-        velocity: velocity,
-        spin: currentSpin,
-        bouncePoints: bouncePoints,
-        bounceCount: bounceCount,
-        endTime: time // Return the end time for next phase
+        position,
+        velocity,
+        spin: omega,
+        bouncePoints,
+        bounceCount,
+        endTime: time,
     };
 }
 
 
-// --- Ground Roll Simulation ---
+// ============================================================
+// GROUND ROLL
+// ============================================================
 
-const MIN_ROLL_SPEED = 0.05; // m/s - Speed below which the ball is considered stopped
-const GROUND_FRICTION_TIME_STEP = 0.02; // seconds - Simulation step for ground roll
-export const HOLE_RADIUS_METERS = 0.108 / 2; // Regulation hole diameter is 4.25 inches (0.108m)
-const MAX_HOLE_ENTRY_SPEED = 1.5; // m/s - Max speed to fall into the hole (needs tuning)
-// Spin influence on roll
-const NEUTRAL_BACKSPIN_RPM = 2500; // RPM at which spin has minimal effect on roll distance
-const SPIN_FRICTION_FACTOR = 0.00008; // How much friction changes per RPM deviation (Increased, needs tuning!) // KEEPING THIS FOR NOW, might remove later
-
-// --- New Spin Physics Constants (Tunable) ---
-const BASE_BACKSPIN_ACCELERATION_FACTOR = 0.00005; // Base acceleration per RPM (m/s^2 / RPM) - Increased to enable spin-backs
-const SIDESPIN_ACCELERATION_FACTOR = 0.000004; // Acceleration per RPM (m/s^2 / RPM) - Needs tuning!
-const BACKSPIN_DECAY_RATE_PER_SECOND = 1500; // RPM decay per second - Needs tuning!
-const SIDESPIN_DECAY_RATE_PER_SECOND = 2000; // RPM decay per second - Needs tuning!
-const MIN_SPIN_EFFECT_RPM = 200; // Spin below this RPM has no acceleration effect
-const SURFACE_CHECK_DISTANCE = 0.25; // meters - Check surface every 25cm
+const GROUND_DT             = 0.02;
+export const HOLE_RADIUS_METERS = 0.108 / 2; // regulation hole (4.25 in)
+const MAX_HOLE_ENTRY_SPEED  = 1.5;            // m/s
+const SURFACE_CHECK_DIST    = 0.25;           // m
 
 /**
- * Simulates the ball rolling on the ground with friction and spin effects (backspin and sidespin).
- * Surface type is checked dynamically every 25cm.
- *
- * @param {THREE.Vector3} initialPosition - Starting position of the ball (meters).
- * @param {THREE.Vector3} initialVelocity - Starting velocity of the ball (m/s).
- * @param {string} surfaceType - Initial surface type (used if holeLayout not provided).
- * @param {number} initialBackspinRPM - Initial backspin in RPM.
- * @param {number} [initialSideSpinRPM=0] - Initial sidespin in RPM.
- * @param {number} startTime - Start time offset for animation
- * @param {object} holeLayout - Hole layout data for dynamic surface detection (optional)
- * @returns {object} Result containing finalPosition (THREE.Vector3), isHoledOut (boolean), and rollTrajectoryPoints (array of THREE.Vector3).
+ * Friction coefficient (m/s² of deceleration / g) for rolling on a surface.
+ * Uses explicit surface.friction if present, otherwise maps from rollOut with
+ * an exponential model calibrated to:
+ *   green (rollOut 0.90) → ~0.08
+ *   fairway (rollOut 0.50) → ~0.20
+ *   thick rough (rollOut 0.15) → ~0.45
  */
-export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType, initialBackspinRPM = 0, initialSideSpinRPM = 0, startTime = 0, holeLayout = null) {
+function rollingFrictionFor(surfaceProps) {
+    if (surfaceProps?.friction !== undefined) return surfaceProps.friction;
+    const rollOut = surfaceProps?.rollOut ?? 0.5;
+    return 0.63 * Math.exp(-2.3 * rollOut);
+}
 
+/**
+ * Ground roll with rolling/sliding friction and gentle lateral curvature from sidespin.
+ * Backspin during roll is mostly already shed in the bounce phase; any residual
+ * decays here and creates a small extra deceleration while it persists.
+ */
+export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType,
+                                   initialBackspinRPM = 0, initialSideSpinRPM = 0,
+                                   startTime = 0, holeLayout = null) {
     let position = initialPosition.clone();
     let velocity = initialVelocity.clone();
-    // Store initial horizontal velocity direction for backspin force
-    const initialHorizontalVelocityDir = velocity.clone().setY(0).normalize();
-    const initialSpeed = Math.sqrt(velocity.x**2 + velocity.z**2);
-
-    // Ensure ball starts on the ground with correct lie offset for roll simulation
-    position.y = getBallYPositionForSurface(surfaceType, position.x, position.z);
-    // We only care about horizontal velocity for rolling friction
     velocity.y = 0;
 
-    // Track current spin amounts
-    let currentBackspinRPM = initialBackspinRPM;
-    let currentSideSpinRPM = initialSideSpinRPM;
+    const initialHDir = velocity.clone().setY(0).normalize();
 
-    const surfaceProps = getSurfaceProperties(surfaceType);
-    const initialRollOut = surfaceProps?.rollOut || 0.5;
+    let bsRPM = initialBackspinRPM;
+    let ssRPM = initialSideSpinRPM;
 
-    // Check for special value -1.0 (water/OOB penalty area): stop all physics immediately
-    if (initialRollOut < 0) {
+    let surfaceProps = getSurfaceProperties(surfaceType);
+    if ((surfaceProps?.rollOut ?? 0.5) < 0) {
+        // penalty surface
         return {
             finalPosition: initialPosition.clone(),
             isHoledOut: false,
-            rollTrajectoryPoints: [{ x: initialPosition.x, y: initialPosition.y, z: initialPosition.z, time: startTime }]
+            rollTrajectoryPoints: [{ x: initialPosition.x, y: initialPosition.y, z: initialPosition.z, time: startTime }],
+            endTime: startTime,
         };
     }
 
-    const baseFrictionCoefficient = surfaceProps?.friction || 0.1; // Base friction from surface
-    const surfaceSpinResponse = surfaceProps?.spinResponse || 1.0; // How much surface responds to spin
-    const gravity = 9.81;
+    position.y = getBallYPositionForSurface(surfaceType, position.x, position.z);
 
-    // Calculate surface-specific backspin acceleration factor
-    const effectiveBackspinAccelFactor = BASE_BACKSPIN_ACCELERATION_FACTOR * surfaceSpinResponse;
+    let mu = rollingFrictionFor(surfaceProps);
+    let decel = mu * GRAVITY;
 
-    // COMMENTED OUT: Spin-modified friction (we handle spin effect via direct acceleration instead)
-    // // Adjust friction based on backspin
-    // // Higher backspin increases friction, lower backspin/topspin decreases it.
-    // const spinDeviation = initialBackspinRPM - NEUTRAL_BACKSPIN_RPM;
-    // // *** Corrected formula: Use '+' so high spin increases friction factor ***
-    // let effectiveFrictionCoefficient = baseFrictionCoefficient * (1 + (spinDeviation * SPIN_FRICTION_FACTOR));
-    // // Clamp effective friction to prevent negative values or excessive reduction/increase
-    // effectiveFrictionCoefficient = Math.max(0.01, effectiveFrictionCoefficient); // Ensure minimum friction
-    // // Let's remove the upper clamp for now to see the full effect of high spin
-    // // effectiveFrictionCoefficient = Math.min(baseFrictionCoefficient * 3.0, effectiveFrictionCoefficient); // Optional: Cap max friction increase
+    // Sidespin curvature: lateral acceleration = k * ω_side * v
+    // Tuned k so that a 1500 RPM sidespin on a 5 m/s putt curves ~5 cm over 5 m of roll.
+    const SIDESPIN_CURVE_K = 0.000012;
 
-    // Use base friction directly (no spin modification)
-    const effectiveFrictionCoefficient = baseFrictionCoefficient;
+    // Residual backspin slightly increases effective friction (still sliding part of the time)
+    const BACKSPIN_DRAG_K = 0.000008; // m/s² added per RPM of |backspin|
 
-    // Calculate base friction deceleration magnitude
-    const frictionDecelerationMagnitude = effectiveFrictionCoefficient * gravity;
+    // Spin decay during roll: fast on grass, slower on green
+    const SPIN_DECAY_PER_S = 1200; // RPM/s
 
+    let time = startTime;
+    let totalRolled = 0;
+    let lastPos = position.clone();
+    let distSinceSurfaceCheck = 0;
+    let currentSurface = surfaceType;
+    let isHoledOut = false;
 
-    let time = startTime; // Start from end of bounce time
-    const dt = GROUND_FRICTION_TIME_STEP;
-    let steps = 0;
-    let isHoledOut = false; // Track if the ball falls in the hole
-    const holePosition = getFlagPosition(); // Get hole position once at the start
-    const rollTrajectoryPoints = []; // Initialize array to store roll points
-
-    // Track distance rolled
-    let totalDistanceRolled = 0;
-    let lastPosition = position.clone();
-    let distanceSinceLastSurfaceCheck = 0; // Track distance for surface checking
-
-    // Track current surface and friction
-    let currentSurfaceType = surfaceType;
-    let currentFrictionCoefficient = baseFrictionCoefficient;
-    let currentFrictionDecelerationMagnitude = frictionDecelerationMagnitude;
-
-    // Sample logging every 0.5 seconds, starting immediately
-    let nextLogTime = startTime; // Start logging immediately
+    const holePos = getFlagPosition();
+    const rollPoints = [];
+    let nextLogTime = startTime;
     let hasLoggedFirst = false;
 
     while (true) {
-        const speed = velocity.length(); // Current speed (horizontal only as y=0)
+        const speed = velocity.length();
 
-        // Periodic logging - log first immediately, then every 0.5 seconds
         if (time >= nextLogTime && speed > MIN_ROLL_SPEED) {
-            console.log(`\n🏃 ROLL @ ${totalDistanceRolled.toFixed(1)}m (${time.toFixed(2)}s):`);
-            console.log(`   Surface: ${currentSurfaceType}`);
+            console.log(`\n🏃 ROLL @ ${totalRolled.toFixed(1)}m (${time.toFixed(2)}s):`);
+            console.log(`   Surface: ${currentSurface}`);
             console.log(`   Speed: ${speed.toFixed(2)} m/s`);
-            console.log(`   Backspin: ${currentBackspinRPM.toFixed(0)} rpm`);
-            console.log(`   Sidespin: ${currentSideSpinRPM.toFixed(0)} rpm`);
-            console.log(`   Friction decel: ${currentFrictionDecelerationMagnitude.toFixed(3)} m/s²`);
-
-            if (!hasLoggedFirst) {
-                hasLoggedFirst = true;
-                nextLogTime = startTime + 0.5;
-            } else {
-                nextLogTime += 0.5;
-            }
+            console.log(`   Backspin: ${bsRPM.toFixed(0)} rpm   Sidespin: ${ssRPM.toFixed(0)} rpm`);
+            console.log(`   μ: ${mu.toFixed(3)}  decel: ${decel.toFixed(3)} m/s²`);
+            if (!hasLoggedFirst) { hasLoggedFirst = true; nextLogTime = startTime + 0.5; }
+            else nextLogTime += 0.5;
         }
 
-        // --- Hole Interaction Check ---
-        // Only check if on the green and hole position is known
-        if (currentSurfaceType === 'GREEN' && holePosition) {
-            // Calculate 2D distance to hole center
-            const dx = position.x - holePosition.x;
-            const dz = position.z - holePosition.z;
-            const distanceToHoleCenter = Math.sqrt(dx*dx + dz*dz);
-
-            // Check capture condition
-            if (distanceToHoleCenter < HOLE_RADIUS_METERS && speed < MAX_HOLE_ENTRY_SPEED) {
+        // Hole check on green
+        if (currentSurface === 'GREEN' && holePos) {
+            const dx = position.x - holePos.x;
+            const dz = position.z - holePos.z;
+            const d = Math.sqrt(dx * dx + dz * dz);
+            if (d < HOLE_RADIUS_METERS && speed < MAX_HOLE_ENTRY_SPEED) {
                 isHoledOut = true;
-                console.log(`\n⛳ HOLED OUT!`);
-                console.log(`   Distance to hole: ${(distanceToHoleCenter * 100).toFixed(2)} cm (max: ${(HOLE_RADIUS_METERS * 100).toFixed(2)} cm)`);
-                console.log(`   Entry speed: ${speed.toFixed(2)} m/s (max: ${MAX_HOLE_ENTRY_SPEED} m/s)`);
-                position.set(holePosition.x, BALL_RADIUS / 2, holePosition.z); // Center ball in hole, slightly sunk
-                velocity.set(0, 0, 0); // Stop the ball
-                break; // Exit simulation loop
-            } else if (distanceToHoleCenter < HOLE_RADIUS_METERS * 2) {
-                // Ball is near the hole but didn't go in - log why
-                const tooFast = speed >= MAX_HOLE_ENTRY_SPEED;
-                const tooFar = distanceToHoleCenter >= HOLE_RADIUS_METERS;
-                console.log(`\n🔴 MISSED HOLE (close!)`);
-                console.log(`   Distance to hole: ${(distanceToHoleCenter * 100).toFixed(2)} cm (need: < ${(HOLE_RADIUS_METERS * 100).toFixed(2)} cm) ${tooFar ? '❌ TOO FAR' : '✓'}`);
-                console.log(`   Entry speed: ${speed.toFixed(2)} m/s (need: < ${MAX_HOLE_ENTRY_SPEED} m/s) ${tooFast ? '❌ TOO FAST' : '✓'}`);
+                console.log(`\n⛳ HOLED OUT! distance ${(d * 100).toFixed(1)} cm, speed ${speed.toFixed(2)} m/s`);
+                position.set(holePos.x, BALL_RADIUS / 2, holePos.z);
+                velocity.set(0, 0, 0);
+                break;
             }
-            // TODO: Add lip-out logic here later if desired
         }
 
-        // --- Stop Check ---
         if (speed < MIN_ROLL_SPEED) {
-            velocity.set(0, 0, 0); // Ensure velocity is zeroed out
-            break; // Exit simulation loop
+            velocity.set(0, 0, 0);
+            break;
         }
 
-        // --- Spin Decay ---
-        const spinDecayFactor = dt; // Decay is per second, applied over dt
-        currentBackspinRPM -= BACKSPIN_DECAY_RATE_PER_SECOND * spinDecayFactor * Math.sign(currentBackspinRPM);
-        currentSideSpinRPM -= SIDESPIN_DECAY_RATE_PER_SECOND * spinDecayFactor * Math.sign(currentSideSpinRPM);
-        // Prevent spin from going past zero due to decay
-        if (Math.abs(currentBackspinRPM) < MIN_SPIN_EFFECT_RPM) currentBackspinRPM = 0;
-        if (Math.abs(currentSideSpinRPM) < MIN_SPIN_EFFECT_RPM) currentSideSpinRPM = 0;
-
-        // --- Calculate Acceleration Vectors ---
-        const netAccelerationVec = new THREE.Vector3(0, 0, 0);
-        const currentVelocityDir = velocity.clone().normalize();
-
-        // 1. Friction Acceleration (Opposite current velocity)
-        if (speed > 0.01) { // Only apply friction if moving
-             const frictionAccel = currentVelocityDir.clone().multiplyScalar(-currentFrictionDecelerationMagnitude);
-             netAccelerationVec.add(frictionAccel);
+        // Spin decay
+        if (Math.abs(bsRPM) > 0) {
+            const sign = Math.sign(bsRPM);
+            bsRPM -= SPIN_DECAY_PER_S * GROUND_DT * sign;
+            if (Math.sign(bsRPM) !== sign) bsRPM = 0;
+        }
+        if (Math.abs(ssRPM) > 0) {
+            const sign = Math.sign(ssRPM);
+            ssRPM -= SPIN_DECAY_PER_S * GROUND_DT * sign;
+            if (Math.sign(ssRPM) !== sign) ssRPM = 0;
         }
 
-        // 2. Backspin Acceleration (Opposite initial velocity direction)
-        if (Math.abs(currentBackspinRPM) >= MIN_SPIN_EFFECT_RPM) {
-            // Positive backspin creates force opposite initial direction (slows down faster or pulls back)
-            // Negative backspin (topspin) creates force *along* initial direction (less slowing)
-            const backspinAccelMag = currentBackspinRPM * effectiveBackspinAccelFactor; // Magnitude can be negative for topspin
-            const backspinAccel = initialHorizontalVelocityDir.clone().multiplyScalar(-backspinAccelMag); // Negate mag to align force correctly
-            netAccelerationVec.add(backspinAccel);
+        // Build acceleration
+        const vDir = velocity.clone().normalize();
+        const accel = new THREE.Vector3(0, 0, 0);
+
+        // Friction (kinetic + small spin penalty while backspin remains)
+        const effectiveDecel = decel + BACKSPIN_DRAG_K * Math.abs(bsRPM);
+        accel.addScaledVector(vDir, -effectiveDecel);
+
+        // Sidespin curvature (perpendicular to current velocity, sign by sidespin direction)
+        if (Math.abs(ssRPM) > 50) {
+            const lateralDir = vDir.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0),
+                                                          ssRPM > 0 ? -Math.PI / 2 : Math.PI / 2);
+            accel.addScaledVector(lateralDir, SIDESPIN_CURVE_K * Math.abs(ssRPM) * speed * GRAVITY);
         }
 
-        // 3. Sidespin Acceleration (Perpendicular to current velocity)
-        if (Math.abs(currentSideSpinRPM) >= MIN_SPIN_EFFECT_RPM && speed > 0.01) {
-            const sidespinAccelMag = Math.abs(currentSideSpinRPM) * SIDESPIN_ACCELERATION_FACTOR;
-            // Rotate current velocity direction 90 degrees around Y axis
-            // Positive sidespin (slice) -> force to the right (negative X relative to Z dir) -> rotate -90 deg
-            // Negative sidespin (hook) -> force to the left (positive X relative to Z dir) -> rotate +90 deg
-            const rotationAngle = (currentSideSpinRPM > 0 ? -Math.PI / 2 : Math.PI / 2);
-            const sidespinAccelDir = currentVelocityDir.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), rotationAngle);
-            const sidespinAccel = sidespinAccelDir.multiplyScalar(sidespinAccelMag);
-            netAccelerationVec.add(sidespinAccel);
-        }
-
-        // --- Update Velocity (with refined stop check v3) ---
-        let shouldStop = false;
-        if (speed > 0.01) {
-            // Calculate deceleration from friction (always opposes current velocity)
-            const frictionDecelMagnitude = currentFrictionDecelerationMagnitude; // Use current surface friction
-
-            // Calculate the component of backspin acceleration opposing the *current* velocity
-            let opposingBackspinMagnitude = 0;
-            if (Math.abs(currentBackspinRPM) >= MIN_SPIN_EFFECT_RPM) {
-                const backspinAccelMag = currentBackspinRPM * effectiveBackspinAccelFactor;
-                const backspinAccelVec = initialHorizontalVelocityDir.clone().multiplyScalar(-backspinAccelMag);
-                // Project backspin accel onto the negative current velocity direction
-                opposingBackspinMagnitude = -backspinAccelVec.dot(currentVelocityDir);
-                opposingBackspinMagnitude = Math.max(0, opposingBackspinMagnitude); // Ensure non-negative
-            }
-
-            // Total deceleration magnitude purely opposing the current direction of motion
-            const totalOpposingDecelMagnitude = frictionDecelMagnitude + opposingBackspinMagnitude;
-            const stoppingDecelerationAmount = totalOpposingDecelMagnitude * dt;
-
-            if (speed <= stoppingDecelerationAmount) {
-                shouldStop = true;
-            }
-        } else {
-             // If speed is already very low, consider stopping
-             shouldStop = true;
-        }
-
-
-        if (shouldStop) {
+        // Will the next step over-shoot to a stop?
+        if (speed <= effectiveDecel * GROUND_DT) {
             velocity.set(0, 0, 0);
         } else {
-            // Apply the full net acceleration (friction + all spin forces)
-            velocity.addScaledVector(netAccelerationVec, dt);
+            velocity.addScaledVector(accel, GROUND_DT);
         }
 
-        // Update position using the potentially modified velocity
-        position.addScaledVector(velocity, dt);
-        // Keep ball on the ground plane with correct lie offset and terrain height
-        position.y = getBallYPositionForSurface(currentSurfaceType, position.x, position.z);
+        // Update position, keep on surface
+        position.addScaledVector(velocity, GROUND_DT);
+        position.y = getBallYPositionForSurface(currentSurface, position.x, position.z);
 
-        // Track distance traveled in this step
-        const stepDistance = position.distanceTo(lastPosition);
-        totalDistanceRolled += stepDistance;
-        distanceSinceLastSurfaceCheck += stepDistance;
+        // Distance tracking
+        const stepDist = position.distanceTo(lastPos);
+        totalRolled += stepDist;
+        distSinceSurfaceCheck += stepDist;
 
-        // --- Check Surface Type Every 25cm ---
-        if (distanceSinceLastSurfaceCheck >= SURFACE_CHECK_DISTANCE && holeLayout) {
-            const detectedSurface = getSurfaceTypeAtPoint({ x: position.x, z: position.z }, holeLayout);
-            if (detectedSurface && detectedSurface !== currentSurfaceType) {
-                currentSurfaceType = detectedSurface;
-
-                // Update friction coefficients
-                const newSurfaceProps = getSurfaceProperties(currentSurfaceType);
-                const newRollOut = newSurfaceProps?.rollOut || 0.5;
-
-                // Check for special value -1.0 (water/OOB): stop immediately
-                if (newRollOut < 0) {
+        // Surface change detection
+        if (distSinceSurfaceCheck >= SURFACE_CHECK_DIST && holeLayout) {
+            const detected = getSurfaceTypeAtPoint({ x: position.x, z: position.z }, holeLayout);
+            if (detected && detected !== currentSurface) {
+                currentSurface = detected;
+                surfaceProps = getSurfaceProperties(currentSurface);
+                if ((surfaceProps?.rollOut ?? 0.5) < 0) {
                     velocity.set(0, 0, 0);
-                    console.log(`Ball entered ${currentSurfaceType}, stopping roll immediately.`);
-                    break; // Exit simulation loop
+                    console.log(`Ball entered ${currentSurface}, stopping.`);
+                    break;
                 }
-
-                currentFrictionCoefficient = newSurfaceProps?.friction || 0.1;
-                currentFrictionDecelerationMagnitude = currentFrictionCoefficient * gravity;
-
+                mu = rollingFrictionFor(surfaceProps);
+                decel = mu * GRAVITY;
             }
-            distanceSinceLastSurfaceCheck = 0; // Reset distance counter
+            distSinceSurfaceCheck = 0;
         }
 
-        lastPosition = position.clone();
+        lastPos = position.clone();
+        rollPoints.push({ x: position.x, y: position.y, z: position.z, time });
+        time += GROUND_DT;
 
-        // Store the current position for the roll trajectory with timestamp
-        rollTrajectoryPoints.push({ x: position.x, y: position.y, z: position.z, time: time });
-
-        time += dt;
-        steps++;
-
-        // Safety break
-        if (time > 30) { // Max 30 seconds of rolling
-            console.warn("Sim (Roll): Ground roll simulation exceeded 30 seconds, breaking loop.");
-            velocity.set(0, 0, 0); // Stop the ball
+        if (time - startTime > 30) {
+            console.warn("Roll sim exceeded 30s, breaking.");
+            velocity.set(0, 0, 0);
             break;
         }
     }
 
-    // --- Apply Ball Lie Offset based on final surface ---
-    if (!isHoledOut && surfaceProps && typeof surfaceProps.ballLieOffset === 'number') {
-        if (surfaceProps.ballLieOffset === -1) { // Special case for water
-            // Set Y significantly below typical surface height, e.g., based on water surface height
-            position.y = (surfaceProps.height ?? 0) - BALL_RADIUS * 2; // Example: below water surface
-        } else {
-            const finalY = BALL_RADIUS + surfaceProps.ballLieOffset;
-            position.y = finalY;
+    // Final lie offset
+    if (!isHoledOut) {
+        const finalProps = getSurfaceProperties(currentSurface);
+        if (finalProps && typeof finalProps.ballLieOffset === 'number' && finalProps.ballLieOffset !== -1) {
+            position.y = queryTerrainHeight(position.x, position.z) + BALL_RADIUS + finalProps.ballLieOffset;
+        } else if (finalProps?.ballLieOffset === -1) {
+            position.y = (finalProps.height ?? 0) - BALL_RADIUS * 2;
         }
-    } else if (isHoledOut) {
-    } else {
-        console.warn(`Sim (Roll): Could not apply lie offset. HoledOut=${isHoledOut}, SurfaceProps=${!!surfaceProps}, Offset=${surfaceProps?.ballLieOffset}`);
-        // Keep position.y at terrain height + BALL_RADIUS if offset couldn't be applied and not holed out
-        position.y = queryTerrainHeight(position.x, position.z) + BALL_RADIUS;
+        if (rollPoints.length > 0) rollPoints[rollPoints.length - 1].y = position.y;
     }
-
-    // --- Apply Ball Lie Offset to the final position AND the last trajectory point ---
-    let finalAdjustedY = queryTerrainHeight(position.x, position.z) + BALL_RADIUS; // Default to terrain height + standard radius height
-    if (!isHoledOut && surfaceProps && typeof surfaceProps.ballLieOffset === 'number') {
-        if (surfaceProps.ballLieOffset === -1) { // Special case for water
-            finalAdjustedY = (surfaceProps.height ?? 0) - BALL_RADIUS * 2; // Example: below water surface
-        } else {
-            finalAdjustedY = BALL_RADIUS + surfaceProps.ballLieOffset;
-        }
-        position.y = finalAdjustedY; // Update the final position vector
-
-        // Also update the last point in the trajectory array
-        if (rollTrajectoryPoints.length > 0) {
-            rollTrajectoryPoints[rollTrajectoryPoints.length - 1].y = finalAdjustedY;
-        }
-
-    } else if (isHoledOut) {
-        finalAdjustedY = position.y; // Use the Y position set during hole-in check
-         // Update the last trajectory point for hole-in as well
-         if (rollTrajectoryPoints.length > 0) {
-            rollTrajectoryPoints[rollTrajectoryPoints.length - 1].y = finalAdjustedY;
-        }
-    } else {
-        console.warn(`Sim (Roll): Could not apply lie offset. HoledOut=${isHoledOut}, SurfaceProps=${!!surfaceProps}, Offset=${surfaceProps?.ballLieOffset}`);
-        position.y = finalAdjustedY; // Ensure final position uses the default BALL_RADIUS height
-        // Update the last trajectory point to default height too
-        if (rollTrajectoryPoints.length > 0) {
-            rollTrajectoryPoints[rollTrajectoryPoints.length - 1].y = finalAdjustedY;
-        }
-    }
-
-    // --- Final Logging Before Return ---
-    if (rollTrajectoryPoints.length > 0) {
-    } else {
-    }
-
-
-    const rollDuration = time - startTime;
-
 
     return {
-        finalPosition: position, // Position now includes the lie offset adjustment
-        isHoledOut: isHoledOut,
-        rollTrajectoryPoints: rollTrajectoryPoints, // Return the collected points (last point Y is now adjusted)
-        endTime: time // Return final time
+        finalPosition: position,
+        isHoledOut,
+        rollTrajectoryPoints: rollPoints,
+        endTime: time,
     };
 }

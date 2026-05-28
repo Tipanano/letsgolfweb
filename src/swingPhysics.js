@@ -59,25 +59,32 @@ const FLIP_STRIKE_SMASH_PENALTY = 0.05; // % smash factor reduction (early relea
 const PUNCH_STRIKE_SMASH_PENALTY = 0.05; // % smash factor reduction (late release)
 const BUNKER_FAT_STRIKE_SMASH_PENALTY = 0.10; // Reduced penalty for fat shots from sand
 
-// Spin Calculation Factors (Placeholders - Need Refinement)
-const SPIN_AXIS_SENSITIVITY = 6.0; // How much face-to-path affects spin axis tilt
+// Spin Calculation: physics-based via spin loft and spin axis tilt.
+//
+// Total spin (RPM) ≈ k(loft) · BallSpeed(mph) · sin(SpinLoft)
+//   where SpinLoft = DynamicLoft − AttackAngle.
+// k(loft) rises super-linearly with loft because wedge friction/groove
+// engagement is much higher than driver face friction. A quadratic fit
+// matches PGA Tour data better than a linear coefficient:
+//   Driver  10.5° → k ≈ 87    →  ~2700 rpm
+//   7-iron  32°   → k ≈ 105   →  ~7400 rpm
+//   PW      45°   → k ≈ 125   →  ~9700 rpm
+//   LW      60°   → k ≈ 157   → ~10800 rpm
+const SPIN_LOFT_K_BASE = 85;        // coefficient at 0° loft
+const SPIN_LOFT_K_QUAD = 0.020;     // adds k(loft) = base + quad·loft²
 
-// Backspin Factors
-const BACKSPIN_LOFT_FACTOR = 110; // Backspin per degree of dynamic loft
-const BACKSPIN_SPEED_FACTOR = 40; // Backspin per mph of ACHS
-const BACKSPIN_AOA_FACTOR =  0; // Backspin per degree of positive AoA
+// Strike quality multipliers on spin loft engagement (not on final spin —
+// these scale the effective spin loft to model groove/contact deterioration).
+const STRIKE_SPIN_MOD = {
+    Center: 1.00,
+    Flip:   1.15,  // early release → adds loft → adds spin
+    Punch:  0.75,  // late release → delofts → less spin
+    Thin:   0.55,  // contacts equator → poor compression
+    Fat:    0.70,  // grass/turf between face and ball
+};
 
-// Sidespin Calculation Factors (NEW - Placeholders, need refinement)
-const SIDESPIN_FACE_TO_PATH_FACTOR = 100; // Base sidespin RPM per degree of face-to-path
-const SIDESPIN_SPEED_FACTOR = 5;         // Additional sidespin RPM per mph of ACHS (scaled by face-to-path)
-const SIDESPIN_LOFT_DAMPENING_FACTOR = 0.008; // How much dynamic loft reduces sidespin
-
-// Common Spin Strike Modifiers
-const FAT_STRIKE_SPIN_MOD = 0.8; // Multiplier for backspin
-const THIN_STRIKE_SPIN_MOD = 0.5; // Multiplier for backspin
-const FLIP_STRIKE_SPIN_MOD = 1.2; // Multiplier for backspin (adds spin)
-const PUNCH_STRIKE_SPIN_MOD = 0.7; // Multiplier for backspin (reduces spin)
-const BUNKER_FAT_STRIKE_SPIN_MOD = 0.9; // Less spin reduction for fat bunker shots
+// (Strike spin modifiers now live in STRIKE_SPIN_MOD above; bunker fat is handled
+// in the spin calculation explicitly.)
 
 
 // --- Helper Functions ---
@@ -359,158 +366,66 @@ function calculateBallSpeed(actualCHS, smashFactor) {
 }
 
 /**
- * Calculates the initial Launch Angle based on dynamic loft, attack angle, and club speed.
- * High club speed on high-lofted clubs increases launch (ball goes more vertical).
+ * Launch angle from dynamic loft and attack angle.
+ * Coefficients fit to 2023 PGA Tour TrackMan averages across the bag:
+ *   Driver LA 10.4° (DL 13.5°, AoA +3) → 0.70·DL + 0.45·AoA  ≈ 10.8°
+ *   7-iron LA 16.3° (DL 28°,  AoA -4.5) ≈ 17.6°
+ *   PW     LA 24.2° (DL 40°,  AoA -5.8) ≈ 25.4°
+ * Negative AoA depresses launch significantly (vertical gear effect from
+ * compressing the ball below the face plane), so the AoA coefficient is
+ * larger than in many naive models.
  */
-function calculateLaunchAngle(dynamicLoft, attackAngle, actualCHS, baseLoft) {
-    // Base launch from loft and attack angle
-    let launchAngle = dynamicLoft * 0.7 + attackAngle * 1;
-
-    // High-lofted clubs (wedges) with high club speed add vertical launch
-    if (baseLoft >= 45) {
-        // For wedges (45°+), add launch based on club speed above 80 mph
-        const speedAboveBase = Math.max(0, actualCHS - 80);
-        const loftFactor = (baseLoft - 45) / 15; // 0 at PW (45°), 1.0 at LW (60°)
-        const launchBonus = speedAboveBase * 0.08 * loftFactor; // Up to ~0.8° per mph over 80
-        launchAngle += launchBonus;
-    }
-
-    return launchAngle;
+function calculateLaunchAngle(dynamicLoft, attackAngle) {
+    return 0.70 * dynamicLoft + 0.45 * attackAngle;
 }
 
 /**
- * Calculates the Spin Axis Tilt (degrees from horizontal) based on face-to-path angle and dynamic loft.
- * Positive tilt corresponds to slice spin, negative to hook spin.
+ * Spin axis tilt from face-to-path and spin loft.
+ * tilt = atan2(sin(F2P), sin(SpinLoft))
+ * Positive tilt = side axis tilted right → slice (right-curving) for a righty.
  */
-function calculateSpinAxis(faceAngleRelativeToPath, dynamicLoft) {
-    // Simplified physics model: tilt = atan(sin(face-to-path) / cos(dynamic_loft))
-    // This approximates the tilt of the spin axis relative to the ground plane.
-    const faceToPathRad = faceAngleRelativeToPath * Math.PI / 180;
-    const loftRad = dynamicLoft * Math.PI / 180;
-
-    let tiltAngleRad = 0;
-    const cosLoft = Math.cos(loftRad);
-    if (Math.abs(cosLoft) > 1e-6) { // Avoid division by zero if loft is 90 deg
-       tiltAngleRad = Math.atan(Math.sin(faceToPathRad) / cosLoft);
-    }
-
-    let tiltAngleDeg = tiltAngleRad * 180 / Math.PI;
-    tiltAngleDeg *= SPIN_AXIS_SENSITIVITY; // Apply sensitivity tuning factor
-
-    return tiltAngleDeg; // Degrees
+function calculateSpinAxisTilt(faceAngleRelPath, spinLoft) {
+    const f = faceAngleRelPath * Math.PI / 180;
+    const sl = Math.max(1e-3, Math.abs(spinLoft)) * Math.PI / 180; // avoid /0 at zero spin loft
+    const tiltRad = Math.atan2(Math.sin(f), Math.sin(sl));
+    return tiltRad * 180 / Math.PI;
 }
 
 /**
- * Calculates the Back Spin rate (RPM) based on dynamic loft, speed, AoA, strike quality, and surface.
- * @param {number} dynamicLoft - Calculated dynamic loft.
- * @param {number} actualCHS - Calculated actual club head speed.
- * @param {number} attackAngle - Calculated attack angle.
- * @param {string} strikeQuality - Calculated strike quality.
- * @param {string} currentSurface - The surface the ball is on.
- * @returns {number} The final backspin in RPM.
+ * Total spin (RPM) and decomposition into backspin and sidespin via spin axis tilt.
+ *
+ * totalSpin = k(loft) · BallSpeed_mph · sin(effectiveSpinLoft)
+ *   where effectiveSpinLoft folds in strike-quality compression modifiers.
+ * backspin = totalSpin · cos(tilt)
+ * sidespin = totalSpin · sin(tilt)
+ *
+ * @returns {{ backspin: number, sidespin: number, totalSpin: number, tiltDeg: number, spinLoft: number }}
  */
-function calculateBackSpin(dynamicLoft, actualCHS, attackAngle, strikeQuality, currentSurface, staticClubLoft) {
-    const LOW_LOFT_THRESHOLD = 18.1; // Woods and Driver
-    const HIGH_LOFT_THRESHOLD = 44.0; // Wedges
-    const BASE_SPEED_FACTOR = BACKSPIN_SPEED_FACTOR; // Original 20
+function calculateSpinComponents({
+    dynamicLoft, attackAngle, faceAngleRelPath, ballSpeed,
+    staticLoft, strikeQuality, currentSurface,
+}) {
+    const spinLoft = dynamicLoft - attackAngle; // degrees
 
-    let speedFactorMultiplier = 1.0;
-
-    if (staticClubLoft < LOW_LOFT_THRESHOLD) {
-        // Reduce significantly for very low lofts
-        // Example: at 10 deg (Driver), multiplier might be 0.3
-        // Scale linearly from, say, 0.2 at 0 loft to 0.7 at LOW_LOFT_THRESHOLD
-        const minMultiplierLow = 0.2; // Multiplier for extremely low loft (e.g. theoretical 0 deg)
-        const maxMultiplierLow = 0.3; // Multiplier at the LOW_LOFT_THRESHOLD
-        speedFactorMultiplier = minMultiplierLow + (maxMultiplierLow - minMultiplierLow) * (staticClubLoft / LOW_LOFT_THRESHOLD);
-    } else if (staticClubLoft > HIGH_LOFT_THRESHOLD) {
-        // Optionally, slightly increase for very high lofts, or keep at 1.0
-        // Example: at 60 deg (Lob Wedge), multiplier might be 1.1
-        const minMultiplierHigh = 1.2; // Multiplier at the HIGH_LOFT_THRESHOLD
-        const maxMultiplierHigh = 1.3; // Multiplier for very high lofts (e.g., 60+ deg)
-        const range = 65.0 - HIGH_LOFT_THRESHOLD; // Assume max loft around 65 for scaling
-        speedFactorMultiplier = minMultiplierHigh + (maxMultiplierHigh - minMultiplierHigh) * ((staticClubLoft - HIGH_LOFT_THRESHOLD) / range);
-        speedFactorMultiplier = Math.min(speedFactorMultiplier, maxMultiplierHigh); // Cap it
-    } else {
-        // Interpolate between LOW_LOFT_THRESHOLD (e.g., 0.7x) and HIGH_LOFT_THRESHOLD (1.0x)
-        const lowThreshMultiplier = 0.4; // Multiplier at LOW_LOFT_THRESHOLD
-        const highThreshMultiplier = 1.3; // Multiplier at HIGH_LOFT_THRESHOLD
-        const loftRange = HIGH_LOFT_THRESHOLD - LOW_LOFT_THRESHOLD;
-        speedFactorMultiplier = lowThreshMultiplier + (highThreshMultiplier - lowThreshMultiplier) * ((staticClubLoft - LOW_LOFT_THRESHOLD) / loftRange);
+    // Strike modifier reduces compression / groove engagement
+    let strikeMod = STRIKE_SPIN_MOD[strikeQuality] ?? 1.0;
+    // Sand acts as a buffer for fat shots — less spin loss than fat off turf
+    if (strikeQuality === 'Fat' && currentSurface?.toUpperCase() === 'BUNKER') {
+        strikeMod = 0.90;
     }
 
-    // Ensure multiplier is not negative or excessively high
-    speedFactorMultiplier = Math.max(0.1, Math.min(speedFactorMultiplier, 1.5));
+    const effectiveSpinLoft = spinLoft * strikeMod;
+    const slRad = effectiveSpinLoft * Math.PI / 180;
+    const k = SPIN_LOFT_K_BASE + SPIN_LOFT_K_QUAD * staticLoft * staticLoft;
+    const totalSpin = Math.max(0, k * ballSpeed * Math.sin(Math.max(0, slRad)));
 
-    const dynamicSpeedFactor = BASE_SPEED_FACTOR * speedFactorMultiplier;
+    const tiltDeg = calculateSpinAxisTilt(faceAngleRelPath, spinLoft);
+    const tiltRad = tiltDeg * Math.PI / 180;
 
-    // Adjust effective loft for strike quality (thin/fat strikes reduce effective loft)
-    let effectiveLoft = dynamicLoft;
-    if (strikeQuality === "Thin") {
-        effectiveLoft *= 0.6; // Thin strike contacts high on ball, significantly reduces effective loft
-    } else if (strikeQuality === "Fat") {
-        effectiveLoft *= 0.7; // Fat strike hits ground first, reduces loft presentation
-    }
+    const backspin = totalSpin * Math.cos(tiltRad);
+    const sidespin = totalSpin * Math.sin(tiltRad);
 
-    let baseSpin = /*1000 +*/
-                   (effectiveLoft * BACKSPIN_LOFT_FACTOR) +
-                   (actualCHS * dynamicSpeedFactor) + // Use the new dynamic factor
-                   (attackAngle * BACKSPIN_AOA_FACTOR);
-
-    // Apply modifier based on strike quality and surface
-    let strikeMod = 1.0;
-    // Special handling for fat shots from bunker
-    if (strikeQuality === "Fat" && currentSurface.toUpperCase() === 'BUNKER') {
-        strikeMod = BUNKER_FAT_STRIKE_SPIN_MOD;
-    } else {
-        // Standard modifiers
-        switch (strikeQuality) {
-            case "Fat": strikeMod = FAT_STRIKE_SPIN_MOD; break; // Less compression
-        case "Thin": strikeMod = THIN_STRIKE_SPIN_MOD; break; // Hits equator
-        case "Flip": strikeMod = FLIP_STRIKE_SPIN_MOD; break; // Adds spin (scooping)
-            case "Punch": strikeMod = PUNCH_STRIKE_SPIN_MOD; break; // Less spin (delofting)
-        }
-    }
-    let backSpin = baseSpin * strikeMod;
-
-    // Clamp backspin to reasonable limits
-    backSpin = clamp(backSpin, 500, 12000);
-
-    return backSpin;
-}
-
-/**
- * Calculates the Side Spin rate (RPM) based on face-to-path, speed, and dynamic loft.
- * @param {number} faceAngleRelativeToPath - Clubface angle relative to path (degrees).
- * @param {number} actualCHS - Calculated actual club head speed (mph).
- * @param {number} dynamicLoft - Calculated dynamic loft (degrees).
- * @param {string} strikeQuality - Calculated strike quality.
- * @returns {number} The side spin in RPM (positive for slice spin for a righty, negative for hook).
- */
-function calculateSideSpin(faceAngleRelativeToPath, actualCHS, dynamicLoft, strikeQuality) {
-    let baseSideSpin = faceAngleRelativeToPath * SIDESPIN_FACE_TO_PATH_FACTOR;
-    let speedContribution = 0;
-    
-    // Apply loft dampening: higher loft clubs tend to generate less sidespin for the same face-to-path
-    let loftDampening = Math.max(0.1, 1.0 - (dynamicLoft * SIDESPIN_LOFT_DAMPENING_FACTOR));
-
-    let totalSideSpin;
-
-    if (Math.abs(faceAngleRelativeToPath) > 0.1) { // Only add speed contribution if face is not perfectly square
-        // Speed contribution is scaled by how open/closed the face is relative to path
-        speedContribution = (actualCHS * SIDESPIN_SPEED_FACTOR) * (faceAngleRelativeToPath / 5.0); // Normalize faceAngle (e.g. div by 5 deg as a reference)
-        totalSideSpin = (baseSideSpin + speedContribution) * loftDampening;
-    } else {
-        totalSideSpin = baseSideSpin * loftDampening; // No significant face/path, so speed doesn't add much sidespin
-    }
-
-    // TODO: Consider strikeQuality modifiers for sidespin (e.g., gear effect for toe/heel)
-    // Example: if (strikeQuality === "Toe") totalSideSpin *= 1.2; (more slice/hook)
-    // Example: if (strikeQuality === "Heel" && totalSideSpin !== 0) totalSideSpin *= 1.2 * -Math.sign(totalSideSpin); // Exaggerate hook for heel, slice for toe (simplified)
-
-    totalSideSpin = clamp(totalSideSpin, -5000, 5000);
-
-    return totalSideSpin;
+    return { backspin, sidespin, totalSpin, tiltDeg, spinLoft };
 }
 
 
@@ -587,85 +502,47 @@ export function calculateImpactPhysics(timingInputs, club, swingSpeed, ballPosit
     // Example: Path +5 (right), Face_to_Target 0 (square) => Face-to-Path = 0 - 5 = -5 (closed to path)
     const faceAngleRelPath = dynamicFaceAngleToTarget - clubPathAngle;
 
-    const attackAngle = calculateAttackAngle(club.baseAoA, ballPositionFactor, currentSurface); // Pass currentSurface
+    const attackAngle = calculateAttackAngle(club.baseAoA, ballPositionFactor, currentSurface);
     const dynamicLoft = calculateDynamicLoft(club.loft, wristsDev, attackAngle, swingSpeed);
     const strikeQuality = calculateStrikeQuality(wristsDev, attackAngle, club.baseAoA, swingSpeed);
-    // Pass surface to smash factor and backspin calculations
     const smashFactor = calculateSmashFactor(club.baseSmash, strikeQuality, currentSurface);
-    let ballSpeed = calculateBallSpeed(actualCHS, smashFactor); // Calculate initial ball speed
-    let launchAngle = calculateLaunchAngle(dynamicLoft, attackAngle, actualCHS, club.loft); // Calculate initial launch angle
-    let backSpin = calculateBackSpin(dynamicLoft, actualCHS, attackAngle, strikeQuality, currentSurface, club.loft);
+    let ballSpeed = calculateBallSpeed(actualCHS, smashFactor);
+    let launchAngle = calculateLaunchAngle(dynamicLoft, attackAngle);
 
-
-
-    // --- Apply Surface Flight Modifications ---
+    // --- Apply Surface Flight Modifications (lie effects on ball speed / launch / spin) ---
     const surfaceProps = getSurfaceProperties(currentSurface);
     const flightMod = surfaceProps?.flightModification;
 
-    if (flightMod) {
-        // Velocity Reduction (Apply to Ball Speed)
-        let velReduction = flightMod.velocityReduction || 0;
-        if (Array.isArray(velReduction)) {
-            const [min, max] = velReduction;
-            velReduction = min + Math.random() * (max - min);
+    const sampleMod = (m) => {
+        if (m === undefined || m === null) return 0;
+        if (Array.isArray(m)) {
+            const [min, max] = m;
+            return min + Math.random() * (max - min);
         }
-        ballSpeed *= (1 - velReduction);
+        return m;
+    };
 
-        // Spin Reduction (Apply to Back Spin)
-        let spinReduction = flightMod.spinReduction || 0;
-        if (Array.isArray(spinReduction)) {
-            const [min, max] = spinReduction;
-            spinReduction = min + Math.random() * (max - min);
-        }
-        backSpin *= (1 - spinReduction);
-        // Also apply to side spin? Let's assume yes for now.
-        // sideSpin *= (1 - spinReduction); // Apply before side spin calculation below
+    const velReduction  = sampleMod(flightMod?.velocityReduction);
+    const spinReduction = sampleMod(flightMod?.spinReduction);
+    const launchChange  = sampleMod(flightMod?.launchAngleChange);
 
-        // Launch Angle Change
-        const launchChange = flightMod.launchAngleChange || 0;
-        launchAngle += launchChange;
+    ballSpeed   *= (1 - velReduction);
+    launchAngle += launchChange;
 
-    }
+    // --- Spin: spin loft + axis tilt, decomposed into backspin / sidespin ---
+    const spinResult = calculateSpinComponents({
+        dynamicLoft,
+        attackAngle,
+        faceAngleRelPath,
+        ballSpeed,
+        staticLoft: club.loft,
+        strikeQuality,
+        currentSurface,
+    });
 
-    // --- Calculate Side Spin (New Method) ---
-    let sideSpin = calculateSideSpin(faceAngleRelPath, actualCHS, dynamicLoft, strikeQuality);
-
-    // Apply surface flight modifications to side spin as well (if applicable)
-    // This re-uses the same spinReduction factor calculated for backspin, for consistency.
-    if (flightMod && flightMod.spinReduction) {
-         let spinReductionFactorForSideSpin = flightMod.spinReduction; // Assuming it's a single value or already determined
-         if (Array.isArray(flightMod.spinReduction)) {
-             // If spinReduction was an array [min, max] and randomized for backspin,
-             // we should ideally use the *same* random factor.
-             // For simplicity, if it's an array, let's re-evaluate or use a consistent interpretation.
-             // This part might need refinement if backspin's reduction factor isn't stored/passed.
-             // Let's assume flightMod.spinReduction is the factor to apply (could be a re-randomized one if array).
-             // To be truly consistent, the randomized factor from backspin should be passed or re-used.
-             // For now, if it's an array, we'll just take the first element as an example, or average.
-             // This is a placeholder for potentially more robust handling of shared random factors.
-             if (Array.isArray(flightMod.spinReduction) && flightMod.spinReduction.length === 2) {
-                // If backspin randomized it, we don't have that exact value here.
-                // Re-randomizing or taking midpoint. For now, let's just log and use a simple approach.
-                // console.warn("Sidespin reduction from array: using new random value or midpoint logic might be needed for perfect consistency with backspin's random reduction.");
-                const [min, max] = flightMod.spinReduction;
-                spinReductionFactorForSideSpin = min + Math.random() * (max - min); // Re-randomize for side spin
-             } else if (typeof flightMod.spinReduction === 'number') {
-                spinReductionFactorForSideSpin = flightMod.spinReduction;
-             } else {
-                spinReductionFactorForSideSpin = 0; // Default if not a number or expected array
-             }
-         } else if (typeof flightMod.spinReduction === 'number') {
-            spinReductionFactorForSideSpin = flightMod.spinReduction;
-         } else {
-            spinReductionFactorForSideSpin = 0;
-         }
-
-         sideSpin *= (1 - spinReductionFactorForSideSpin);
-    }
-
-    // The old spinAxisTilt calculation might still be useful if you want to visualize it,
-    // but it's no longer the direct source of sideSpin RPM.
-    const spinAxisTilt = calculateSpinAxis(faceAngleRelPath, dynamicLoft); // Keep for informational/visual purposes if needed
+    let backSpin = spinResult.backspin * (1 - spinReduction);
+    let sideSpin = spinResult.sidespin * (1 - spinReduction);
+    const spinAxisTilt = spinResult.tiltDeg;
 
 
     // --- Assemble Result Object ---
