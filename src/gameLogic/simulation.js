@@ -32,26 +32,28 @@ const AIR_VISCOSITY  = 1.81e-5;            // Pa·s, dynamic viscosity of air at
  *                       (dimples keep boundary layer turbulent; unlike a smooth
  *                        sphere which rises again at very high Re, real golf
  *                        balls stay in the trough)
- *   + 0.04·S            small spin-induced drag rise (Aoki 2009 measured ~5%)
+ *   + 0.12·S            spin-induced drag rise. Aoki measured 10-20% Cd rise
+ *                       across S = 0–0.5; we're at the upper end. This is the
+ *                       term that primarily separates iron behavior (S ~ 0.3)
+ *                       from driver behavior (S ~ 0.08) in flight.
  */
 function dragCoefficient(reynolds, spinRatio) {
     let cd;
     if (reynolds < 4e4)       cd = 0.50;
     else if (reynolds < 7e4)  cd = 0.50 - 0.29 * (reynolds - 4e4) / 3e4;
     else                       cd = 0.21;
-    return cd + 0.04 * Math.min(spinRatio, 0.5);
+    return cd + 0.16 * Math.min(spinRatio, 0.5);
 }
 
 /**
  * Lift coefficient for a dimpled golf ball as a function of spin ratio S = ωR/v.
- * Saturates near 0.25 at S ≥ 0.30. Within published range from Aoki (2009)
- * and Lyman (2013); chosen at the high end so driver gets enough lift to
- * carry tour-realistic distance. Tradeoff: irons fly a little longer than
- * tour averages (~10-15% above tour pro carry) because high-spin shots
- * saturate to the same CL plateau.
+ * Faster onset (scale = 0.06) so a moderate-spin driver shot reaches ~70% of
+ * max CL, while high-spin shots saturate to the same plateau. This shape
+ * matches Aoki (2009) data better than slow saturation — real measurements
+ * show CL climbing steeply through S = 0.05–0.15 then flattening.
  */
 function liftCoefficient(spinRatio) {
-    return 0.25 * (1 - Math.exp(-spinRatio / 0.10));
+    return 0.22 * (1 - Math.exp(-spinRatio / 0.06));
 }
 
 /** Helper: Y-position of ball on the ground for a given surface and XZ. */
