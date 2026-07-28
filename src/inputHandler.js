@@ -23,6 +23,8 @@ import { isLocalPlayerTurn } from './multiplayerManager.js'; // Import turn chec
 import * as SwingArc from './swingArcVisualizer.js';
 // Rhythm putting (mapping toggle)
 import * as RhythmPutt from './rhythmPutt.js';
+// Green-reading overlay
+import * as SlopeOverlay from './visuals/slopeOverlay.js';
 // --- Constants for Aiming ---
 const AIM_INCREMENT_FULL = 0.5; // Degrees per key press
 const AIM_INCREMENT_CHIP = 0.2; // Degrees per key press
@@ -59,6 +61,13 @@ export function handleKeyDown(event) {
     } else if (event.key === '0') {
         // Activate Measurement Camera View
         Visuals.activateMeasurementCamera();
+        return; // Consume event
+    }
+
+    // --- Green-reading overlay toggle (slope arrows) ---
+    if (event.key === 'g') {
+        const visible = SlopeOverlay.toggleSlopeOverlay();
+        updateStatus(visible ? 'Slope arrows ON (g to hide)' : 'Slope arrows off');
         return; // Consume event
     }
 

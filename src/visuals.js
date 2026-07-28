@@ -10,6 +10,7 @@ import { setShotDirectionAngle, getCurrentTargetLineAngle, getShotDirectionAngle
 import { getCurrentGameMode } from './main.js'; // Import game mode getter
 import { YARDS_TO_METERS } from './utils/unitConversions.js'; // Import conversion constant
 import * as GreenContours from './greenContours.js'; // Smooth green elevation field
+import * as SlopeOverlay from './visuals/slopeOverlay.js'; // Green-reading arrows
 import * as multiplayerManager from './multiplayerManager.js'; // Import multiplayer manager
 import * as ui from './ui.js'; // Import UI functions
 import { buildTerrainMesh, getTerrainHeight, getTerrainInfo } from './terrainHeight.js'; // Import terrain height system
@@ -105,6 +106,7 @@ export function switchToRangeView(initialScene = null) {
     unloadCurrentView(); // Unload previous view first (removes target elements etc.)
     currentVisualMode = VISUAL_MODES.RANGE;
     GreenContours.setActiveContour(null); // Range is flat
+    SlopeOverlay.disposeSlopeOverlay();
     TargetVisuals.hideTargetElements(); // Ensure target elements are hidden
     RangeVisuals.initRangeVisuals(sceneToUse); // Add/show range elements
     CoreVisuals.applyStaticCameraView('range'); // Set camera to static range view
@@ -178,6 +180,14 @@ export function drawHole(holeLayout) {
     // Build terrain mesh for height lookups
     if (holeLayout) {
         currentTerrainMesh = buildTerrainMesh(holeLayout);
+    }
+
+    // Green-reading overlay (toggled with 'g')
+    const contour = holeLayout?.greenContour;
+    if (contour) {
+        SlopeOverlay.buildSlopeOverlay(contour.center.x, contour.center.z, contour.innerRadius ?? contour.outerRadius);
+    } else {
+        SlopeOverlay.disposeSlopeOverlay();
     }
 }
 

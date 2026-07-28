@@ -192,11 +192,17 @@ export function initCoreVisuals(canvasElement) {
     renderer.shadowMap.enabled = true;
 
     // 4. Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+    // Lighting: modest ambient + sky/ground hemisphere for natural color,
+    // and a warm sun at a raking angle so terrain contours actually model.
+    // Keep the sun direction in sync with SHADE_SUN in holeRenderer.js.
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.28);
     scene.add(ambientLight);
 
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(50, 100, 20);
+    const hemiLight = new THREE.HemisphereLight(0xbfdcff, 0x3f6b3f, 0.45);
+    scene.add(hemiLight);
+
+    const directionalLight = new THREE.DirectionalLight(0xfff2dd, 1.0);
+    directionalLight.position.set(60, 70, 25);
     directionalLight.castShadow = true;
     directionalLight.shadow.mapSize.width = 1024;
     directionalLight.shadow.mapSize.height = 1024;

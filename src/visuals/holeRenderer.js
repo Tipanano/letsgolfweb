@@ -4,7 +4,29 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.m
 import { TextureLoader } from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
 import { createNoise2D } from 'https://esm.sh/simplex-noise';
 import earcut from 'https://cdn.skypack.dev/earcut@2.2.4';
-import { heightAt as contourHeightAt, hasContour, isNearContour } from '../greenContours.js';
+import { heightAt as contourHeightAt, gradientAt as contourGradientAt, hasContour, isNearContour } from '../greenContours.js';
+
+// Baked hillshade for contoured ground: the scene's high ambient light washes
+// out real shading, so slope readability is painted into vertex colors —
+// slopes facing the sun brighten, slopes facing away darken. Exaggerated on
+// purpose; matches the directional light at (50, 100, 20).
+const SHADE_SUN = (() => {
+    const len = Math.sqrt(60 * 60 + 70 * 70 + 25 * 25);
+    return { x: 60 / len, y: 70 / len, z: 25 / len };
+})();
+const SHADE_EXAGGERATION = 5.0;
+const SHADE_MIN = 0.68, SHADE_MAX = 1.22;
+
+/** Brightness factor (≈1 on flat ground) for the contour slope at x,z. */
+function hillshadeFactor(x, z) {
+    const grad = contourGradientAt(x, z);
+    if (!grad || (grad.x === 0 && grad.z === 0)) return 1;
+    const invLen = 1 / Math.sqrt(grad.x * grad.x + 1 + grad.z * grad.z);
+    const lambert = (-grad.x * SHADE_SUN.x + SHADE_SUN.y - grad.z * SHADE_SUN.z) * invLen;
+    const flat = SHADE_SUN.y; // Lambert of perfectly flat ground
+    const factor = Math.pow(Math.max(0.01, lambert / flat), SHADE_EXAGGERATION);
+    return Math.min(SHADE_MAX, Math.max(SHADE_MIN, factor));
+}
 
 /**
  * Adaptively subdivides triangles near the active green contour and displaces
@@ -177,24 +199,36 @@ export function renderPolygonWithHeights(polygonData, scene, textureLoader, obje
         // Create geometry
         const geometry = createGeometryFromTriangulation(positions, indices);
 
-        // Add vertex colors with simplex noise if requested
-        if (addNoise) {
-            const noise2D = createNoise2D();
-            const colors = new Float32Array(positions.length);
-            const baseColor = new THREE.Color(polygonData.surface?.color || '#228b22');
+        // Vertex colors: optional simplex noise (rough) and baked hillshade
+        // near the contour, so slopes read even under heavy ambient light.
+        const vertexCount = positions.length / 3;
+        let useVertexColors = false;
+        const colors = new Float32Array(positions.length);
+        const noise2D = addNoise ? createNoise2D() : null;
+        const baseColor = addNoise
+            ? new THREE.Color(polygonData.surface?.color || '#228b22')
+            : new THREE.Color(1, 1, 1); // White multiplies textures unchanged
+        const contourActive = hasContour();
 
-            for (let i = 0; i < positions.length / 3; i++) {
-                const x = positions[i * 3];
-                const z = positions[i * 3 + 2];
-                const noiseValue = noise2D(x * noiseScale, z * noiseScale);
-                const variation = 1.0 + noiseValue * variationStrength;
-                const clampedVariation = Math.max(0, variation);
+        for (let i = 0; i < vertexCount; i++) {
+            const x = positions[i * 3];
+            const z = positions[i * 3 + 2];
 
-                colors[i * 3] = baseColor.r * clampedVariation;
-                colors[i * 3 + 1] = baseColor.g * clampedVariation;
-                colors[i * 3 + 2] = baseColor.b * clampedVariation;
+            let factor = 1.0;
+            if (addNoise) {
+                factor *= Math.max(0, 1.0 + noise2D(x * noiseScale, z * noiseScale) * variationStrength);
             }
+            if (contourActive && isNearContour(x, z, 0)) {
+                factor *= hillshadeFactor(x, z);
+            }
+            if (factor !== 1.0) useVertexColors = true;
 
+            colors[i * 3] = baseColor.r * factor;
+            colors[i * 3 + 1] = baseColor.g * factor;
+            colors[i * 3 + 2] = baseColor.b * factor;
+        }
+
+        if (addNoise || useVertexColors) {
             geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
         }
 
@@ -217,7 +251,7 @@ export function renderPolygonWithHeights(polygonData, scene, textureLoader, obje
 
         const materialOptions = {
             side: THREE.DoubleSide,
-            ...(addNoise && { vertexColors: true })
+            ...((addNoise || useVertexColors) && { vertexColors: true })
         };
 
         if (surface?.texturePath) {
