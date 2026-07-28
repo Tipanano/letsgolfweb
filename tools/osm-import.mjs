@@ -100,28 +100,35 @@ for (const el of elements) {
 }
 console.log('Associated:', Object.fromEntries(Object.entries(byType).map(([k, v]) => [k, v.length])));
 
-// --- Tee: polygon nearest the line start ---
+// --- Tees: all boxes near the hole's start; play from the back tee ---
+// OSM maps every tee set (championship/medal/forward). Candidates are tee
+// polygons near the start of the hole line; the active tee is the one
+// FARTHEST from the flag (back tee). All candidates are kept in the layout
+// for a future tee selector.
 const start = linePts[0];
-let teePoly = null, teeDist = Infinity;
+const flagPt = linePts[linePts.length - 1];
+const teeCandidates = [];
 for (const pts of byType.tee) {
     const c = centroid(pts);
-    const d = Math.hypot(c.x - start.x, c.z - start.z);
-    if (d < teeDist) { teeDist = d; teePoly = pts; }
-}
-let tee;
-if (teePoly) {
-    const c = centroid(teePoly);
+    if (Math.hypot(c.x - start.x, c.z - start.z) > 55) continue; // Near this hole's start only
     let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-    for (const p of teePoly) {
+    for (const p of pts) {
         minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
         minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z);
     }
-    tee = {
+    teeCandidates.push({
         center: { x: +c.x.toFixed(2), y: 0, z: +c.z.toFixed(2) },
         width: +Math.min(9, Math.max(3, maxX - minX)).toFixed(1),
         depth: +Math.min(9, Math.max(3, maxZ - minZ)).toFixed(1),
-        surface: 'TEE',
-    };
+        distToFlag: +Math.hypot(c.x - flagPt.x, c.z - flagPt.z).toFixed(1),
+    });
+}
+teeCandidates.sort((a, b) => b.distToFlag - a.distToFlag); // Back tee first
+
+let tee;
+if (teeCandidates.length > 0) {
+    tee = { ...teeCandidates[0], surface: 'TEE' };
+    delete tee.distToFlag;
 } else {
     tee = { center: { x: start.x, y: 0, z: start.z }, width: 6, depth: 4, surface: 'TEE' };
 }
@@ -168,8 +175,8 @@ const background = {
     surface: 'OUT_OF_BOUNDS',
 };
 
-// --- Length + flag ---
-let length = 0;
+// --- Length (card style: from the active tee along the play line) + flag ---
+let length = Math.hypot(tee.center.x - start.x, tee.center.z - start.z);
 for (let i = 0; i < linePts.length - 1; i++) {
     length += Math.hypot(linePts[i + 1].x - linePts[i].x, linePts[i + 1].z - linePts[i].z);
 }
@@ -191,6 +198,8 @@ const layout = {
         ...byType.rough.map(pts => ({ vertices: pts, surface: 'LIGHT_ROUGH' })),
     ],
     flagPositions: [{ number: 1, x: flag.x, y: 0, z: flag.z }],
+    // All mapped tee boxes, back tee first (future tee selector)
+    tees: teeCandidates,
 };
 
 console.log(`  "${layout.name}": par ${layout.par}, ${layout.lengthMeters}m, ` +
