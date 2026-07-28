@@ -17,7 +17,7 @@ function injectStyles() {
     style.textContent = `
         #rhythm-putt-hud {
             position: absolute;
-            bottom: 96px;
+            bottom: 26px;
             left: 50%;
             transform: translateX(-50%);
             display: none;

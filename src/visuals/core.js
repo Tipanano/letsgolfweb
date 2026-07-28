@@ -517,6 +517,7 @@ function getFlagPosition() {
 // --- Function to Apply Aim Angle (Called by Input Handler) ---
 export function applyAimAngleToCamera() {
     if (!camera) return;
+    updateAimIndicator(); // Keep the ground chevron in sync with the aim
     // Calculate the total absolute aim angle for camera rotation
     const totalAimAngle = getCurrentTargetLineAngle() + getShotDirectionAngle();
 
@@ -647,18 +648,79 @@ export function setBallHalo(visible, x = 0, z = 0, surfaceLayerHeight = 0.06) {
     ensureBallHalo();
     if (!ballHaloMesh) return;
     ballHaloMesh.visible = visible;
-    if (!visible) return;
+    if (visible) {
+        ballHaloMesh.position.set(x, surfaceLayerHeight + BALL_HALO_LIFT, z);
 
-    ballHaloMesh.position.set(x, surfaceLayerHeight + BALL_HALO_LIFT, z);
+        // Tilt the ring to the local terrain slope so it hugs contoured greens
+        const grad = contourGradientAt(x, z);
+        if (grad) {
+            const normal = new THREE.Vector3(-grad.x, 1, -grad.z).normalize();
+            ballHaloMesh.quaternion.setFromUnitVectors(HALO_UP, normal);
+        } else {
+            ballHaloMesh.quaternion.identity();
+        }
+    }
 
-    // Tilt the ring to the local terrain slope so it hugs contoured greens
-    const grad = contourGradientAt(x, z);
+    // The aim chevron shares the halo's lifecycle (rest = shown, flight = hidden)
+    updateAimIndicator();
+}
+
+// --- Aim Indicator (ground chevron ahead of the ball) ---
+let aimArrowMesh = null;
+const AIM_ARROW_DIST = 0.85; // m ahead of the ball center
+
+function ensureAimArrow() {
+    if (aimArrowMesh || !scene) return;
+    const shape = new THREE.Shape();
+    shape.moveTo(0, 0.4);      // Tip
+    shape.lineTo(-0.17, 0);    // Left wing
+    shape.lineTo(0, 0.12);     // Notch
+    shape.lineTo(0.17, 0);     // Right wing
+    shape.closePath();
+    const geom = new THREE.ShapeGeometry(shape);
+    geom.rotateX(-Math.PI / 2);
+    geom.rotateY(Math.PI); // Point along +Z so yaw = aim angle
+    const mat = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.7,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        depthTest: false, // Never swallowed by sloped terrain
+    });
+    aimArrowMesh = new THREE.Mesh(geom, mat);
+    aimArrowMesh.name = 'AimIndicator';
+    aimArrowMesh.renderOrder = 21;
+    aimArrowMesh.visible = false;
+    scene.add(aimArrowMesh);
+}
+
+/** Repositions the aim chevron from the halo anchor + current aim angle. */
+export function updateAimIndicator() {
+    ensureAimArrow();
+    if (!aimArrowMesh) return;
+    if (!ballHaloMesh || !ballHaloMesh.visible) {
+        aimArrowMesh.visible = false;
+        return;
+    }
+
+    const angleRad = (getCurrentTargetLineAngle() + getShotDirectionAngle()) * Math.PI / 180;
+    const dx = Math.sin(angleRad), dz = Math.cos(angleRad);
+    const base = ballHaloMesh.position;
+    const px = base.x + dx * AIM_ARROW_DIST;
+    const pz = base.z + dz * AIM_ARROW_DIST;
+    aimArrowMesh.position.set(px, base.y + 0.004, pz);
+
+    const yawQ = new THREE.Quaternion().setFromAxisAngle(HALO_UP, angleRad);
+    const grad = contourGradientAt(px, pz);
     if (grad) {
         const normal = new THREE.Vector3(-grad.x, 1, -grad.z).normalize();
-        ballHaloMesh.quaternion.setFromUnitVectors(HALO_UP, normal);
+        const tiltQ = new THREE.Quaternion().setFromUnitVectors(HALO_UP, normal);
+        aimArrowMesh.quaternion.copy(tiltQ).multiply(yawQ);
     } else {
-        ballHaloMesh.quaternion.identity();
+        aimArrowMesh.quaternion.copy(yawQ);
     }
+    aimArrowMesh.visible = true;
 }
 
 export function showBallAtAddress(position = null, surfaceType = null) {

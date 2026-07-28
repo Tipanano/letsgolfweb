@@ -35,7 +35,7 @@ import {
     isPracticeMode
 } from '../modes/playHole.js';
 import { getFlagPosition, setFlagstickVisibility } from '../visuals/holeView.js'; // Import flag position getter AND visibility setter
-import { getActiveCameraMode, setCameraBehindBall, snapFollowCameraToBall, CameraMode, removeTrajectoryLine, applyAimAngleToCamera, setCameraBehindBallLookingAtTarget, setInitialFollowCameraLookingAtTarget, setBallScale, resetStaticCameraZoom, setBallHalo, BALL_RADIUS } from '../visuals/core.js'; // Import camera functions, line removal, aim application, setBallScale, AND resetStaticCameraZoom
+import { getActiveCameraMode, setCameraBehindBall, snapFollowCameraToBall, CameraMode, removeTrajectoryLine, applyAimAngleToCamera, setCameraBehindBallLookingAtTarget, setInitialFollowCameraLookingAtTarget, setBallScale, resetStaticCameraZoom, setBallHalo, updateAimIndicator, BALL_RADIUS } from '../visuals/core.js'; // Import camera functions, line removal, aim application, setBallScale, AND resetStaticCameraZoom
 import { getSurfaceProperties } from '../surfaces.js';
 import { resetVisuals } from '../visuals.js'; // Import resetVisuals to update ball position
 import { getSurfaceTypeAtPoint } from '../utils/gameUtils.js'; // Import surface checker
@@ -682,6 +682,10 @@ function _prepareNextShotAtCurrentPosition() {
         // At-address prompt for the next shot (re-read the type: auto putter
         // selection above may have just changed it)
         showAddressHint(getCurrentShotType(), { hasClub: !!getSelectedClub() });
+
+        // Aim chevron: refresh now that the default aim toward the flag is set
+        // (the halo was placed before the aim angle was computed)
+        updateAimIndicator();
     }
     // Does NOT call visuals.resetVisuals()
 }
