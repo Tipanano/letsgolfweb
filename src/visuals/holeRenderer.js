@@ -4,7 +4,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.m
 import { TextureLoader } from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
 import { createNoise2D } from 'https://esm.sh/simplex-noise';
 import earcut from 'https://cdn.skypack.dev/earcut@2.2.4';
-import { heightAt as contourHeightAt, gradientAt as contourGradientAt, hasContour, isNearContour, isNearFineFeature, bankLevelAt, WATER_SURFACE_Y } from '../greenContours.js';
+import { heightAt as contourHeightAt, gradientAt as contourGradientAt, hasContour, isNearContour, isNearFineFeature, bankLevelAt, getWaterSheets, WATER_SURFACE_Y } from '../greenContours.js';
 
 // Baked hillshade for contoured ground: the scene's high ambient light washes
 // out real shading, so slope readability is painted into vertex colors —
@@ -36,7 +36,7 @@ function hillshadeFactor(x, z) {
  * Because the field feathers to exactly 0 at its outer edge, T-junctions at
  * the subdivision boundary are coplanar and invisible.
  */
-function adaptiveSubdivideForContour(positions, indices) {
+function adaptiveSubdivideForContour(positions, indices, fixedBudgetSq = null) {
     if (!hasContour()) return { positions, indices };
 
     const verts = [];
@@ -72,7 +72,7 @@ function adaptiveSubdivideForContour(positions, indices) {
         const cx = (verts[a][0] + verts[b][0] + verts[c][0]) / 3;
         const cz = (verts[a][2] + verts[b][2] + verts[c][2]) / 3;
         const margin = Math.sqrt(maxESq);
-        const budget = isNearFineFeature(cx, cz, margin) ? FINE_EDGE_SQ : COARSE_EDGE_SQ;
+        const budget = fixedBudgetSq ?? (isNearFineFeature(cx, cz, margin) ? FINE_EDGE_SQ : COARSE_EDGE_SQ);
         if (depth >= MAX_DEPTH || maxESq < budget || !isNearContour(cx, cz, margin)) {
             out.push(a, b, c);
             return;
@@ -198,8 +198,9 @@ export function renderPolygonWithHeights(polygonData, scene, textureLoader, obje
 
         if (drapeY !== undefined) {
             // Draped sheet (creeks on sloping terrain): per-vertex level from
-            // a callback, subdivided so it can follow the landscape downhill.
-            ({ positions, indices } = adaptiveSubdivideForContour(positions, indices));
+            // a callback. Coarse 3m budget — a water surface needs no rim
+            // detail, and the fine budget explodes long ribbons into 10⁶ verts.
+            ({ positions, indices } = adaptiveSubdivideForContour(positions, indices, 9));
             for (let i = 0; i < positions.length; i += 3) {
                 positions[i + 1] = drapeY(positions[i], positions[i + 2]);
             }
@@ -400,25 +401,35 @@ export function renderWaterHazards(holeLayout, scene, textureLoader, objectsArra
             scene.add(mesh);
             objectsArray.push(mesh);
         } else if (water.type === 'polygon' || water.vertices) {
-            // Sheet draped 0.18m below the local BANK line (terrain without
-            // the water's own depression): creeks descend with the DEM
-            // instead of sitting underground at their upper end, and flat
-            // ponds get the classic level sheet automatically.
-            const mesh = renderPolygonWithHeights(water, scene, textureLoader, objectsArray, {
+            // Sheet mode comes from the terrain module (which carved the
+            // matching depression): ponds get a LEVEL sheet at their level
+            // floor's height; creeks drape 0.18m below the bank line so the
+            // run descends with the DEM.
+            const info = getWaterSheets()[idx];
+            const opts = {
                 name: `Water Hazard #${idx + 1}`,
                 textureRepetitions: 5,
-                drapeY: (x, z) => bankLevelAt(x, z) + WATER_SURFACE_Y
-            });
+            };
+            if (info?.mode === 'flat') opts.flatY = info.y;
+            else opts.drapeY = (x, z) => bankLevelAt(x, z) + WATER_SURFACE_Y;
+            const mesh = renderPolygonWithHeights(water, scene, textureLoader, objectsArray, opts);
 
-            // Water sheet: unlit sky-blue so it reads as water, not a dark
-            // pit — the lit/shaded look comes from the banks around it
+            // Lit water with a specular glint so it reads as water, plus a
+            // slight emissive floor so it never collapses into a dark pit
             if (mesh) {
                 mesh.material?.dispose?.();
-                mesh.material = new THREE.MeshBasicMaterial({
-                    color: 0x5d97c9,
+                mesh.material = new THREE.MeshPhongMaterial({
+                    color: 0x3f81b8,
+                    specular: 0xcfe6ff,
+                    shininess: 130,
+                    emissive: 0x10314a,
                     transparent: true,
-                    opacity: 0.85,
+                    opacity: 0.9,
+                    // OSM polygons wind either way — never let the sheet
+                    // backface-cull into invisibility when seen from above
+                    side: THREE.DoubleSide,
                 });
+                mesh.geometry.computeVertexNormals();
             }
         }
     });

@@ -223,6 +223,7 @@ function makeGridFeature(f) {
  */
 export function setTerrainFromLayout(layout) {
     features = [];
+    waterSheets = [];
     if (!layout) return;
 
     if (layout.greenContour?.center && layout.greenContour.outerRadius > 0) {
@@ -257,18 +258,65 @@ export function setTerrainFromLayout(layout) {
         }
     }
 
-    // Water: terrain dips well below the water surface, so banks slope down
-    // and meet the water inside the polygon. Tagged so bankLevelAt() can
-    // reconstruct the undisturbed bank height under a water sheet.
+    // Water: terrain dips below the water surface, so banks slope down and
+    // meet the water inside the polygon. Two modes, decided by how much the
+    // bank line varies across the polygon:
+    //  - pond (≤2.5m spread): LEVEL floor carved to the lowest bank − depth
+    //    (cutting deeper into the uphill side) + level sheet, like real water
+    //  - creek (steeper): depression relative to local terrain + draped sheet
+    //    so the run descends with the landscape
+    waterSheets = [];
     if (Array.isArray(layout.waterHazards)) {
         for (const w of layout.waterHazards) {
             const verts = w?.vertices;
-            if (!verts || verts.length < 3) continue;
-            const f = makeDepressionFeature(verts, WATER_DEPTH, WATER_RIM);
-            f.isWater = true;
-            features.push(f);
+            if (!verts || verts.length < 3) { waterSheets.push(null); continue; }
+            let minBank = Infinity, maxBank = -Infinity;
+            for (const v of verts) {
+                const b = bankLevelAt(v.x, v.z);
+                if (b < minBank) minBank = b;
+                if (b > maxBank) maxBank = b;
+            }
+            if (maxBank - minBank <= 2.5) {
+                features.push(makeLevelWaterFeature(verts, minBank - WATER_DEPTH, WATER_RIM));
+                waterSheets.push({ mode: 'flat', y: minBank + WATER_SURFACE_Y });
+            } else {
+                const f = makeDepressionFeature(verts, WATER_DEPTH, WATER_RIM);
+                f.isWater = true;
+                features.push(f);
+                waterSheets.push({ mode: 'drape' });
+            }
         }
     }
+}
+
+let waterSheets = []; // aligned with layout.waterHazards indexes
+
+/** Per-hazard sheet placement decided by setTerrainFromLayout. */
+export function getWaterSheets() { return waterSheets; }
+
+/**
+ * Pond with a LEVEL floor: carves down to `level` wherever the bank sits
+ * above it, feathered at the polygon edge (C1 at the rim like the relative
+ * depressions). evalAt subtracts from the bank via bankLevelAt, so the
+ * floor comes out flat regardless of the slope it cuts into.
+ */
+function makeLevelWaterFeature(verts, level, rimWidth) {
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const v of verts) {
+        minX = Math.min(minX, v.x); maxX = Math.max(maxX, v.x);
+        minZ = Math.min(minZ, v.z); maxZ = Math.max(maxZ, v.z);
+    }
+    return {
+        isWater: true,
+        bbox: { minX, maxX, minZ, maxZ },
+        evalAt(x, z) {
+            if (!pointInPolygon(x, z, verts)) return 0;
+            const bank = bankLevelAt(x, z);
+            const target = Math.min(bank, level);
+            const d = distanceToPolygonEdge(x, z, verts);
+            return (target - bank) * smootherstep(Math.min(1, d / rimWidth));
+        },
+    };
 }
 
 /**
