@@ -984,7 +984,7 @@ export function displayDownswingFeedbackWindows(rotationStartMs, rotationWidthMs
  * @param {number | string} [backSpin='N/A'] - Backspin of the last shot (Range).
  * @param {number | string} [sideSpin='N/A'] - Sidespin of the last shot (Range).
  */
-export function updateVisualOverlayInfo(mode, { holeNum = 'N/A', par = 'N/A', distToFlag = 'N/A', shotNum = 'N/A', score = 'N/A', lie = 'N/A', wind = 'N/A', playerName = 'Player 1', totalScore = 'N/A', position = 'N/A', lastShotDist = 'N/A', backSpin = 'N/A', sideSpin = 'N/A' } = {}) {
+export function updateVisualOverlayInfo(mode, { holeNum = 'N/A', par = 'N/A', distToFlag = 'N/A', shotNum = 'N/A', score = 'N/A', lie = 'N/A', wind = 'N/A', playerName = 'Player 1', totalScore = 'N/A', position = 'N/A', lastShotDist = 'N/A', backSpin = 'N/A', sideSpin = 'N/A', elevDelta = null } = {}) {
     const formatNum = (num, digits = 0) => (num !== undefined && num !== null && !isNaN(num)) ? num.toFixed(digits) : 'N/A';
     const formatScore = (s) => {
         if (s === null || s === undefined || isNaN(s)) return 'N/A';
@@ -1021,10 +1021,14 @@ export function updateVisualOverlayInfo(mode, { holeNum = 'N/A', par = 'N/A', di
         if (overlayShotNumSpan) overlayShotNumSpan.textContent = shotNum ?? 'N/A';
         if (overlayForScoreTextSpan) overlayForScoreTextSpan.textContent = forScoreText;
 
-        // Update Top Right (Distance to Flag)
-        // Convert from meters to yards if needed (check if distToFlag is already in yards)
+        // Update Top Right (Distance to Flag), with elevation delta when the
+        // hole sits meaningfully above/below the ball (contoured greens)
         const distToFlagYards = (typeof distToFlag === 'number' && distToFlag > 0) ? metersToYards(distToFlag) : distToFlag;
-        if (overlayDistFlagSpan) overlayDistFlagSpan.textContent = formatNum(distToFlagYards, 0);
+        let distText = formatNum(distToFlagYards, 0);
+        if (typeof elevDelta === 'number' && Math.abs(elevDelta) >= 0.05) {
+            distText += ` ${elevDelta > 0 ? '▲' : '▼'}${Math.abs(elevDelta).toFixed(1)}m`;
+        }
+        if (overlayDistFlagSpan) overlayDistFlagSpan.textContent = distText;
 
         // Update Bottom Left (Play Hole)
         if (mode === 'play-hole') {

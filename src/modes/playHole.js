@@ -121,6 +121,7 @@ export async function initializeMode(holeName) { // Made async, added holeName p
                 holeNum: 1,
                 par: currentHoleLayout.par || 4,
                 distToFlag: initialDistToFlag,
+                elevDelta: elevationDeltaToFlag(currentBallPosition, currentHoleLayout.flagPosition),
                 shotNum: shotsTaken + 1,
                 lie: currentLie,
                 wind: 'Calm',
@@ -268,6 +269,7 @@ export async function applyPracticePlacement(preset, force = false) {
         holeNum: 'P',
         par: currentHoleLayout.par || 3,
         distToFlag: distToFlag,
+        elevDelta: elevationDeltaToFlag(currentBallPosition, currentHoleLayout.flagPosition),
         shotNum: 1,
         lie: currentLie,
         wind: 'Calm',
@@ -367,6 +369,7 @@ export function handleShotResult(shotData) {
             holeNum: currentHoleIndex + 1,
             par: currentHoleLayout.par,
             distToFlag: distToFlag,
+            elevDelta: elevationDeltaToFlag(displayBallPos, currentHoleLayout.flagPosition),
             shotNum: displayShotNum,
             lie: displayLie,
             wind: 'Calm',
@@ -450,6 +453,13 @@ function calculateDistanceToFlag(ballPos, flagPos) {
     const dx = flagPos.x - ballPos.x;
     const dz = flagPos.z - ballPos.z;
     return Math.sqrt(dx * dx + dz * dz);
+}
+
+// Elevation difference (m) from the ball's lie up/down to the hole
+function elevationDeltaToFlag(ballPos, flagPos) {
+    if (!ballPos || !flagPos) return null;
+    return visuals.queryTerrainHeight(flagPos.x, flagPos.z) -
+           visuals.queryTerrainHeight(ballPos.x, ballPos.z);
 }
 
 // --- Getters (optional) ---
