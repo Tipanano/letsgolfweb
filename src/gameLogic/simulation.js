@@ -6,6 +6,7 @@ import { getFlagPosition } from '../visuals/holeView.js';
 import { BALL_RADIUS } from '../visuals/core.js';
 import { getSurfaceTypeAtPoint } from '../utils/gameUtils.js';
 import { queryTerrainHeight } from '../visuals.js';
+import { gradientAt as contourGradientAt } from '../greenContours.js';
 
 // ============================================================
 // Physical constants (sea level, regulation golf ball)
@@ -587,9 +588,21 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
             }
         }
 
+        // Slope at the current position (green contour break). The ball may
+        // only come to rest where friction can hold it — on a steeper slope
+        // it keeps creeping downhill.
+        const grad = contourGradientAt(position.x, position.z);
+        const slopePullDecel = grad ? GRAVITY * Math.sqrt(grad.x * grad.x + grad.z * grad.z) : 0;
+
         if (speed < MIN_ROLL_SPEED) {
-            velocity.set(0, 0, 0);
-            break;
+            if (slopePullDecel <= decel) {
+                velocity.set(0, 0, 0);
+                break;
+            }
+            // Too steep to rest: nudge the ball downhill so it keeps rolling
+            if (speed < 0.01 && grad) {
+                velocity.set(-grad.x, 0, -grad.z).normalize().multiplyScalar(0.02);
+            }
         }
 
         // Spin decay
@@ -619,8 +632,14 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
             accel.addScaledVector(lateralDir, SIDESPIN_CURVE_K * Math.abs(ssRPM) * speed * GRAVITY);
         }
 
-        // Will the next step over-shoot to a stop?
-        if (speed <= effectiveDecel * GROUND_DT) {
+        // Gravity along the slope: downhill acceleration = -g·∇h (break)
+        if (grad && slopePullDecel > 0.001) {
+            accel.x += -GRAVITY * grad.x;
+            accel.z += -GRAVITY * grad.z;
+        }
+
+        // Will the next step over-shoot to a stop? (Only rest where friction holds)
+        if (speed <= effectiveDecel * GROUND_DT && slopePullDecel <= decel) {
             velocity.set(0, 0, 0);
         } else {
             velocity.addScaledVector(accel, GROUND_DT);

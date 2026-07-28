@@ -11,6 +11,7 @@ import { createTeeMesh } from './objects.js'; // Import the tee creator
 import { getSurfaceProperties } from '../surfaces.js'; // Import surface properties getter
 
 import { YARDS_TO_METERS } from '../utils/unitConversions.js';
+import { gradientAt as contourGradientAt } from '../greenContours.js';
 
 export let scene, camera, renderer, ball, trajectoryLine, teeMesh, smallTeeMesh; // Add teeMesh and smallTeeMesh
 // export const BALL_RADIUS = 0.2; // Old, incorrect value
@@ -555,18 +556,32 @@ function ensureBallHalo() {
         transparent: true,
         opacity: 0.55,
         depthWrite: false,
+        depthTest: false, // Locator ring must never be swallowed by sloped terrain
     });
     ballHaloMesh = new THREE.Mesh(geom, mat);
-    ballHaloMesh.renderOrder = 5;
+    ballHaloMesh.renderOrder = 20;
     ballHaloMesh.visible = false;
     scene.add(ballHaloMesh);
 }
+
+const HALO_UP = new THREE.Vector3(0, 1, 0);
 
 export function setBallHalo(visible, x = 0, z = 0, surfaceLayerHeight = 0.06) {
     ensureBallHalo();
     if (!ballHaloMesh) return;
     ballHaloMesh.visible = visible;
-    if (visible) ballHaloMesh.position.set(x, surfaceLayerHeight + BALL_HALO_LIFT, z);
+    if (!visible) return;
+
+    ballHaloMesh.position.set(x, surfaceLayerHeight + BALL_HALO_LIFT, z);
+
+    // Tilt the ring to the local terrain slope so it hugs contoured greens
+    const grad = contourGradientAt(x, z);
+    if (grad) {
+        const normal = new THREE.Vector3(-grad.x, 1, -grad.z).normalize();
+        ballHaloMesh.quaternion.setFromUnitVectors(HALO_UP, normal);
+    } else {
+        ballHaloMesh.quaternion.identity();
+    }
 }
 
 export function showBallAtAddress(position = null, surfaceType = null) {
@@ -635,8 +650,11 @@ export function showBallAtAddress(position = null, surfaceType = null) {
     ball.position.copy(ballPos);
     ball.visible = true;
 
-    // Locator ring on every lie, at that surface's render layer height
-    setBallHalo(true, ballPos.x, ballPos.z, surfaceProps?.height ?? 0);
+    // Locator ring on every lie: surface render layer + terrain height.
+    // The incoming position's y is terrain + BALL_RADIUS before display
+    // offsets, so the terrain component is recoverable without imports.
+    const terrainYForHalo = (position?.y ?? BALL_RADIUS) - BALL_RADIUS;
+    setBallHalo(true, ballPos.x, ballPos.z, terrainYForHalo + (surfaceProps?.height ?? 0));
 }
 
 // Function to hide the ball and tee

@@ -6,8 +6,9 @@
 
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
 import { scene } from './core.js';
+import { heightAt as contourHeightAt, gradientAt as contourGradientAt } from '../greenContours.js';
 
-const MARKER_Y = 0.07; // Slightly above the green's layer height (0.06)
+const MARKER_LIFT = 0.07; // Above the green's layer height (0.06), plus terrain
 
 let group = null;
 let ellipseMesh = null;
@@ -30,6 +31,7 @@ function ensureCreated() {
         transparent: true,
         opacity: 0.22,
         depthWrite: false,
+        depthTest: false, // Never clipped by sloped terrain
     });
     ellipseMesh = new THREE.Mesh(ellipseGeom, ellipseMaterial);
     ellipseMesh.renderOrder = 10;
@@ -43,6 +45,7 @@ function ensureCreated() {
         transparent: true,
         opacity: 0.9,
         depthWrite: false,
+        depthTest: false, // Never clipped by sloped terrain
     });
     ringMesh = new THREE.Mesh(ringGeom, ringMaterial);
     ringMesh.position.y = 0.005;
@@ -68,12 +71,24 @@ export function updatePuttPreview({ ballPos, aimAngleRad, distanceMeters, spread
     const dirX = Math.sin(aimAngleRad);
     const dirZ = Math.cos(aimAngleRad);
 
+    const markerX = ballPos.x + dirX * distanceMeters;
+    const markerZ = ballPos.z + dirZ * distanceMeters;
     group.position.set(
-        ballPos.x + dirX * distanceMeters,
-        MARKER_Y,
-        ballPos.z + dirZ * distanceMeters
+        markerX,
+        contourHeightAt(markerX, markerZ) + MARKER_LIFT,
+        markerZ
     );
-    group.rotation.y = aimAngleRad;
+
+    // Aim yaw + tilt to the local terrain slope
+    const yawQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), aimAngleRad);
+    const grad = contourGradientAt(markerX, markerZ);
+    if (grad) {
+        const normal = new THREE.Vector3(-grad.x, 1, -grad.z).normalize();
+        const tiltQ = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
+        group.quaternion.copy(tiltQ).multiply(yawQ);
+    } else {
+        group.quaternion.copy(yawQ);
+    }
 
     const semiLength = Math.max(0.25, distanceMeters * spreadFrac);
     const semiWidth = Math.max(0.15, semiLength * 0.35);
