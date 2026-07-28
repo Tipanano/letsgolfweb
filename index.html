@@ -596,12 +596,17 @@
 
             <!-- Segmented Control for tabs -->
             <div id="hole-tabs" style="display: flex; margin-bottom: 20px; border-bottom: 2px solid #e0e0e0;">
+                <button id="tab-courses" class="hole-tab" style="flex: 1; padding: 12px; border: none; background: none; cursor: pointer; color: #666; border-bottom: 3px solid transparent; transition: all 0.2s;">Courses</button>
                 <button id="tab-official" class="hole-tab active" style="flex: 1; padding: 12px; border: none; background: none; cursor: pointer; font-weight: bold; color: #4CAF50; border-bottom: 3px solid #4CAF50; transition: all 0.2s;">Official Holes</button>
                 <button id="tab-community" class="hole-tab" style="flex: 1; padding: 12px; border: none; background: none; cursor: pointer; color: #666; border-bottom: 3px solid transparent; transition: all 0.2s;">Community Holes</button>
                 <button id="tab-yours" class="hole-tab" style="flex: 1; padding: 12px; border: none; background: none; cursor: pointer; color: #666; border-bottom: 3px solid transparent; transition: all 0.2s;">Your Holes</button>
             </div>
 
             <!-- Tab Content -->
+            <div id="tab-content-courses" class="tab-content" style="display: none; min-height: 200px;">
+                <div id="courses-list" style="max-height: 420px; overflow-y: auto;"></div>
+            </div>
+
             <div id="tab-content-official" class="tab-content" style="display: block; min-height: 200px;">
                 <div id="official-holes-loading" style="text-align: center; padding: 40px 20px; color: #666;">
                     <div style="font-size: 1.1em; margin-bottom: 10px;">Loading official holes...</div>

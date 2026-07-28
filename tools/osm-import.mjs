@@ -23,26 +23,17 @@ const ROUGH_END_CAP = 30;        // m: corridor extension past tee/green
 const M_PER_DEG_LAT = 110540;
 const M_PER_DEG_LON_EQ = 111320;
 
-const [, , inputPath, holePattern, outputPath] = process.argv;
-if (!inputPath || !holePattern || !outputPath) {
-    console.error('Usage: node tools/osm-import.mjs <overpass.json> <holeNamePattern> <out.json>');
-    process.exit(1);
-}
+// CLI:
+//   Single hole:  node tools/osm-import.mjs <overpass.json> <holeNamePattern> <out.json>
+//   Full course:  node tools/osm-import.mjs <overpass.json> --course "<pattern with {n}>" <holes> "<courseName>" <out.json>
+//   e.g.          node tools/osm-import.mjs carnoustie.json --course "^{n}\\. " 18 "Carnoustie Championship" course.json
+const argv = process.argv.slice(2);
+const courseMode = argv[1] === '--course';
 
-const data = JSON.parse(readFileSync(inputPath, 'utf8'));
+const data = JSON.parse(readFileSync(argv[0], 'utf8'));
 const elements = data.elements || [];
 
-// --- Pick the hole line ---
-const holeRe = new RegExp(holePattern);
-const holeLine = elements.find(e =>
-    e.type === 'way' && e.tags?.golf === 'hole' &&
-    holeRe.test(e.tags.name || '') && (e.geometry?.length ?? 0) >= 2);
-if (!holeLine) {
-    console.error(`No golf=hole way matching /${holePattern}/`);
-    process.exit(1);
-}
-console.log(`Hole: "${holeLine.tags.name}" par ${holeLine.tags.par ?? '?'} (${holeLine.geometry.length} line points)`);
-
+function convertHole(holeLine) {
 // --- Local projection: meters east/north of the hole line start ---
 const lat0 = holeLine.geometry[0].lat;
 const lon0 = holeLine.geometry[0].lon;
@@ -202,7 +193,51 @@ const layout = {
     flagPositions: [{ number: 1, x: flag.x, y: 0, z: flag.z }],
 };
 
-writeFileSync(outputPath, JSON.stringify(layout, null, 1));
-console.log(`Wrote ${outputPath}: par ${layout.par}, ${layout.lengthMeters}m, ` +
-    `${layout.fairways.length} fairways, ${layout.greens.length} greens, ` +
-    `${layout.bunkers.length} bunkers, ${layout.waterHazards.length} water`);
+console.log(`  "${layout.name}": par ${layout.par}, ${layout.lengthMeters}m, ` +
+    `${layout.fairways.length} fw, ${layout.greens.length} gr, ` +
+    `${layout.bunkers.length} bk, ${layout.waterHazards.length} wa`);
+return layout;
+}
+
+function findHoleLine(pattern) {
+    const re = new RegExp(pattern);
+    return elements.find(e =>
+        e.type === 'way' && e.tags?.golf === 'hole' &&
+        re.test(e.tags.name || '') && (e.geometry?.length ?? 0) >= 2) || null;
+}
+
+if (courseMode) {
+    const [, , patternTemplate, holeCountStr, courseName, outPath] = argv;
+    const holeCount = parseInt(holeCountStr, 10);
+    if (!patternTemplate || !holeCount || !courseName || !outPath) {
+        console.error('Usage: node tools/osm-import.mjs <overpass.json> --course "<pattern with {n}>" <holes> "<name>" <out.json>');
+        process.exit(1);
+    }
+    const holes = [];
+    for (let n = 1; n <= holeCount; n++) {
+        const line = findHoleLine(patternTemplate.replace('{n}', String(n)));
+        if (!line) {
+            console.error(`Hole ${n}: no golf=hole match — skipping`);
+            continue;
+        }
+        holes.push(convertHole(line));
+    }
+    const course = {
+        formatVersion: 1,
+        name: courseName,
+        attribution: 'Course data © OpenStreetMap contributors (ODbL)',
+        par: holes.reduce((s, h) => s + (h.par || 4), 0),
+        holes,
+    };
+    writeFileSync(outPath, JSON.stringify(course));
+    console.log(`Wrote ${outPath}: ${holes.length}/${holeCount} holes, course par ${course.par}`);
+} else {
+    const [, holePattern, outPath] = argv;
+    const line = findHoleLine(holePattern);
+    if (!line) {
+        console.error(`No golf=hole way matching /${holePattern}/`);
+        process.exit(1);
+    }
+    const layout = convertHole(line);
+    writeFileSync(outPath, JSON.stringify(layout, null, 1));
+}

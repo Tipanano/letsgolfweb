@@ -9,11 +9,13 @@ import { courseManager } from './courseManager.js';
 const modal = document.getElementById('play-hole-modal');
 const closeBtn = document.getElementById('close-play-hole-modal');
 const tabButtons = {
+    courses: document.getElementById('tab-courses'),
     official: document.getElementById('tab-official'),
     community: document.getElementById('tab-community'),
     yours: document.getElementById('tab-yours')
 };
 const tabContents = {
+    courses: document.getElementById('tab-content-courses'),
     official: document.getElementById('tab-content-official'),
     community: document.getElementById('tab-content-community'),
     yours: document.getElementById('tab-content-yours')
@@ -25,7 +27,7 @@ const yourHolesLoading = document.getElementById('your-holes-loading');
 const yourHolesList = document.getElementById('your-holes-list');
 const yourHolesEmpty = document.getElementById('your-holes-empty');
 
-let currentTab = 'official';
+let currentTab = 'courses';
 let onHoleSelectedCallback = null;
 
 /**
@@ -35,13 +37,7 @@ let onHoleSelectedCallback = null;
 export function showModal(callback) {
     onHoleSelectedCallback = callback;
     modal.style.display = 'flex';
-
-    // Load holes for the current tab
-    if (currentTab === 'official') {
-        loadOfficialHoles();
-    } else if (currentTab === 'yours') {
-        loadUserHoles();
-    }
+    switchTab(currentTab); // Styles the tabs and loads the current tab's data
 }
 
 /**
@@ -82,7 +78,79 @@ function switchTab(tabName) {
         loadOfficialHoles();
     } else if (tabName === 'yours') {
         loadUserHoles();
+    } else if (tabName === 'courses') {
+        loadCourses();
     }
+}
+
+// --- Bundled courses (static JSON, imported from OpenStreetMap) ---
+const BUNDLED_COURSES = [
+    { file: 'courses/carnoustie-championship.json' },
+];
+const courseCache = new Map();
+
+async function loadCourses() {
+    const list = document.getElementById('courses-list');
+    if (!list) return;
+    list.innerHTML = '<p style="color:#666; text-align:center; padding:30px;">Loading courses…</p>';
+
+    const cards = [];
+    for (const entry of BUNDLED_COURSES) {
+        try {
+            let course = courseCache.get(entry.file);
+            if (!course) {
+                const res = await fetch(entry.file);
+                course = await res.json();
+                courseCache.set(entry.file, course);
+            }
+            cards.push(createCourseCard(course));
+        } catch (e) {
+            console.error('Failed to load course', entry.file, e);
+        }
+    }
+
+    list.innerHTML = '';
+    if (cards.length === 0) {
+        list.innerHTML = '<p style="color:#666; text-align:center; padding:30px;">No courses available.</p>';
+        return;
+    }
+    cards.forEach(c => list.appendChild(c));
+}
+
+function createCourseCard(course) {
+    const card = document.createElement('div');
+    card.style.cssText = 'border:1px solid #e0e0e0; border-radius:8px; padding:14px 16px; margin-bottom:12px; background:#fafafa;';
+
+    const head = document.createElement('div');
+    head.style.cssText = 'display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px;';
+    head.innerHTML = `<strong style="font-size:1.05em; color:#2e7d32;">${course.name}</strong>` +
+        `<span style="color:#666; font-size:0.85em;">Par ${course.par} · ${course.holes.length} holes</span>`;
+    card.appendChild(head);
+
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:grid; grid-template-columns:repeat(6, 1fr); gap:6px;';
+    course.holes.forEach((hole, i) => {
+        const btn = document.createElement('button');
+        btn.style.cssText = 'padding:8px 4px; border:1px solid #c8e6c9; border-radius:6px; background:white; cursor:pointer; font-size:0.82em; line-height:1.3;';
+        btn.innerHTML = `<b>${i + 1}</b><br><span style="color:#888;">Par ${hole.par} · ${hole.lengthMeters}m</span>`;
+        btn.addEventListener('mouseenter', () => { btn.style.background = '#e8f5e9'; });
+        btn.addEventListener('mouseleave', () => { btn.style.background = 'white'; });
+        btn.addEventListener('click', () => {
+            localStorage.setItem('previewHoleData', JSON.stringify(hole));
+            hideModal();
+            if (onHoleSelectedCallback) onHoleSelectedCallback(hole);
+        });
+        grid.appendChild(btn);
+    });
+    card.appendChild(grid);
+
+    if (course.attribution) {
+        const attr = document.createElement('div');
+        attr.style.cssText = 'margin-top:8px; font-size:0.72em; color:#999;';
+        attr.textContent = course.attribution;
+        card.appendChild(attr);
+    }
+    return card;
 }
 
 /**
@@ -267,6 +335,7 @@ function createHoleListItem(hole) {
 closeBtn.addEventListener('click', hideModal);
 
 // Tab click handlers
+tabButtons.courses.addEventListener('click', () => switchTab('courses'));
 tabButtons.official.addEventListener('click', () => switchTab('official'));
 tabButtons.community.addEventListener('click', () => switchTab('community'));
 tabButtons.yours.addEventListener('click', () => switchTab('yours'));
