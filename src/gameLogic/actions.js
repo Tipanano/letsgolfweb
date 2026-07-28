@@ -32,7 +32,11 @@ import {
     prepareForTeeShotAfterHoleOut,
     returnToTee,
     moveToFormerPosition,
-    isPracticeMode
+    isPracticeMode,
+    isRoundActive,
+    hasNextRoundHole,
+    advanceToNextHole,
+    endRound
 } from '../modes/playHole.js';
 import { getFlagPosition, setFlagstickVisibility } from '../visuals/holeView.js'; // Import flag position getter AND visibility setter
 import { getActiveCameraMode, setCameraBehindBall, snapFollowCameraToBall, CameraMode, removeTrajectoryLine, applyAimAngleToCamera, setCameraBehindBallLookingAtTarget, setInitialFollowCameraLookingAtTarget, setBallScale, resetStaticCameraZoom, setBallHalo, updateAimIndicator, BALL_RADIUS } from '../visuals/core.js'; // Import camera functions, line removal, aim application, setBallScale, AND resetStaticCameraZoom
@@ -544,8 +548,21 @@ export function resetSwing() {
     if (currentMode === 'play-hole') {
         const holeJustCompleted = getHoleJustCompleted();
 
-        // Case 1: Holed out - return to tee
+        // Case 1: Holed out
         if (holeJustCompleted) {
+            // Course round: advance to the next hole, or show the scorecard
+            if (isRoundActive()) {
+                if (hasNextRoundHole()) {
+                    advanceToNextHole().catch(e => console.error('Round advance failed:', e));
+                } else {
+                    const summary = endRound();
+                    gameAlert.show(summary.text, 'Round Complete');
+                    returnToTee();
+                    resetSwingState();
+                    showAddressHint(getCurrentShotType(), { hasClub: !!getSelectedClub() });
+                }
+                return;
+            }
             console.log('resetSwing: Hole completed, returning to tee');
             returnToTee(); // Updates playHole internal state
             resetSwingState(); // Full reset with UI and visuals (gets position from playHole)

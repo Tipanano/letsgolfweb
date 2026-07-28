@@ -51,7 +51,7 @@ function generateNewCTFHole() {
 
 // Function to change the game mode
 // practiceType: 'chip' | 'putt' — starts play-hole mode as the short-game practice green
-export async function setGameMode(newMode, initialHoleName = null, targetDistance = null, practiceType = null) { // Made async, added initialHoleName and targetDistance
+export async function setGameMode(newMode, initialHoleName = null, targetDistance = null, practiceType = null, courseRound = null) { // Made async, added initialHoleName and targetDistance
     if (!Object.values(GAME_MODES).includes(newMode)) {
         console.error(`Attempted to switch to invalid game mode: ${newMode}`);
         return;
@@ -98,7 +98,10 @@ export async function setGameMode(newMode, initialHoleName = null, targetDistanc
         logic.resetSwing(); // Reset swing state for CTF mode (sets gameState to 'ready')
         visuals.showBallAtAddress(); // Ensure ball is shown
     } else if (currentMode === GAME_MODES.PLAY_HOLE) {
-        if (practiceType) {
+        if (courseRound) {
+            // Full round on a bundled course (sequential holes + scorecard)
+            await playHole.startCourseRound(courseRound);
+        } else if (practiceType) {
             // Short-game practice green (chipping/putting practice)
             await playHole.initializePracticeMode(practiceType);
         } else {
@@ -306,16 +309,29 @@ document.getElementById('mode-btn-closest')?.addEventListener('click', async () 
     }
 });
 
-document.getElementById('mode-btn-hole')?.addEventListener('click', async () => {
-    const canProceed = await checkMultiplayerBeforeSinglePlayer();
-    if (canProceed) {
-        // Show hole selection modal
-        playHoleModal.showModal((holeData) => {
-            // Hole selected, start game
+function openHoleModal() {
+    playHoleModal.showModal(
+        (holeData) => {
+            // Single hole selected
             ui.showGameView();
             setGameMode(GAME_MODES.PLAY_HOLE);
-        });
-    }
+        },
+        (course) => {
+            // Full round selected
+            ui.showGameView();
+            setGameMode(GAME_MODES.PLAY_HOLE, null, null, null, course);
+        }
+    );
+}
+
+document.getElementById('mode-btn-hole')?.addEventListener('click', async () => {
+    const canProceed = await checkMultiplayerBeforeSinglePlayer();
+    if (canProceed) openHoleModal();
+});
+
+document.getElementById('mode-btn-course')?.addEventListener('click', async () => {
+    const canProceed = await checkMultiplayerBeforeSinglePlayer();
+    if (canProceed) openHoleModal();
 });
 
 // --- Connect "Back to Menu" Button ---

@@ -33,108 +33,16 @@ const HOLE_RADIUS_METERS = 0.108 / 2; // Regulation hole diameter is 4.25 inches
 export async function initializeMode(holeName) { // Made async, added holeName parameter
     console.log(`Initializing Play Hole mode for hole: ${holeName || 'default'}...`);
     currentModeActive = true;
-    holeJustCompleted = false; // Ensure this is reset when a hole is initialized
+    holeJustCompleted = false;
 
     // Check for preview mode (hole maker preview)
     const previewData = localStorage.getItem('previewHoleData');
     if (previewData && !holeName) {
         console.log('Preview mode detected, loading custom hole from hole maker...');
         try {
-            // Import holeLoader to process the preview data
-            const { processHoleLayout } = await import('../holeLoader.js');
-
-            const previewLayout = JSON.parse(previewData);
-
-            // Process the layout using holeLoader
-            currentHoleLayout = processHoleLayout(previewLayout);
-
-            if (!currentHoleLayout) {
-                throw new Error('Failed to process hole layout');
-            }
-
-            // Set initial position (XZ only for now)
-            // Preview holes from hole maker are already in meters, no conversion needed
-            let initialX = 0, initialZ = 0;
-            if (currentHoleLayout.tee?.center) {
-                initialX = currentHoleLayout.tee.center.x;
-                initialZ = currentHoleLayout.tee.center.z;
-            }
-
-            // Initialize other state
-            shotsTaken = 0;
-            score = 0;
-            currentLie = 'TEE';
-            formerBallPosition = null;
-            formerLie = null;
-            currentHoleIndex = 0;
-
             localStorage.removeItem('previewHoleData');
-
-            // Reset swing speed to default (90%)
-            const defaultSwingSpeed = 90;
-            const { setSwingSpeed } = await import('../gameLogic/state.js');
-            setSwingSpeed(defaultSwingSpeed);
-
-            // Update fullscreen power slider to match
-            const fsPowerSlider = document.getElementById('fs-power-slider');
-            if (fsPowerSlider) {
-                fsPowerSlider.value = defaultSwingSpeed;
-                const fsPowerDisplay = document.getElementById('fs-power-display');
-                const fsPowerValue = document.getElementById('fs-power-value');
-                if (fsPowerDisplay) fsPowerDisplay.textContent = `${defaultSwingSpeed}%`;
-                if (fsPowerValue) fsPowerValue.textContent = `${defaultSwingSpeed}%`;
-            }
-
-            // Clear club selection - player must choose for first shot
-            const { clearSelectedClub } = await import('../gameLogic/state.js');
-            clearSelectedClub();
-            ui.clearClubSelection();
-
-            // Reset ball position to center (default stance)
-            const centerBallPosition = Math.floor(ui.getBallPositionLevels() / 2);
-            ui.setBallPosition(centerBallPosition);
-
-            console.log('New hole - defaults set: power 90%, stance center, club selection cleared');
-
-            // Draw hole first (builds terrain mesh)
-            visuals.drawHole(currentHoleLayout);
-
-            // Now query terrain height at tee position
-            const { queryTerrainHeight } = await import('../visuals.js');
-            const groundHeight = queryTerrainHeight(initialX, initialZ);
-            currentBallPosition = { x: initialX, y: groundHeight + BALL_RADIUS, z: initialZ };
-
-            // Reset visuals with correct ball height
-            visuals.resetVisuals(currentBallPosition, currentLie);
-
-            // Set shot type based on lie
-            if (currentLie === 'GREEN') {
-                setShotType('putt');
-            } else {
-                // For tee or any non-green lie, set to full swing
-                setShotType('full');
-                ui.setShotTypeRadio('full');
-            }
-
-            const initialDistToFlag = calculateDistanceToFlag(currentBallPosition, currentHoleLayout.flagPosition);
-
-            // Update UI overlay with hole info
-            ui.updateVisualOverlayInfo('play-hole', {
-                holeNum: 1,
-                par: currentHoleLayout.par || 4,
-                distToFlag: initialDistToFlag,
-                elevDelta: elevationDeltaToFlag(currentBallPosition, currentHoleLayout.flagPosition),
-                shotNum: shotsTaken + 1,
-                lie: currentLie,
-                wind: 'Calm',
-                playerName: playerManager.getDisplayName(),
-                totalScore: score,
-                position: '1st'
-            });
-
-            // Activate camera
-            visuals.activateHoleViewCamera();
-
+            roundCourse = null; // Single-hole play, not a round
+            await initializeHoleFromRawLayout(JSON.parse(previewData));
             console.log('Preview hole loaded and ready to play!');
             return;
         } catch (error) {
@@ -152,6 +60,136 @@ export async function initializeMode(holeName) { // Made async, added holeName p
     currentModeActive = false;
 }
 
+/**
+ * Loads and prepares one hole from a raw layout object (hole-maker format).
+ * Used by the hole-maker preview path and by course rounds.
+ */
+export async function initializeHoleFromRawLayout(rawLayout, { holeNumber = 1, preserveScore = false } = {}) {
+    currentModeActive = true;
+    holeJustCompleted = false;
+
+    const { processHoleLayout } = await import('../holeLoader.js');
+    currentHoleLayout = processHoleLayout(rawLayout);
+    if (!currentHoleLayout) throw new Error('Failed to process hole layout');
+
+    let initialX = 0, initialZ = 0;
+    if (currentHoleLayout.tee?.center) {
+        initialX = currentHoleLayout.tee.center.x;
+        initialZ = currentHoleLayout.tee.center.z;
+    }
+
+    shotsTaken = 0;
+    if (!preserveScore) score = 0;
+    currentLie = 'TEE';
+    formerBallPosition = null;
+    formerLie = null;
+    currentHoleIndex = holeNumber - 1;
+
+    // Per-hole defaults: full power, center stance, no club selected
+    const { setSwingSpeed, setGameState } = await import('../gameLogic/state.js');
+    setSwingSpeed(90);
+    const fsPowerSlider = document.getElementById('fs-power-slider');
+    if (fsPowerSlider) {
+        fsPowerSlider.value = 90;
+        const fsPowerDisplay = document.getElementById('fs-power-display');
+        const fsPowerValue = document.getElementById('fs-power-value');
+        if (fsPowerDisplay) fsPowerDisplay.textContent = '90%';
+        if (fsPowerValue) fsPowerValue.textContent = '90%';
+    }
+    const { clearSelectedClub } = await import('../gameLogic/state.js');
+    clearSelectedClub();
+    ui.clearClubSelection();
+    ui.setBallPosition(Math.floor(ui.getBallPositionLevels() / 2));
+
+    // Draw hole first (builds terrain mesh + field), then place the ball
+    visuals.drawHole(currentHoleLayout);
+    const groundHeight = visuals.queryTerrainHeight(initialX, initialZ);
+    currentBallPosition = { x: initialX, y: groundHeight + BALL_RADIUS, z: initialZ };
+    visuals.resetVisuals(currentBallPosition, currentLie);
+
+    setShotType('full');
+    ui.setShotTypeRadio('full');
+    setGameState('ready');
+
+    const initialDistToFlag = calculateDistanceToFlag(currentBallPosition, currentHoleLayout.flagPosition);
+    ui.updateVisualOverlayInfo('play-hole', {
+        holeNum: holeNumber,
+        par: currentHoleLayout.par || 4,
+        distToFlag: initialDistToFlag,
+        elevDelta: elevationDeltaToFlag(currentBallPosition, currentHoleLayout.flagPosition),
+        shotNum: 1,
+        lie: currentLie,
+        wind: 'Calm',
+        playerName: playerManager.getDisplayName(),
+        totalScore: roundCourse ? roundRelativeToPar() : score,
+        position: '1st'
+    });
+
+    visuals.activateHoleViewCamera();
+    showAddressHint('full', { hasClub: false });
+}
+
+// --- Course Rounds (sequential 18-hole play with a scorecard) ---
+
+let roundCourse = null;     // The course container being played, or null
+let roundHoleIndex = 0;     // 0-based index into roundCourse.holes
+let roundScores = [];       // [{ hole, par, strokes }]
+
+export function isRoundActive() {
+    return !!roundCourse;
+}
+
+export function hasNextRoundHole() {
+    return !!roundCourse && roundHoleIndex < roundCourse.holes.length - 1;
+}
+
+/** Running total relative to par over COMPLETED holes. */
+function roundRelativeToPar() {
+    return roundScores.reduce((s, h) => s + (h.strokes - h.par), 0);
+}
+
+export async function startCourseRound(course) {
+    console.log(`Starting round: ${course.name} (${course.holes.length} holes)`);
+    roundCourse = course;
+    roundHoleIndex = 0;
+    roundScores = [];
+    score = 0;
+    await initializeHoleFromRawLayout(course.holes[0], { holeNumber: 1, preserveScore: true });
+}
+
+export async function advanceToNextHole() {
+    if (!hasNextRoundHole()) return;
+    roundHoleIndex++;
+    await initializeHoleFromRawLayout(roundCourse.holes[roundHoleIndex],
+        { holeNumber: roundHoleIndex + 1, preserveScore: true });
+}
+
+/** Records the just-finished hole. Called from handleShotResult on hole-out. */
+function recordRoundHole() {
+    if (!roundCourse) return;
+    roundScores.push({
+        hole: roundHoleIndex + 1,
+        par: currentHoleLayout?.par || 4,
+        strokes: shotsTaken,
+    });
+}
+
+/** Ends the round and returns a summary { text, total, relative }. */
+export function endRound() {
+    const total = roundScores.reduce((s, h) => s + h.strokes, 0);
+    const relative = roundRelativeToPar();
+    const par = roundCourse?.par || roundScores.reduce((s, h) => s + h.par, 0);
+    const name = roundCourse?.name || 'Course';
+    const line = (from, to) => roundScores.slice(from, to).map(h => h.strokes).join(' ');
+    const text = `${name}\n\n` +
+        `Out:  ${line(0, 9)}\n` +
+        (roundScores.length > 9 ? `In:   ${line(9, 18)}\n` : '') +
+        `\nTotal: ${total} (${relative === 0 ? 'E' : relative > 0 ? '+' + relative : relative}) — par ${par}`;
+    roundCourse = null;
+    roundHoleIndex = 0;
+    return { text, total, relative };
+}
+
 export function terminateMode() {
     console.log("Terminating Play Hole mode.");
     // Consider saving state here if abrupt termination is possible
@@ -160,6 +198,8 @@ export function terminateMode() {
     currentHoleLayout = null;
     practiceMode = false;
     practicePlacement = null;
+    roundCourse = null;
+    roundScores = [];
     hidePracticePanel();
 }
 
@@ -326,6 +366,17 @@ export function handleShotResult(shotData) {
         console.log(`HOLE OUT! Strokes this hole: ${shotsTaken}. Total round score: ${score}`);
         if (practiceMode) {
             ui.updateStatus(`Holed it! 🎉 Press (n) to replay this spot, or pick a new one.`);
+        } else if (roundCourse) {
+            recordRoundHole();
+            const par = currentHoleLayout?.par || 4;
+            const diff = shotsTaken - par;
+            const scoreName = diff <= -2 ? 'Eagle!' : diff === -1 ? 'Birdie!' : diff === 0 ? 'Par.' :
+                              diff === 1 ? 'Bogey.' : `+${diff}.`;
+            const rel = roundRelativeToPar();
+            const relText = rel === 0 ? 'E' : rel > 0 ? '+' + rel : rel;
+            ui.updateStatus(hasNextRoundHole()
+                ? `${scoreName} ${shotsTaken} on hole ${roundHoleIndex + 1} (${relText} thru ${roundHoleIndex + 1}). Press (n) for hole ${roundHoleIndex + 2}.`
+                : `${scoreName} Round complete: ${score} (${relText}). Press (n) for the scorecard.`);
         } else {
             ui.updateStatus(`Hole ${currentHoleIndex + 1} complete! Score: ${shotsTaken}. Press (n) to play again.`);
         }

@@ -29,13 +29,15 @@ const yourHolesEmpty = document.getElementById('your-holes-empty');
 
 let currentTab = 'courses';
 let onHoleSelectedCallback = null;
+let onRoundSelectedCallback = null;
 
 /**
  * Show the modal
  * @param {Function} callback - Called when a hole is selected with (holeData)
  */
-export function showModal(callback) {
+export function showModal(callback, roundCallback = null) {
     onHoleSelectedCallback = callback;
+    onRoundSelectedCallback = roundCallback;
     modal.style.display = 'flex';
     switchTab(currentTab); // Styles the tabs and loads the current tab's data
 }
@@ -121,11 +123,27 @@ function createCourseCard(course) {
     const card = document.createElement('div');
     card.style.cssText = 'border:1px solid #e0e0e0; border-radius:8px; padding:14px 16px; margin-bottom:12px; background:#fafafa;';
 
+    const totalLen = course.holes.reduce((s, h) => s + (h.lengthMeters || 0), 0);
+    const bunkers = course.holes.reduce((s, h) => s + (h.bunkers?.length || 0), 0);
+    // Difficulty proxy: mostly length, salted with bunker density
+    const diffScore = totalLen + bunkers * 8;
+    const stars = diffScore < 5200 ? 2 : diffScore < 5900 ? 3 : diffScore < 6600 ? 4 : 5;
+
     const head = document.createElement('div');
-    head.style.cssText = 'display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px;';
+    head.style.cssText = 'display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;';
     head.innerHTML = `<strong style="font-size:1.05em; color:#2e7d32;">${course.name}</strong>` +
-        `<span style="color:#666; font-size:0.85em;">Par ${course.par} · ${course.holes.length} holes</span>`;
+        `<span style="color:#666; font-size:0.85em;">Par ${course.par} · ${(totalLen / 1000).toFixed(1)}km · ` +
+        `<span title="Difficulty (length + bunkering)" style="color:#e6a817;">${'★'.repeat(stars)}${'☆'.repeat(5 - stars)}</span></span>`;
     card.appendChild(head);
+
+    const roundBtn = document.createElement('button');
+    roundBtn.textContent = '⛳ Play full round';
+    roundBtn.style.cssText = 'width:100%; margin-bottom:10px; padding:9px; border:none; border-radius:6px; background:#2e7d32; color:white; font-weight:bold; cursor:pointer;';
+    roundBtn.addEventListener('click', () => {
+        hideModal();
+        if (onRoundSelectedCallback) onRoundSelectedCallback(course);
+    });
+    card.appendChild(roundBtn);
 
     const grid = document.createElement('div');
     grid.style.cssText = 'display:grid; grid-template-columns:repeat(6, 1fr); gap:6px;';
