@@ -122,6 +122,24 @@ export const SURFACES = {
     texturePath: 'assets/textures/rough.png', // Added texture path
     ballLieOffset: 0.015 // Almost hidden (tuned for 3.5x ball on 0.03 layer)
   },
+  NATIVE_AREA: {
+    name: 'Native Area',
+    color: '#a9945a', // Golden wild grass base
+    bounce: 0.07, // Tall grass swallows the bounce
+    rollOut: 0.12, // Barely rolls
+    spinResponse: 0.25,
+    flightModification: {
+      spinReduction: [0.5, 0.7], // Wild grass kills groove contact
+      launchAngleChange: 2.5,
+      velocityReduction: [0.15, 0.45]
+    },
+    strikeFactors: {
+      fatForgiveness: 0.5,  // Very easy to chunk out of wiry grass
+      thinForgiveness: 1.6  // Ball sits up in the wisps - easy to slide under
+    },
+    height: 0.033, // Layer height: just above thick rough
+    ballLieOffset: 0.02 // Sitting down in the wisps
+  },
   BUNKER: {
     name: 'Bunker',
     color: '#F4A460', // Sandy color

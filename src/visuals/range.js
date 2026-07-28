@@ -1,143 +1,150 @@
-import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
+// src/visuals/range.js
+//
+// Driving range scene, built from a layout object and rendered through the
+// same pipeline as real holes (textured surfaces, noise variation, instanced
+// grass, native areas) — plus target greens with pins and distance labels.
 
-let ground, fairway, green1, green2;
-const Y_OFFSET_GROUND = 0;
-const Y_OFFSET_FAIRWAY = 0.01;
-const Y_OFFSET_GREEN = 0.02;
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
+import { TextureLoader } from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
+import { SURFACES } from '../surfaces.js';
+import { renderRoughAreas, renderFairways, renderGreen, renderBunkers } from './holeRenderer.js';
+import { buildGrass } from './grass.js';
+
+let rangeObjects = []; // Everything added to the scene for the range
+
+function circle(cx, cz, radius, segments = 20, wobble = 0.06) {
+    const verts = [];
+    for (let i = 0; i < segments; i++) {
+        const a = (i / segments) * Math.PI * 2;
+        const r = radius * (1 + wobble * Math.sin(a * 3 + radius));
+        verts.push({ x: +(cx + Math.cos(a) * r).toFixed(2), z: +(cz + Math.sin(a) * r).toFixed(2) });
+    }
+    return verts;
+}
+
+// Target pins: distance from tee (meters), lateral offset, green radius
+const RANGE_TARGETS = [
+    { z: 60, x: -5, r: 6 },
+    { z: 110, x: 9, r: 7 },
+    { z: 160, x: -10, r: 8 },
+    { z: 220, x: 6, r: 9 },
+    { z: 280, x: 0, r: 10 },
+];
+
+function buildRangeLayout() {
+    return {
+        fairways: [{
+            surface: SURFACES.FAIRWAY,
+            vertices: [
+                { x: -14, z: -6 }, { x: 14, z: -6 },
+                { x: 22, z: 40 }, { x: 27, z: 120 }, { x: 26, z: 200 },
+                { x: 22, z: 260 }, { x: 18, z: 310 },
+                { x: -18, z: 310 }, { x: -22, z: 260 },
+                { x: -26, z: 200 }, { x: -27, z: 120 }, { x: -22, z: 40 },
+            ],
+        }],
+        greens: RANGE_TARGETS.map(t => ({
+            surface: SURFACES.GREEN,
+            vertices: circle(t.x, t.z, t.r),
+        })),
+        bunkers: [
+            { type: 'polygon', surface: SURFACES.BUNKER, vertices: circle(16, 104, 4, 16, 0.1) },
+            { type: 'polygon', surface: SURFACES.BUNKER, vertices: circle(-18, 166, 4.5, 16, 0.1) },
+            { type: 'polygon', surface: SURFACES.BUNKER, vertices: circle(14, 226, 5, 16, 0.1) },
+        ],
+        lightRough: [{
+            surface: SURFACES.LIGHT_ROUGH,
+            vertices: [
+                { x: -90, z: -25 }, { x: 90, z: -25 },
+                { x: 90, z: 350 }, { x: -90, z: 350 },
+            ],
+        }],
+        nativeAreas: [
+            { surface: SURFACES.NATIVE_AREA, vertices: circle(52, 85, 13, 16, 0.18) },
+            { surface: SURFACES.NATIVE_AREA, vertices: circle(-55, 130, 16, 16, 0.18) },
+            { surface: SURFACES.NATIVE_AREA, vertices: circle(60, 210, 17, 16, 0.18) },
+            { surface: SURFACES.NATIVE_AREA, vertices: circle(-62, 275, 14, 16, 0.18) },
+        ],
+    };
+}
+
+/** White pin with a red flag and a floating distance label. */
+function createTargetPin(scene, x, z, distanceMeters) {
+    const group = new THREE.Group();
+
+    const poleH = 2.6;
+    const pole = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.03, 0.03, poleH, 8),
+        new THREE.MeshStandardMaterial({ color: 0xffffff })
+    );
+    pole.position.y = poleH / 2;
+    pole.castShadow = true;
+    group.add(pole);
+
+    const cloth = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.55, 0.35),
+        new THREE.MeshBasicMaterial({ color: 0xd93a2b, side: THREE.DoubleSide }) // Unlit: red from every angle
+    );
+    cloth.position.set(0.28, poleH - 0.22, 0);
+    group.add(cloth);
+
+    // Distance label sprite (canvas texture)
+    const canvas = document.createElement('canvas');
+    canvas.width = 128;
+    canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    // Sprites render this texture mirrored — pre-flip so the text reads right
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+    ctx.font = 'bold 40px "Open Sans", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 8;
+    ctx.strokeStyle = 'rgba(20, 35, 26, 0.9)';
+    ctx.strokeText(`${distanceMeters}m`, 64, 32);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(`${distanceMeters}m`, 64, 32);
+    const labelTex = new THREE.CanvasTexture(canvas);
+    const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTex, transparent: true }));
+    label.scale.set(4.5, 2.25, 1);
+    label.position.y = poleH + 1.3;
+    group.add(label);
+
+    group.position.set(x, 0, z);
+    scene.add(group);
+    rangeObjects.push(group);
+}
 
 export function initRangeVisuals(scene) {
+    removeRangeVisuals(scene); // Safety: never double-build
 
-    // --- Ground (Rough) ---
-    const groundGeometry = new THREE.PlaneGeometry(200, 400); // Width, Length
-    const groundMaterial = new THREE.MeshStandardMaterial({ color: 0x228B22, side: THREE.DoubleSide }); // Forest green (rough)
-    ground = new THREE.Mesh(groundGeometry, groundMaterial);
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.y = Y_OFFSET_GROUND;
-    ground.receiveShadow = true;
-    scene.add(ground);
+    const layout = buildRangeLayout();
+    const textureLoader = new TextureLoader();
 
-    // --- Fairway (using ShapeGeometry) ---
-    const fairwayLength = 300;
-    const startWidth = 20;
-    const maxWidth = 40;
-    const curveControlOffset = 30; // How far out the curve control points go
+    renderRoughAreas(layout, scene, textureLoader, rangeObjects);
+    renderBunkers(layout, scene, textureLoader, rangeObjects);
+    renderFairways(layout, scene, textureLoader, rangeObjects);
+    renderGreen(layout, scene, textureLoader, rangeObjects);
+    buildGrass(layout, scene, rangeObjects);
 
-    const fairwayShape = new THREE.Shape();
-
-    // Start at bottom-left corner (relative to shape's local coords)
-    fairwayShape.moveTo(-startWidth / 2, 0);
-
-    // Curve out to max width on the left side
-    fairwayShape.quadraticCurveTo(
-        -maxWidth / 2 - curveControlOffset, fairwayLength * 0.25, // Control point
-        -maxWidth / 2, fairwayLength * 0.5 // End point (midpoint left)
-    );
-
-    // Straight section on left side
-    fairwayShape.lineTo(-maxWidth / 2, fairwayLength * 0.75);
-
-    // Curve back in to start width on the left side
-     fairwayShape.quadraticCurveTo(
-        -maxWidth / 2 - curveControlOffset, fairwayLength * 0.9, // Control point
-        -startWidth / 2, fairwayLength // End point (top-left)
-    );
-
-    // Top edge (straight for simplicity here, could be curved)
-    fairwayShape.lineTo(startWidth / 2, fairwayLength);
-
-    // Curve back in on the right side (mirroring left)
-     fairwayShape.quadraticCurveTo(
-        maxWidth / 2 + curveControlOffset, fairwayLength * 0.9, // Control point
-        maxWidth / 2, fairwayLength * 0.75 // End point (mid-top right)
-    );
-
-    // Straight section on right side
-    fairwayShape.lineTo(maxWidth / 2, fairwayLength * 0.5);
-
-     // Curve out to max width on the right side
-    fairwayShape.quadraticCurveTo(
-        maxWidth / 2 + curveControlOffset, fairwayLength * 0.25, // Control point
-        startWidth / 2, 0 // End point (bottom-right)
-    );
-
-
-    // Close the shape (back to bottom-left)
-    fairwayShape.lineTo(-startWidth / 2, 0);
-
-    const fairwayGeometry = new THREE.ShapeGeometry(fairwayShape);
-    const fairwayMaterial = new THREE.MeshStandardMaterial({ color: 0x3CB371, side: THREE.DoubleSide }); // Medium sea green (fairway)
-    // Translate the geometry so its center is at the local origin (0,0)
-    // It was defined from Y=0 to Y=fairwayLength, so center is at Y=fairwayLength/2
-    fairwayGeometry.translate(0, -fairwayLength / 2, 0);
-
-    fairway = new THREE.Mesh(fairwayGeometry, fairwayMaterial);
-
-    // ShapeGeometry is created in the XY plane. Rotate and position it.
-    fairway.rotation.x = -Math.PI / 2; // Rotate to lay flat
-    fairway.position.y = Y_OFFSET_FAIRWAY; // Place slightly above ground
-    // Now position the mesh's origin (which is the geometry's center)
-    // at the center of where the fairway should be in world space.
-    fairway.position.z = fairwayLength / 2;
-
-
-    fairway.receiveShadow = true;
-    scene.add(fairway);
-
-    // --- Greens ---
-    const greenMaterial = new THREE.MeshStandardMaterial({ color: 0x006400, side: THREE.DoubleSide }); // Dark green (green)
-
-    // Green 1 (Closer)
-    const green1Radius = 10;
-    const green1Geometry = new THREE.CircleGeometry(green1Radius, 32);
-    green1 = new THREE.Mesh(green1Geometry, greenMaterial);
-    green1.rotation.x = -Math.PI / 2;
-    green1.position.set(0, Y_OFFSET_GREEN, 100); // Position 100 units down range
-    green1.receiveShadow = true;
-    scene.add(green1);
-
-    // Green 2 (Further)
-    const green2Radius = 15;
-    const green2Geometry = new THREE.CircleGeometry(green2Radius, 32);
-    green2 = new THREE.Mesh(green2Geometry, greenMaterial);
-    green2.rotation.x = -Math.PI / 2;
-    green2.position.set(0, Y_OFFSET_GREEN, 200); // Position 200 units down range
-    green2.receiveShadow = true;
-    scene.add(green2);
-
-
-    // Add other range elements here later (targets, tee box markers, etc.)
-
-    // Return elements if needed elsewhere (optional)
-    return { ground, fairway, green1, green2 };
+    RANGE_TARGETS.forEach(t => createTargetPin(scene, t.x, t.z, t.z));
 }
 
 export function removeRangeVisuals(scene) {
-    // Remove Greens
-    if (green1) {
-        scene.remove(green1);
-        green1.geometry.dispose();
-        green1.material.dispose();
-        green1 = null;
+    for (const obj of rangeObjects) {
+        scene.remove(obj);
+        obj.traverse?.(child => {
+            child.geometry?.dispose?.();
+            if (child.material) {
+                (Array.isArray(child.material) ? child.material : [child.material])
+                    .forEach(m => { m.map?.dispose?.(); m.dispose?.(); });
+            }
+        });
+        obj.geometry?.dispose?.();
+        if (obj.material) {
+            (Array.isArray(obj.material) ? obj.material : [obj.material])
+                .forEach(m => { m.map?.dispose?.(); m.dispose?.(); });
+        }
     }
-     if (green2) {
-        scene.remove(green2);
-        green2.geometry.dispose();
-        green2.material.dispose();
-        green2 = null;
-    }
-    // Remove Fairway
-    if (fairway) {
-        scene.remove(fairway);
-        fairway.geometry.dispose();
-        fairway.material.dispose();
-        fairway = null;
-    }
-    // Remove Ground
-    if (ground) {
-        scene.remove(ground);
-        ground.geometry.dispose();
-        ground.material.dispose();
-        ground = null;
-    }
-    // Add removal logic for other range elements here
+    rangeObjects = [];
 }

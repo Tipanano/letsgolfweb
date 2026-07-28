@@ -170,6 +170,16 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
         }
     }
 
+    // 5.5 Native Areas (wild grass patches — sit on top of rough layers)
+    if (holeLayout.nativeAreas && Array.isArray(holeLayout.nativeAreas)) {
+        for (let i = 0; i < holeLayout.nativeAreas.length; i++) {
+            const area = holeLayout.nativeAreas[i];
+            if (area.vertices && isPointInPolygon(point, area.vertices)) {
+                return 'NATIVE_AREA';
+            }
+        }
+    }
+
     // 6. Rough Types (Check in order: Thick → Medium → Light for proper layering)
     // Check thick rough first (most penalizing)
     if (holeLayout.thickRough && Array.isArray(holeLayout.thickRough)) {

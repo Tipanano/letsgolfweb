@@ -70,6 +70,11 @@ export function generatePracticeGreenLayout() {
             ],
             surface: 'LIGHT_ROUGH',
         }],
+        nativeAreas: [
+            // Wild golden-grass patches framing the far corners
+            { controlPoints: circleVertices(-30, 82, 9, 16, 0.18), surface: 'NATIVE_AREA' },
+            { controlPoints: circleVertices(30, 21, 7, 16, 0.18), surface: 'NATIVE_AREA' },
+        ],
         flagPositions: [{ number: 1, x: PRACTICE_FLAG.x, y: 0, z: PRACTICE_FLAG.z }],
         // Smooth analytic contours (see greenContours.js): a gentle
         // back-to-front tilt, a crown on the right, a raised back tier, and a

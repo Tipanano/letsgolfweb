@@ -231,6 +231,20 @@ export function processHoleLayout(sourceLayout) {
             });
         }
 
+        // Process Native Areas (wild grass)
+        if (layout.nativeAreas && Array.isArray(layout.nativeAreas)) {
+            layout.nativeAreas.forEach(area => {
+                if (area.controlPoints) {
+                    area.vertices = area.controlPoints;
+                    delete area.controlPoints;
+                }
+                if (area.vertices) {
+                    area.surface = SURFACES[area.surface];
+                    area.type = 'polygon';
+                }
+            });
+        }
+
         // Legacy rough support (single rough polygon)
         if (layout.rough && layout.rough.vertices) {
             layout.rough.surface = SURFACES[layout.rough.surface];

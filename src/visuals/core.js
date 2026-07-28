@@ -167,13 +167,80 @@ function setupMouseCameraControls(canvasElement) {
 }
 
 
+/**
+ * Gradient sky dome + distant treeline silhouette. Both ignore fog (the sky
+ * IS the fog color at the horizon) and render behind everything.
+ */
+function createSkyAndHorizon(targetScene) {
+    // Sky: vertex-colored dome, deep blue zenith → pale warm horizon
+    const skyGeom = new THREE.SphereGeometry(850, 32, 18);
+    const pos = skyGeom.getAttribute('position');
+    const colors = new Float32Array(pos.count * 3);
+    const zenith = new THREE.Color(0x3f7fc2);
+    const horizon = new THREE.Color(0xd8ecf7);
+    const c = new THREE.Color();
+    for (let i = 0; i < pos.count; i++) {
+        // 0 at horizon (and below), 1 at zenith; curve biases color to horizon
+        const t = Math.pow(Math.max(0, pos.getY(i) / 850), 0.55);
+        c.copy(horizon).lerp(zenith, t);
+        colors[i * 3] = c.r;
+        colors[i * 3 + 1] = c.g;
+        colors[i * 3 + 2] = c.b;
+    }
+    skyGeom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    const skyMat = new THREE.MeshBasicMaterial({
+        vertexColors: true,
+        side: THREE.BackSide,
+        fog: false,
+        depthWrite: false,
+    });
+    const sky = new THREE.Mesh(skyGeom, skyMat);
+    sky.renderOrder = -2;
+    targetScene.add(sky);
+
+    // Treeline: a distant ring silhouette with a gently varied top edge
+    const SEGMENTS = 96;
+    const RADIUS = 480; // Close enough that fog softens but doesn't erase it
+    const treeGeom = new THREE.CylinderGeometry(RADIUS, RADIUS, 1, SEGMENTS, 1, true);
+    const tPos = treeGeom.getAttribute('position');
+    for (let i = 0; i < tPos.count; i++) {
+        if (tPos.getY(i) > 0) {
+            const angle = Math.atan2(tPos.getZ(i), tPos.getX(i));
+            // Layered sine noise for an organic canopy line (8–22m tall)
+            const h = 14 + 6 * Math.sin(angle * 7.3) + 3 * Math.sin(angle * 17.7 + 2.1);
+            tPos.setY(i, h);
+        } else {
+            tPos.setY(i, -2);
+        }
+    }
+    treeGeom.computeVertexNormals();
+    const treeMat = new THREE.MeshBasicMaterial({
+        color: 0x2a4a30,
+        side: THREE.BackSide,
+        fog: true, // Haze softens it into the distance
+    });
+    const treeline = new THREE.Mesh(treeGeom, treeMat);
+    treeline.renderOrder = -1;
+    targetScene.add(treeline);
+
+    // Earth plane: extends the ground to the treeline so layouts never float
+    // in a void. Sits below every surface layer; fog blends it out.
+    const earthGeom = new THREE.PlaneGeometry(1600, 1600);
+    const earthMat = new THREE.MeshLambertMaterial({ color: 0x315c34 });
+    const earth = new THREE.Mesh(earthGeom, earthMat);
+    earth.rotation.x = -Math.PI / 2;
+    earth.position.y = -0.08;
+    earth.receiveShadow = true;
+    targetScene.add(earth);
+}
+
 export function initCoreVisuals(canvasElement) {
 
     // 1. Scene
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87CEEB); // Sky blue background
-    // Increase fog start and far distance
-    // scene.fog = new THREE.Fog(0x87CEEB, 150, 500); // Start further, end further // TEMP DISABLED
+    scene.background = new THREE.Color(0xbfdff2); // Fallback behind the sky dome
+    scene.fog = new THREE.Fog(0xcfe4f2, 220, 750); // Distance haze, matches horizon
+    createSkyAndHorizon(scene);
 
     // 2. Camera (Default - Range View)
     const aspectRatio = canvasElement.clientWidth / canvasElement.clientHeight;
@@ -190,6 +257,9 @@ export function initCoreVisuals(canvasElement) {
     renderer.setSize(canvasElement.clientWidth, canvasElement.clientHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Soft shadow edges
+    renderer.toneMapping = THREE.ACESFilmicToneMapping; // Filmic color response
+    renderer.toneMappingExposure = 1.15;
 
     // 4. Lighting
     // Lighting: modest ambient + sky/ground hemisphere for natural color,

@@ -324,6 +324,7 @@ export function renderRoughAreas(holeLayout, scene, textureLoader, objectsArray)
         { key: 'lightRough', name: 'Light Rough', reps: 10 },
         { key: 'mediumRough', name: 'Medium Rough', reps: 10 },
         { key: 'thickRough', name: 'Thick Rough', reps: 10 },
+        { key: 'nativeAreas', name: 'Native Area', reps: 10 }, // Wild grass base
         { key: 'rough', name: 'Rough (Legacy)', reps: 10 } // Legacy support
     ];
 

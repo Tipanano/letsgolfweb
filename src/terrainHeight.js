@@ -110,6 +110,10 @@ export function buildTerrainMesh(holeLayout) {
         }
     });
 
+    if (holeLayout.nativeAreas && Array.isArray(holeLayout.nativeAreas)) {
+        holeLayout.nativeAreas.forEach((n, idx) => addSurface(n, `native_${idx}`));
+    }
+
     if (holeLayout.bunkers && Array.isArray(holeLayout.bunkers)) {
         holeLayout.bunkers.forEach((b, idx) => addSurface(b, `bunker_${idx}`));
     }
