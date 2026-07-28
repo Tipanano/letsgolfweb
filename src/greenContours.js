@@ -132,9 +132,60 @@ function polygonArea(verts) {
     return Math.abs(a / 2);
 }
 
+// --- Authored hole-wide terrain features (layout.terrainFeatures) ---
+// { type: 'bump',    x, z, radius, height }           (height<0 = hollow)
+// { type: 'plateau', x, z, radius, height, rim }      (flat top, feathered edge)
+// { type: 'ridge'|'valley', x, z, angle, length, width, height }
+
+function makeBumpFeature(f) {
+    const sigma = Math.max(0.5, (f.radius ?? 8) / 2);
+    const reach = sigma * 3.2;
+    return {
+        bbox: { minX: f.x - reach, maxX: f.x + reach, minZ: f.z - reach, maxZ: f.z + reach },
+        evalAt(x, z) {
+            const dx = x - f.x, dz = z - f.z;
+            return f.height * Math.exp(-(dx * dx + dz * dz) / (2 * sigma * sigma));
+        },
+    };
+}
+
+function makePlateauFeature(f) {
+    const radius = f.radius ?? 8;
+    const rim = Math.max(0.5, f.rim ?? radius * 0.5);
+    return {
+        bbox: { minX: f.x - radius, maxX: f.x + radius, minZ: f.z - radius, maxZ: f.z + radius },
+        evalAt(x, z) {
+            const d = Math.sqrt((x - f.x) ** 2 + (z - f.z) ** 2);
+            if (d >= radius) return 0;
+            return f.height * smootherstep(Math.min(1, (radius - d) / rim));
+        },
+    };
+}
+
+function makeRidgeFeature(f) {
+    const halfLen = (f.length ?? 30) / 2;
+    const width = Math.max(1, f.width ?? 10);
+    const sigma = width / 2;
+    const cosA = Math.cos(f.angle ?? 0);
+    const sinA = Math.sin(f.angle ?? 0);
+    const reach = halfLen + width * 2;
+    return {
+        bbox: { minX: f.x - reach, maxX: f.x + reach, minZ: f.z - reach, maxZ: f.z + reach },
+        evalAt(x, z) {
+            const rx = x - f.x, rz = z - f.z;
+            const u = rx * cosA + rz * sinA;   // Along the ridge
+            const v = -rx * sinA + rz * cosA;  // Across it
+            const along = smootherstep(Math.min(1, Math.max(0, (halfLen - Math.abs(u)) / width)));
+            if (along === 0) return 0;
+            return f.height * along * Math.exp(-(v * v) / (2 * sigma * sigma));
+        },
+    };
+}
+
 /**
- * Builds the terrain field for a hole layout: authored green contour plus
- * automatic bunker bowls and water depressions. Pass null to clear (flat).
+ * Builds the terrain field for a hole layout: authored green contour and
+ * hole-wide terrain features, plus automatic bunker bowls and water
+ * depressions. Pass null to clear (flat).
  */
 export function setTerrainFromLayout(layout) {
     features = [];
@@ -144,15 +195,25 @@ export function setTerrainFromLayout(layout) {
         features.push(makeContourFeature(layout.greenContour));
     }
 
+    // Authored hole-wide features (elevated tees/greens, mounds, valleys...)
+    if (Array.isArray(layout.terrainFeatures)) {
+        for (const f of layout.terrainFeatures) {
+            if (!f || typeof f.height !== 'number') continue;
+            if (f.type === 'bump') features.push(makeBumpFeature(f));
+            else if (f.type === 'plateau') features.push(makePlateauFeature(f));
+            else if (f.type === 'ridge' || f.type === 'valley') features.push(makeRidgeFeature(f));
+        }
+    }
+
     // Bunkers: depth scales gently with size (small pots stay shallow)
     if (Array.isArray(layout.bunkers)) {
         for (const b of layout.bunkers) {
             const verts = b?.vertices;
             if (!verts || verts.length < 3) continue;
             const area = polygonArea(verts);
-            // Gentle bowls: ~25% faces read as sunken sand, not black pits
-            const depth = Math.min(0.5, 0.12 + 0.04 * Math.sqrt(area));
-            const rim = Math.min(3.2, Math.max(1.4, 0.4 * Math.sqrt(area)));
+            // Gentle bowls: ~30% faces read as sunken sand, not black pits
+            const depth = Math.min(0.6, 0.15 + 0.05 * Math.sqrt(area));
+            const rim = Math.min(3.5, Math.max(1.6, 0.42 * Math.sqrt(area)));
             features.push(makeDepressionFeature(verts, depth, rim));
         }
     }

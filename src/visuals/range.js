@@ -66,6 +66,13 @@ function buildRangeLayout() {
             { surface: SURFACES.NATIVE_AREA, vertices: circle(60, 210, 17, 16, 0.18) },
             { surface: SURFACES.NATIVE_AREA, vertices: circle(-62, 275, 14, 16, 0.18) },
         ],
+        // Gentle rolling ground so the range reads as a landscape
+        terrainFeatures: [
+            { type: 'bump', x: -34, z: 150, radius: 26, height: 1.1 },
+            { type: 'bump', x: 40, z: 245, radius: 30, height: 1.5 },
+            { type: 'valley', x: 6, z: 185, angle: 0.45, length: 60, width: 18, height: -0.7 },
+            { type: 'ridge', x: -48, z: 255, angle: -0.5, length: 55, width: 16, height: 0.9 },
+        ],
     };
 }
 

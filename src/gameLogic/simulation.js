@@ -362,6 +362,31 @@ function bounceImpulse(vel, omega, cor, mu) {
     return out;
 }
 
+/**
+ * Bounce against sloped ground: rotate velocity/spin into the surface frame
+ * (normal from the terrain gradient), apply the flat-ground impulse model,
+ * rotate back. On flat ground this is exactly bounceImpulse.
+ */
+function bounceImpulseOnSlope(vel, omega, cor, mu, grad) {
+    const slopeSq = grad ? grad.x * grad.x + grad.z * grad.z : 0;
+    if (slopeSq < 0.0001) return bounceImpulse(vel, omega, cor, mu);
+
+    const up = new THREE.Vector3(0, 1, 0);
+    const n = new THREE.Vector3(-grad.x, 1, -grad.z).normalize();
+    const toLocal = new THREE.Quaternion().setFromUnitVectors(n, up);
+    const toWorld = toLocal.clone().invert();
+
+    const vL = new THREE.Vector3(vel.x, vel.y, vel.z).applyQuaternion(toLocal);
+    const wL = new THREE.Vector3(omega.x, omega.y, omega.z).applyQuaternion(toLocal);
+    const r = bounceImpulse(vL, wL, cor, mu);
+    const vW = new THREE.Vector3(r.velocity.x, r.velocity.y, r.velocity.z).applyQuaternion(toWorld);
+    const wW = new THREE.Vector3(r.spin.x, r.spin.y, r.spin.z).applyQuaternion(toWorld);
+    return {
+        velocity: { x: vW.x, y: vW.y, z: vW.z },
+        spin: { x: wW.x, y: wW.y, z: wW.z },
+    };
+}
+
 export function simulateBouncePhase(landingPosition, landingVelocity, landingAngleRadians,
                                     spinRadPerSec, surfaceType, startTime = 0, holeLayout = null) {
     const initialSurfaceProps = getSurfaceProperties(surfaceType);
@@ -416,7 +441,8 @@ export function simulateBouncePhase(landingPosition, landingVelocity, landingAng
             const beforeOmega = { ...omega };
 
             // Apply impulse
-            const r = bounceImpulse({ x: velocity.x, y: velocity.y, z: velocity.z }, omega, cor, mu);
+            const r = bounceImpulseOnSlope({ x: velocity.x, y: velocity.y, z: velocity.z }, omega, cor, mu,
+                                           contourGradientAt(position.x, position.z));
             velocity.set(r.velocity.x, r.velocity.y, r.velocity.z);
             omega = r.spin;
 
