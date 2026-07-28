@@ -670,7 +670,7 @@ export function setShotTypeRadio(shotType) {
     const fsShotTypeBtns = document.querySelectorAll('.fs-shot-type-btn');
 
     if (fsShotTypeValue) {
-        fsShotTypeValue.textContent = shotType === 'full' ? 'Regular' : 'Chip';
+        fsShotTypeValue.textContent = shotType === 'full' ? 'Regular' : shotType === 'putt' ? 'Putt' : 'Chip';
     }
 
     fsShotTypeBtns.forEach(btn => {
@@ -708,9 +708,10 @@ export function updateTimingBarVisibility(shotType) { // Consider renaming later
         armsTimingContainer.style.display = isFullSwing ? '' : 'none';
     }
 
-    // Wrists/Hit Bar ('i'/'d') Visibility: Show for Full, Chip, AND Putt
+    // Wrists/Hit Bar ('i'/'d') Visibility: Show for Full and Chip.
+    // Putt uses the rhythm HUD instead of timing bars.
     if (wristsTimingContainer) {
-        wristsTimingContainer.style.display = (isFullSwing || isChip || isPutt) ? '' : 'none';
+        wristsTimingContainer.style.display = (isFullSwing || isChip) ? '' : 'none';
     }
 
     // Timing Windows (window-a, window-j, window-d) are now handled by displayDownswingFeedbackWindows post-shot.
@@ -1252,26 +1253,29 @@ async function updateMultiplayerMenuState() {
             // Player has an active game - show Resume/Leave buttons
             const session = activeGameCheck.session;
             const refundInfoHTML = session.refundInfo ? `
-                <div style="background: ${session.refundInfo.canRefund ? '#d4edda' : '#f8d7da'}; padding: 6px 8px; border-radius: 4px; margin-top: 6px; font-size: 0.85em; border-left: 3px solid ${session.refundInfo.canRefund ? '#28a745' : '#dc3545'};">
+                <div style="padding: 6px 8px; border-radius: 6px; margin-top: 6px; font-size: 0.85em; background: rgba(0,0,0,0.2); border-left: 3px solid ${session.refundInfo.canRefund ? '#7dffa0' : '#ff8a7a'};">
                     <strong>Refund:</strong> ${session.refundInfo.refundReason}
                     ${session.refundInfo.prepaidBalance > 0 ? `<br><strong>Balance:</strong> ${session.refundInfo.prepaidBalance} NANO` : ''}
                 </div>
             ` : '';
 
             multiplayerSection.innerHTML = `
-                <strong>Multiplayer (Active Game)</strong><br>
-                <div style="background: #fff3cd; padding: 8px; border-radius: 4px; margin: 8px 0; border-left: 3px solid #ffc107;">
-                    <div style="font-size: 0.9em; margin-bottom: 6px;">
-                        <strong>Room:</strong> ${session.roomCode}<br>
-                        <strong>Status:</strong> ${session.gameState === 'waiting' ? 'In Lobby' : 'Playing'}<br>
-                        <strong>Players:</strong> ${session.playerCount}
-                        ${session.isWageringGame ? `<br><strong>Wager:</strong> ${session.wagerAmount} NANO` : ''}
-                    </div>
+                <div class="menu-panel-head">
+                    <strong>Multiplayer</strong>
+                    <span class="menu-beta-tag">active game</span>
+                    <span id="connection-status">Active game found</span>
+                </div>
+                <div style="background: rgba(255, 215, 106, 0.10); border: 1px solid rgba(255, 215, 106, 0.35); padding: 8px 12px; border-radius: 8px; margin-bottom: 10px; font-size: 0.9em;">
+                    <strong>Room:</strong> ${session.roomCode} ·
+                    <strong>Status:</strong> ${session.gameState === 'waiting' ? 'In Lobby' : 'Playing'} ·
+                    <strong>Players:</strong> ${session.playerCount}
+                    ${session.isWageringGame ? ` · <strong>Wager:</strong> ${session.wagerAmount} NANO` : ''}
                     ${refundInfoHTML}
                 </div>
-                <button id="resume-game-btn" style="background: #4CAF50; color: white;">Resume Game</button>
-                <button id="leave-active-game-btn" style="background: #f44336; color: white;">Leave Game</button>
-                <div id="connection-status" style="margin-top: 5px; font-size: 0.9em;">Active game found</div>
+                <div class="menu-panel-actions">
+                    <button id="resume-game-btn" class="menu-chip-btn menu-chip-primary">Resume Game</button>
+                    <button id="leave-active-game-btn" class="menu-chip-btn" style="border-color: rgba(255,138,122,0.5); color: #ff8a7a;">Leave Game</button>
+                </div>
             `;
 
             // Add event listeners to new buttons
@@ -1310,11 +1314,16 @@ async function updateMultiplayerMenuState() {
         } else {
             // No active game - show normal Host/Join buttons
             multiplayerSection.innerHTML = `
-                <strong>Multiplayer (Beta)</strong><br>
-                <button id="test-connection-btn">Test Connection</button>
-                <button id="host-game-btn">Host Game</button>
-                <button id="join-game-btn">Join Game</button>
-                <div id="connection-status" style="margin-top: 5px; font-size: 0.9em;">Not connected</div>
+                <div class="menu-panel-head">
+                    <strong>Multiplayer</strong>
+                    <span class="menu-beta-tag">beta</span>
+                    <span id="connection-status">Not connected</span>
+                </div>
+                <div class="menu-panel-actions">
+                    <button id="host-game-btn" class="menu-chip-btn menu-chip-primary">Host Game</button>
+                    <button id="join-game-btn" class="menu-chip-btn menu-chip-primary">Join Game</button>
+                    <button id="test-connection-btn" class="menu-chip-btn">Test Connection</button>
+                </div>
             `;
 
             // Re-initialize multiplayer buttons (they need to be re-attached)

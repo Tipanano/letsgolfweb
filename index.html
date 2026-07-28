@@ -11,42 +11,66 @@
 
     <!-- Main Menu -->
     <div id="main-menu">
-        <h2>Main Menu</h2>
-        <!-- Mode Selection -->
-        <div id="mode-selection" style="background: #eee; padding: 10px; margin-bottom: 15px; border-radius: 5px;">
-            <strong>Select Mode:</strong>
-            <button id="mode-btn-range">Range</button>
-            <button id="mode-btn-closest">Closest to Flag</button>
-            <button id="mode-btn-hole">Play Hole</button>
-        </div>
-        <!-- Multiplayer -->
-        <div id="multiplayer-section" style="background: #e8f5e9; padding: 10px; margin-bottom: 15px; border-radius: 5px;">
-            <strong>Multiplayer (Beta)</strong><br>
-            <button id="test-connection-btn">Test Connection</button>
-            <button id="host-game-btn">Host Game</button>
-            <button id="join-game-btn">Join Game</button>
-            <div id="connection-status" style="margin-top: 5px; font-size: 0.9em;">Not connected</div>
-        </div>
-        <!-- User Account Section -->
-        <div id="user-auth-section" style="background: #eee; padding: 10px; margin-bottom: 15px; border-radius: 5px;">
-            <strong>User Account</strong><br>
-            <div id="player-status" style="margin-top: 8px; margin-bottom: 8px;">
-                <span id="player-type-badge" style="padding: 2px 8px; border-radius: 3px; font-size: 0.85em; font-weight: bold;">GUEST</span>
-                <span id="player-name" style="margin-left: 8px; font-weight: bold;">Guest_12345</span>
+        <div class="menu-topbar">
+            <div id="player-status">
+                <span id="player-type-badge">GUEST</span>
+                <span id="player-name">Guest_12345</span>
             </div>
-            <button id="register-btn-placeholder">Sign in with Nano</button>
-            <button id="profile-btn" style="display: none;">Profile & History</button>
-            <button id="logout-btn" style="display: none;">Logout</button>
+            <div class="menu-account-actions">
+                <button id="register-btn-placeholder" class="menu-chip-btn">Sign in with Nano</button>
+                <button id="profile-btn" class="menu-chip-btn" style="display: none;">Profile & History</button>
+                <button id="logout-btn" class="menu-chip-btn" style="display: none;">Logout</button>
+            </div>
         </div>
-        <!-- Hole Maker -->
-        <div id="hole-maker-section" style="background: #e3f2fd; padding: 10px; margin-bottom: 15px; border-radius: 5px;">
-            <strong>Hole Maker</strong><br>
-            <button id="hole-maker-btn" onclick="window.open('holeMaker.html', '_blank')">Open Hole Maker</button>
+
+        <div class="menu-hero">
+            <h2 class="menu-title">Got The Yips?</h2>
+            <p class="menu-tagline">Find your rhythm. Hole more putts.</p>
         </div>
-        <!-- Manual Placeholder -->
-        <div id="manual-placeholder" style="background: #eee; padding: 10px; border-radius: 5px;">
-            <strong>Game Manual</strong><br>
-            <button id="manual-btn-placeholder">View Short Manual</button>
+
+        <div id="mode-selection" class="menu-cards">
+            <button id="mode-btn-practice" class="menu-card">
+                <span class="menu-card-icon">🎯</span>
+                <span class="menu-card-title">Practice</span>
+                <span class="menu-card-desc">Range, chipping & putting greens</span>
+            </button>
+            <button id="mode-btn-closest" class="menu-card">
+                <span class="menu-card-icon">📍</span>
+                <span class="menu-card-title">Closest to Flag</span>
+                <span class="menu-card-desc">One shot, stick it tight</span>
+            </button>
+            <button id="mode-btn-hole" class="menu-card">
+                <span class="menu-card-icon">⛳</span>
+                <span class="menu-card-title">Play Hole</span>
+                <span class="menu-card-desc">Tee to cup, count every stroke</span>
+            </button>
+            <button id="hole-maker-btn" class="menu-card" onclick="window.open('holeMaker.html', '_blank')">
+                <span class="menu-card-icon">✏️</span>
+                <span class="menu-card-title">Hole Maker</span>
+                <span class="menu-card-desc">Design your own holes</span>
+            </button>
+            <div id="practice-submenu" style="display: none;">
+                <button id="mode-btn-range" class="menu-subcard">🏌️ Driving Range</button>
+                <button id="mode-btn-chipping" class="menu-subcard">🌱 Chipping Green</button>
+                <button id="mode-btn-putting" class="menu-subcard">🕳️ Putting Green</button>
+            </div>
+        </div>
+
+        <div id="multiplayer-section" class="menu-panel">
+            <div class="menu-panel-head">
+                <strong>Multiplayer</strong>
+                <span class="menu-beta-tag">beta</span>
+                <span id="connection-status">Not connected</span>
+            </div>
+            <div class="menu-panel-actions">
+                <button id="host-game-btn" class="menu-chip-btn menu-chip-primary">Host Game</button>
+                <button id="join-game-btn" class="menu-chip-btn menu-chip-primary">Join Game</button>
+                <button id="test-connection-btn" class="menu-chip-btn">Test Connection</button>
+            </div>
+        </div>
+
+        <div class="menu-footer">
+            <button id="manual-btn-placeholder" class="menu-link-btn">📖 How to play</button>
         </div>
     </div>
 
@@ -141,6 +165,7 @@
             <div class="fs-shot-type-options">
                 <button class="fs-shot-type-btn" data-type="full">Regular</button>
                 <button class="fs-shot-type-btn" data-type="chip">Chip</button>
+                <button class="fs-shot-type-btn" data-type="putt">Putt</button>
             </div>
         </div>
 
@@ -486,55 +511,57 @@
             </div>
 
             <div style="margin-bottom: 25px;">
-                <h3 style="color: #2e7d32; margin-bottom: 10px;">🏌️ Chip Shots</h3>
+                <h3 style="color: #2e7d32; margin-bottom: 10px;">🏌️ Chip Shots (Rhythm)</h3>
                 <p style="line-height: 1.6; color: #37474f; margin-bottom: 15px;">
-                    Chipping is simpler but requires finesse. Ball position is CRITICAL for chip shots.
+                    Chipping uses the same rhythm as putting: tap 'w' to a beat for distance, strike with 'i' on the beat.
+                    Club and ball position decide the shot type — bump-and-run (8i, ball back), standard (PW), flop (LW, ball forward).
                 </p>
 
                 <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 15px;">
                     <h4 style="margin-top: 0; color: #1b5e20;">The Sequence:</h4>
                     <ol style="line-height: 1.8; color: #37474f;">
-                        <li><strong>Set ball position</strong> - Click on the stance visual to adjust (forward = high soft, back = low running)</li>
-                        <li><strong>Press and hold 'w'</strong> - Length determines power/distance</li>
-                        <li><strong>Release 'w'</strong> - Starts downswing</li>
-                        <li><strong>Press 'a'</strong> - Body rotation (affects face angle slightly)</li>
-                        <li><strong>Press 'i'</strong> - Strike the ball</li>
+                        <li><strong>Pick club + ball position</strong> - This decides the shot shape (forward = high/soft, back = low/running)</li>
+                        <li><strong>Tap 'w' repeatedly</strong> - Tempo sets carry distance (3+ taps, watch the marker)</li>
+                        <li><strong>Press 'i' on the beat</strong> - Strike. Early = push, late = pull.</li>
+                        <li><strong>Optional second 'i' on the NEXT beat</strong> - Shape it: early = draw, dead on = extra bite, late = fade. Skip it for a stock shot.</li>
                     </ol>
                 </div>
 
                 <div style="background: #e8f5e9; padding: 15px; border-radius: 5px;">
-                    <h4 style="margin-top: 0; color: #1b5e20;">Ball Position Effects:</h4>
+                    <h4 style="margin-top: 0; color: #1b5e20;">Contact Quality:</h4>
                     <ul style="line-height: 1.8; color: #37474f;">
-                        <li><strong>Forward (toward target):</strong> Higher loft, shallower attack angle, easier to thin</li>
-                        <li><strong>Back (away from target):</strong> Lower loft, steeper attack angle, easier to fat</li>
-                        <li><strong>Wrist Timing (i):</strong> Must adjust based on ball position. Forward ball needs earlier 'i', back ball needs later 'i'.</li>
-                        <li>Experiment with combinations: Back ball position + steep attack = low spinner. Forward ball + shallow = flop shot.</li>
+                        <li><strong>A steady tap rhythm is clean contact.</strong> A shaky tempo risks fat, thin, or the full duff.</li>
+                        <li><strong>The lie scales the risk:</strong> tight lies and bunkers punish wobble hard, fluffy rough is forgiving.</li>
+                        <li><strong>Ball position biases the miss:</strong> forward = thin-prone, back = fat-prone.</li>
                     </ul>
                 </div>
             </div>
 
             <div style="margin-bottom: 25px;">
-                <h3 style="color: #2e7d32; margin-bottom: 10px;">⛳ Putting</h3>
+                <h3 style="color: #2e7d32; margin-bottom: 10px;">⛳ Putting (Rhythm)</h3>
                 <p style="line-height: 1.6; color: #37474f; margin-bottom: 15px;">
-                    Putting is all about distance control and timing. Unlike full swing, backswing length determines power, downswing timing determines direction.
+                    Putting runs on rhythm. Tap 'w' to a steady beat — your tempo sets the distance.
+                    Fast tapping = long putt, slow tapping = delicate touch. When the pace feels right,
+                    strike with 'i' <em>on your own next beat</em>.
                 </p>
 
                 <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 15px;">
                     <h4 style="margin-top: 0; color: #1b5e20;">The Sequence:</h4>
                     <ol style="line-height: 1.8; color: #37474f;">
-                        <li><strong>Press and hold 'w'</strong> - Length of backswing determines putt distance</li>
-                        <li><strong>Release 'w'</strong> - Starts downswing (fixed tempo, always same speed)</li>
-                        <li><strong>Press 'i' in the green zone</strong> - Strike the ball. Timing affects push/pull.</li>
+                        <li><strong>Tap 'w' repeatedly</strong> - At least 3 taps. The tempo of your taps sets the distance (see the HUD and the marker on the green).</li>
+                        <li><strong>Keep the rhythm steady</strong> - A shaky tempo widens your distance dispersion.</li>
+                        <li><strong>Press 'i' on the beat</strong> - Where your next tap <em>would</em> have landed. Early = push, late = pull.</li>
                     </ol>
                 </div>
 
                 <div style="background: #e8f5e9; padding: 15px; border-radius: 5px;">
-                    <h4 style="margin-top: 0; color: #1b5e20;">Timing:</h4>
+                    <h4 style="margin-top: 0; color: #1b5e20;">Tips:</h4>
                     <ul style="line-height: 1.8; color: #37474f;">
                         <li><strong>Too Early:</strong> Push (ball starts right of target)</li>
-                        <li><strong>Perfect (in green zone):</strong> Straight putt</li>
+                        <li><strong>On the beat:</strong> Pure, straight strike</li>
                         <li><strong>Too Late:</strong> Pull (ball starts left of target)</li>
-                        <li>Use the putting guide (spacebar during address) to see the line, but remember - greens have break!</li>
+                        <li><strong>'t'</strong> flips the tempo mapping (fast = short instead), <strong>Esc</strong> cancels a stroke.</li>
+                        <li>Pause too long and the rhythm expires — just start tapping again.</li>
                     </ul>
                 </div>
             </div>
@@ -690,21 +717,20 @@
             <!-- Chip Instructions -->
             <div id="chip-instructions" style="display: none;">
                 <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 15px;">
-                    <h4 style="margin-top: 0; color: #1b5e20;">The Sequence:</h4>
+                    <h4 style="margin-top: 0; color: #1b5e20;">Rhythm Chipping:</h4>
                     <ol style="line-height: 1.8; color: #37474f; padding-left: 20px;">
-                        <li><strong>Set ball position</strong> - Forward = high/soft, Back = low/running</li>
-                        <li><strong>'w'</strong> - Hold for desired distance</li>
-                        <li><strong>Release 'w'</strong> - Start downswing</li>
-                        <li><strong>'a'</strong> - Body rotation</li>
-                        <li><strong>'i'</strong> - Strike the ball</li>
+                        <li><strong>Club + ball position</strong> - Shot type (back = runner, forward = flop)</li>
+                        <li><strong>Tap 'w' to a beat</strong> - Tempo = carry (3+ taps)</li>
+                        <li><strong>'i' on the beat</strong> - Strike (early = push, late = pull)</li>
+                        <li><strong>Second 'i' next beat</strong> - Optional: early = draw, on beat = spin, late = fade</li>
                     </ol>
                 </div>
                 <div style="background: #e8f5e9; padding: 12px; border-radius: 5px;">
-                    <h4 style="margin-top: 0; color: #1b5e20;">Ball Position:</h4>
+                    <h4 style="margin-top: 0; color: #1b5e20;">Contact:</h4>
                     <ul style="line-height: 1.6; color: #37474f; padding-left: 20px; margin: 0;">
-                        <li><strong>Forward:</strong> Higher loft, easier to thin</li>
-                        <li><strong>Back:</strong> Lower loft, steeper attack, easier to fat</li>
-                        <li>Adjust 'i' timing based on position!</li>
+                        <li><strong>Steady rhythm</strong> = clean strike</li>
+                        <li><strong>Shaky rhythm</strong> = fat/thin/duff risk</li>
+                        <li>Tight lies & bunkers punish wobble hardest</li>
                     </ul>
                 </div>
             </div>
@@ -712,20 +738,20 @@
             <!-- Putt Instructions -->
             <div id="putt-instructions" style="display: none;">
                 <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 15px;">
-                    <h4 style="margin-top: 0; color: #1b5e20;">The Sequence:</h4>
+                    <h4 style="margin-top: 0; color: #1b5e20;">Rhythm Putting:</h4>
                     <ol style="line-height: 1.8; color: #37474f; padding-left: 20px;">
-                        <li><strong>'w'</strong> - Backswing length = distance</li>
-                        <li><strong>Release 'w'</strong> - Start downswing</li>
-                        <li><strong>'i'</strong> - Strike in green zone</li>
+                        <li><strong>Tap 'w' to a beat</strong> - Tempo = distance (3+ taps)</li>
+                        <li><strong>Steady rhythm</strong> - Tighter dispersion</li>
+                        <li><strong>'i' on the beat</strong> - Strike</li>
                     </ol>
                 </div>
                 <div style="background: #e8f5e9; padding: 12px; border-radius: 5px;">
                     <h4 style="margin-top: 0; color: #1b5e20;">Timing:</h4>
                     <ul style="line-height: 1.6; color: #37474f; padding-left: 20px; margin: 0;">
                         <li><strong>Too Early:</strong> Push (right)</li>
-                        <li><strong>Perfect (green):</strong> Straight</li>
+                        <li><strong>On the beat:</strong> Straight</li>
                         <li><strong>Too Late:</strong> Pull (left)</li>
-                        <li>Press spacebar to see putting guide</li>
+                        <li><strong>'t'</strong> flips mapping · <strong>Esc</strong> cancels</li>
                     </ul>
                 </div>
             </div>

@@ -4,6 +4,75 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.m
 import { TextureLoader } from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
 import { createNoise2D } from 'https://esm.sh/simplex-noise';
 import earcut from 'https://cdn.skypack.dev/earcut@2.2.4';
+import { heightAt as contourHeightAt, hasContour, isNearContour } from '../greenContours.js';
+
+/**
+ * Adaptively subdivides triangles near the active green contour and displaces
+ * vertices by the analytic heightfield. Triangles far from the contour pass
+ * through untouched; near ones split (4-way, midpoints welded via cache)
+ * until edges are under ~0.9m, which renders the analytic field smoothly.
+ * Because the field feathers to exactly 0 at its outer edge, T-junctions at
+ * the subdivision boundary are coplanar and invisible.
+ */
+function adaptiveSubdivideForContour(positions, indices) {
+    if (!hasContour()) return { positions, indices };
+
+    const verts = [];
+    for (let i = 0; i < positions.length; i += 3) {
+        verts.push([positions[i], positions[i + 1], positions[i + 2]]);
+    }
+
+    const midCache = new Map();
+    const midpoint = (a, b) => {
+        const key = a < b ? a + '_' + b : b + '_' + a;
+        let idx = midCache.get(key);
+        if (idx === undefined) {
+            const va = verts[a], vb = verts[b];
+            verts.push([(va[0] + vb[0]) / 2, (va[1] + vb[1]) / 2, (va[2] + vb[2]) / 2]);
+            idx = verts.length - 1;
+            midCache.set(key, idx);
+        }
+        return idx;
+    };
+
+    const MAX_EDGE_SQ = 0.9 * 0.9;
+    const MAX_DEPTH = 8;
+    const out = [];
+    const edgeLenSq = (a, b) => {
+        const va = verts[a], vb = verts[b];
+        const dx = va[0] - vb[0], dz = va[2] - vb[2];
+        return dx * dx + dz * dz;
+    };
+
+    const process = (a, b, c, depth) => {
+        const maxESq = Math.max(edgeLenSq(a, b), edgeLenSq(b, c), edgeLenSq(c, a));
+        const cx = (verts[a][0] + verts[b][0] + verts[c][0]) / 3;
+        const cz = (verts[a][2] + verts[b][2] + verts[c][2]) / 3;
+        if (depth >= MAX_DEPTH || maxESq < MAX_EDGE_SQ || !isNearContour(cx, cz, Math.sqrt(maxESq))) {
+            out.push(a, b, c);
+            return;
+        }
+        const ab = midpoint(a, b), bc = midpoint(b, c), ca = midpoint(c, a);
+        process(a, ab, ca, depth + 1);
+        process(ab, b, bc, depth + 1);
+        process(ca, bc, c, depth + 1);
+        process(ab, bc, ca, depth + 1);
+    };
+
+    for (let i = 0; i < indices.length; i += 3) {
+        process(indices[i], indices[i + 1], indices[i + 2], 0);
+    }
+
+    const newPositions = new Float32Array(verts.length * 3);
+    for (let i = 0; i < verts.length; i++) {
+        const [x, y, z] = verts[i];
+        newPositions[i * 3] = x;
+        newPositions[i * 3 + 1] = y + contourHeightAt(x, z);
+        newPositions[i * 3 + 2] = z;
+    }
+    const IndexArr = verts.length > 65535 ? Uint32Array : Uint16Array;
+    return { positions: newPositions, indices: new IndexArr(out) };
+}
 
 /**
  * Triangulates a polygon with optional height data on vertices
@@ -100,7 +169,10 @@ export function renderPolygonWithHeights(polygonData, scene, textureLoader, obje
 
     try {
         // Triangulate with heights
-        const { positions, indices } = triangulatePolygonWithHeights(polygonData.vertices, heightOffset);
+        let { positions, indices } = triangulatePolygonWithHeights(polygonData.vertices, heightOffset);
+
+        // Subdivide + displace near the active green contour (smooth elevation)
+        ({ positions, indices } = adaptiveSubdivideForContour(positions, indices));
 
         // Create geometry
         const geometry = createGeometryFromTriangulation(positions, indices);
@@ -133,6 +205,16 @@ export function renderPolygonWithHeights(polygonData, scene, textureLoader, obje
 
         // Apply material
         const surface = polygonData.surface;
+
+        // Layer stacking: surfaces overlap freely in layouts (rough often sits
+        // under fairway/green/bunkers), so coplanar polygons would z-fight.
+        // Each surface type lifts by its 'height' layer value — the cm-scale
+        // gaps in SURFACES are enough for depth precision at all camera
+        // distances. No polygonOffset: depth biasing overdraws small objects
+        // sitting on the surface (the ball) at grazing angles.
+        const layerHeight = surface?.height ?? 0;
+        mesh.position.y = layerHeight;
+
         const materialOptions = {
             side: THREE.DoubleSide,
             ...(addNoise && { vertexColors: true })
@@ -402,8 +484,8 @@ export function renderTeeBox(holeLayout, scene, textureLoader, objectsArray) {
         console.log('renderTeeBox: Rendering as polygon with vertices:', holeLayout.tee.vertices);
         renderPolygonWithHeights(holeLayout.tee, scene, textureLoader, objectsArray, {
             name: 'Tee Box',
-            textureRepetitions: 5,
-            heightOffset: 0.03 // Raise tee box slightly above ground to prevent z-fighting
+            textureRepetitions: 5
+            // Layer lift comes from SURFACES.TEE.height (0.03) like every other surface
         });
     } else if (holeLayout.tee.center) {
         // Fallback to old method for legacy holes without vertices

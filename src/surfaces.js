@@ -17,8 +17,8 @@ export const SURFACES = {
       fatForgiveness: 1.0, // Same as fairway
       thinForgiveness: 1.0  // Same as fairway
     },
-    height: 0.03, // Visual height
-    ballLieOffset: 0.16 // Same as fairway - ball sits slightly into grass (then tee height is added)
+    height: 0.075, // Layer height: above green
+    ballLieOffset: 0.05 // Small lift; the tee peg height is added on top (tuned for 3.5x ball)
   },
   GREEN: {
     name: 'Green',
@@ -37,9 +37,9 @@ export const SURFACES = {
       fatForgiveness: 0.6, // Very tight lie - less forgiving of fat
       thinForgiveness: 0.7  // Very tight lie - easier to thin
     },
-    height: 0.02, // Visual height
+    height: 0.06, // Layer height: above fairway
     texturePath: 'assets/textures/green.png', // Added texture path
-    ballLieOffset: 0.12 // On top
+    ballLieOffset: 0.06 // Display offset = green layer height, so the ball sits ON the rendered green
   },
   FAIRWAY: {
     name: 'Fairway',
@@ -58,9 +58,9 @@ export const SURFACES = {
       fatForgiveness: 1.0, // Baseline
       thinForgiveness: 1.0  // Baseline
     },
-    height: 0.01, // Visual height
+    height: 0.045, // Layer height: above rough and water
     texturePath: 'assets/textures/fairway.png', // Added texture path
-    ballLieOffset: 0.11 // Ball sits slightly into the grass
+    ballLieOffset: 0.09 // Ball sits slightly into the grass (tuned for 3.5x ball on 0.045 layer)
   },
   LIGHT_ROUGH: {
     name: 'Light Rough',
@@ -78,9 +78,9 @@ export const SURFACES = {
       fatForgiveness: 1.1, // Slightly more forgiving both ways - light grass cushions
       thinForgiveness: 1.1  // Ball sits up a bit - easier to get under
     },
-    height: 0.00, // Base rough height
+    height: 0.01, // Layer height: above base ground, below all playing surfaces
     texturePath: 'assets/textures/rough.png', // Added texture path
-    ballLieOffset: 0.08 // Slightly into
+    ballLieOffset: 0.04 // Sits down a bit (tuned for 3.5x ball on 0.01 layer)
   },
   MEDIUM_ROUGH: {
     name: 'Medium Rough',
@@ -98,9 +98,9 @@ export const SURFACES = {
       fatForgiveness: 0.8, // Less forgiving of fat - grass grabs the club
       thinForgiveness: 1.3  // Ball sits up more - easier to get under, harder to thin
     },
-    height: 0.00, // Visual height (same as light rough for now)
+    height: 0.02, // Layer height: above light rough
     texturePath: 'assets/textures/rough.png', // Added texture path
-    ballLieOffset: -0.05 // Half hidden
+    ballLieOffset: 0.02 // Half hidden (tuned for 3.5x ball on 0.02 layer)
   },
   THICK_ROUGH: {
     name: 'Thick Rough',
@@ -118,9 +118,9 @@ export const SURFACES = {
       fatForgiveness: 0.6, // Much less forgiving of fat - thick grass grabs/stops club
       thinForgiveness: 1.5  // Ball sits well up - much easier to get under, harder to thin
     },
-    height: 0.00, // Visual height (same as medium rough for now)
+    height: 0.03, // Layer height: above medium rough
     texturePath: 'assets/textures/rough.png', // Added texture path
-    ballLieOffset: -0.15 // Almost hidden
+    ballLieOffset: 0.015 // Almost hidden (tuned for 3.5x ball on 0.03 layer)
   },
   BUNKER: {
     name: 'Bunker',
@@ -138,9 +138,9 @@ export const SURFACES = {
       fatForgiveness: 2.5, // Very forgiving of fat - sand designed for club to slide through
       thinForgiveness: 0.8  // Less forgiving of thin - ball sits down, easier to blade
     },
-    height: 0.04, // Visual height (highest)
+    height: 0.09, // Layer height: highest (bunkers overlap rough/fairway)
     texturePath: 'assets/textures/bunker.png', // Added texture path
-    ballLieOffset: 0.08 // Slightly into
+    ballLieOffset: 0.11 // Settled into the sand (tuned for 3.5x ball on 0.09 layer)
   },
   WATER: {
     name: 'Water',
@@ -158,7 +158,7 @@ export const SURFACES = {
       thinForgiveness: 1.0
     },
     isPenalty: true, // Flag for penalty stroke/rules
-    height: 0.005, // Visual height (above rough, below fairway)
+    height: 0.035, // Layer height: above rough, below fairway
     ballLieOffset: -1 // Submerged (special value)
   },
   OUT_OF_BOUNDS: {

@@ -2,12 +2,18 @@
 import * as ui from '../ui.js';
 import { savePlayHoleState } from '../gameLogic/persistentGameState.js';
 import * as visuals from '../visuals.js'; // To trigger drawing
-import { setShotType, getCurrentShotType, setSelectedClub } from '../gameLogic/state.js'; // Import setShotType, getCurrentShotType, and setSelectedClub
+import { setShotType, getCurrentShotType, setSelectedClub, getGameState } from '../gameLogic/state.js'; // Import setShotType, getCurrentShotType, and setSelectedClub
 import { BALL_RADIUS } from '../visuals/core.js'; // For calculations
 import { playerManager } from '../playerManager.js'; // Import playerManager
+import {
+    generatePracticeGreenLayout, showPracticePanel, hidePracticePanel, getDefaultPreset, getActiveChipStyle
+} from './practiceGreen.js'; // Short-game practice area
 
 // --- State ---
 let currentHoleLayout = null;
+let practiceMode = false; // True when running the chipping/putting practice green
+let practiceType = 'putt'; // 'chip' | 'putt' — which placement tab opens first
+let practicePlacement = null; // Last chosen placement preset {x, z, lie, ...}
 let shotsTaken = 0; // Strokes for the current hole
 let score = 0; // Total strokes for the round
 let currentBallPosition = null;
@@ -149,6 +155,127 @@ export function terminateMode() {
     // savePlayHoleState({ currentHoleIndex, ballPosition: currentBallPosition, strokesThisHole: shotsTaken, totalStrokesRound: score, currentLie });
     currentModeActive = false;
     currentHoleLayout = null;
+    practiceMode = false;
+    practicePlacement = null;
+    hidePracticePanel();
+}
+
+// --- Practice Green (chipping/putting practice) ---
+
+export function isPracticeMode() {
+    return practiceMode;
+}
+
+/**
+ * Initializes the short-game practice area as a practice variant of
+ * play-hole mode. All lie/camera/shot flow logic is shared with normal
+ * hole play; scoring and persistence are disabled.
+ * @param {string} type - 'chip' or 'putt': which placement tab opens first
+ */
+export async function initializePracticeMode(type = 'putt') {
+    console.log(`Initializing practice green (${type})...`);
+    currentModeActive = true;
+    practiceMode = true;
+    practiceType = type === 'chip' ? 'chip' : 'putt';
+    holeJustCompleted = false;
+
+    const { processHoleLayout } = await import('../holeLoader.js');
+    currentHoleLayout = processHoleLayout(generatePracticeGreenLayout());
+    if (!currentHoleLayout) {
+        console.error('Practice green layout failed to process.');
+        currentModeActive = false;
+        practiceMode = false;
+        return;
+    }
+
+    shotsTaken = 0;
+    score = 0;
+    formerBallPosition = null;
+    formerLie = null;
+    currentHoleIndex = 0;
+
+    // Draw the area first (builds the terrain mesh for height lookups)
+    visuals.drawHole(currentHoleLayout);
+
+    // Drop the ball at the default spot for this practice type
+    await applyPracticePlacement(getDefaultPreset(practiceType), true);
+
+    // Placement panel stays available so the player can move the ball anytime
+    showPracticePanel(
+        practiceType,
+        (preset) => { applyPracticePlacement(preset); },
+        (style) => { applyPracticeChipStyle(style); }
+    );
+}
+
+/**
+ * Applies a chip shot style (club + stance recipe) from the practice panel.
+ */
+export function applyPracticeChipStyle(style) {
+    if (!practiceMode || !style) return;
+    const state = getGameState();
+    if (state !== 'ready' && state !== 'result') return;
+
+    setSelectedClub(style.club);
+    ui.setSelectedClubButton(style.club);
+    ui.setBallPosition(style.ballPositionIndex);
+    setShotType('chip');
+    ui.updateStatus(`${style.label}: ${style.club}, ${style.ballPositionIndex <= 3 ? 'ball back' : style.ballPositionIndex >= 6 ? 'ball forward' : 'ball center'} — Ready`);
+}
+
+/**
+ * Places the ball at a practice preset spot and prepares the next shot
+ * (visuals, camera, aim, club/shot type).
+ */
+export async function applyPracticePlacement(preset, force = false) {
+    if (!practiceMode || !preset) return;
+
+    // Don't teleport the ball mid-swing or mid-animation
+    const state = getGameState();
+    if (!force && state !== 'ready' && state !== 'result') {
+        console.log(`Practice placement ignored during state '${state}'`);
+        return;
+    }
+
+    const groundHeight = visuals.queryTerrainHeight(preset.x, preset.z);
+    currentBallPosition = { x: preset.x, y: groundHeight + BALL_RADIUS, z: preset.z };
+    currentLie = preset.lie;
+    practicePlacement = { ...preset };
+    formerBallPosition = null;
+    formerLie = null;
+    shotsTaken = 0;
+    holeJustCompleted = false;
+
+    // Move the ball visually, then run the standard next-shot preparation
+    // (camera behind ball, aim at flag, auto club selection).
+    visuals.resetVisuals(currentBallPosition, currentLie);
+    const logic = await import('../gameLogic.js');
+    logic.resetSwing();
+
+    // Practice presets can override the auto-selected club/shot type.
+    // Chips use the currently active shot style (club + stance recipe).
+    if (preset.shotType === 'chip') {
+        const style = getActiveChipStyle();
+        setSelectedClub(style.club);
+        ui.setSelectedClubButton(style.club);
+        ui.setBallPosition(style.ballPositionIndex);
+        setShotType('chip');
+    }
+    // Putt presets: green placement auto-selects the putter already.
+
+    const distToFlag = calculateDistanceToFlag(currentBallPosition, currentHoleLayout.flagPosition);
+    ui.updateVisualOverlayInfo('play-hole', {
+        holeNum: 'P',
+        par: currentHoleLayout.par || 3,
+        distToFlag: distToFlag,
+        shotNum: 1,
+        lie: currentLie,
+        wind: 'Calm',
+        playerName: playerManager.getDisplayName(),
+        totalScore: 0,
+        position: '–'
+    });
+    ui.updateStatus(`${preset.label} — Ready`);
 }
 
 export function handleShotResult(shotData) {
@@ -183,7 +310,11 @@ export function handleShotResult(shotData) {
     if (shotData.isHoledOut) {
         holeJustCompleted = true; // Set flag that hole is done, awaiting 'n'
         console.log(`HOLE OUT! Strokes this hole: ${shotsTaken}. Total round score: ${score}`);
-        ui.updateStatus(`Hole ${currentHoleIndex + 1} complete! Score: ${shotsTaken}. Press (n) to play again.`);
+        if (practiceMode) {
+            ui.updateStatus(`Holed it! 🎉 Press (n) to replay this spot, or pick a new one.`);
+        } else {
+            ui.updateStatus(`Hole ${currentHoleIndex + 1} complete! Score: ${shotsTaken}. Press (n) to play again.`);
+        }
         // Ball position remains at the hole for now. It will be reset to tee in prepareForTeeShotAfterHoleOut.
         // shotsTaken for this completed hole is now fixed.
     } else {
@@ -191,7 +322,8 @@ export function handleShotResult(shotData) {
     }
 
     // Save the updated state (ball at its current location, or at hole if just holed out)
-    savePlayHoleState({
+    // Practice sessions are throwaway — never persisted.
+    if (!practiceMode) savePlayHoleState({
         currentHoleIndex: currentHoleIndex,
         ballPosition: currentBallPosition, // This is where the ball physically is
         strokesThisHole: shotsTaken, // Strokes for the current attempt (or completed hole)
@@ -243,9 +375,10 @@ export function handleShotResult(shotData) {
             position: '1st'
         });
 
-        // Check for tap-in distance (1 foot = 0.3048 meters)
+        // Check for tap-in distance (1 foot = 0.3048 meters) — not in practice,
+        // where holing everything out is the whole point.
         const TAP_IN_DISTANCE_METERS = 0.3048;
-        if (currentLie === 'GREEN' && distToFlag <= TAP_IN_DISTANCE_METERS && distToFlag > 0) {
+        if (!practiceMode && currentLie === 'GREEN' && distToFlag <= TAP_IN_DISTANCE_METERS && distToFlag > 0) {
             // Ball is within tap-in range - offer gimme
             import('../ui/gameAlert.js').then(module => {
                 module.gameAlert.show(
@@ -267,6 +400,19 @@ export function handleShotResult(shotData) {
 
 export function prepareForTeeShotAfterHoleOut() {
     if (!currentModeActive) return;
+
+    // Practice: 'return to tee' means 'return to the chosen practice spot'
+    if (practiceMode && practicePlacement) {
+        shotsTaken = 0;
+        currentLie = practicePlacement.lie;
+        const groundHeight = visuals.queryTerrainHeight(practicePlacement.x, practicePlacement.z);
+        currentBallPosition = { x: practicePlacement.x, y: groundHeight + BALL_RADIUS, z: practicePlacement.z };
+        formerBallPosition = null;
+        formerLie = null;
+        holeJustCompleted = false;
+        console.log('Practice: ball returned to placement spot.', currentBallPosition);
+        return;
+    }
 
     console.log("PlayHole: Preparing for tee shot after hole out.");
     shotsTaken = 0;
@@ -320,13 +466,20 @@ export function getHoleJustCompleted() { // Renamed getter
 }
 
 export function getCurrentBallPosition() {
-    if (holeJustCompleted && currentHoleLayout?.tee?.center) {
-        // If hole was just completed, the "next" shot is from the tee
-        return {
-            x: currentHoleLayout.tee.center.x,
-            y: BALL_RADIUS,
-            z: currentHoleLayout.tee.center.z
-        };
+    if (holeJustCompleted) {
+        // Practice: the "next" shot replays from the chosen practice spot
+        if (practiceMode && practicePlacement) {
+            const groundHeight = visuals.queryTerrainHeight(practicePlacement.x, practicePlacement.z);
+            return { x: practicePlacement.x, y: groundHeight + BALL_RADIUS, z: practicePlacement.z };
+        }
+        if (currentHoleLayout?.tee?.center) {
+            // If hole was just completed, the "next" shot is from the tee
+            return {
+                x: currentHoleLayout.tee.center.x,
+                y: BALL_RADIUS,
+                z: currentHoleLayout.tee.center.z
+            };
+        }
     }
     // Otherwise, return the actual current ball position
     return { ...currentBallPosition };
@@ -334,7 +487,7 @@ export function getCurrentBallPosition() {
 
 export function getCurrentLie() {
     if (holeJustCompleted) {
-        return 'TEE';
+        return (practiceMode && practicePlacement) ? practicePlacement.lie : 'TEE';
     }
     return currentLie;
 }
@@ -368,8 +521,8 @@ export function moveToFormerPosition() {
 
         console.log(`PlayHole: Ball moved to former position (OOB penalty). Position:`, currentBallPosition, `Lie: ${currentLie}`);
 
-        // Save updated state
-        savePlayHoleState({
+        // Save updated state (not persisted for practice sessions)
+        if (!practiceMode) savePlayHoleState({
             currentHoleIndex: currentHoleIndex,
             ballPosition: currentBallPosition,
             strokesThisHole: shotsTaken,

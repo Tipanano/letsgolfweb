@@ -17,8 +17,11 @@ export let scene, camera, renderer, ball, trajectoryLine, teeMesh, smallTeeMesh;
 export const BALL_RADIUS = 0.021336; // Regulation radius (1.68 inches / 2) in meters
 
 // Ball Scale Factors for Visibility
+// Off-green the ball is still enlarged for visibility, but modestly — the
+// halo ring (shown at rest on every lie) does the locating job now, so the
+// old 10x balloon is gone. Keep in sync with TEE_SCALE_FACTOR in objects.js.
 const BALL_SCALE_NORMAL = 1.0; // Scale for on the green
-const BALL_SCALE_ENLARGED = 10.0; // Scale for off the green (Adjust as needed)
+const BALL_SCALE_ENLARGED = 3.5; // Scale for off the green
 const BALL_SCALE_VECTOR_NORMAL = new THREE.Vector3(BALL_SCALE_NORMAL, BALL_SCALE_NORMAL, BALL_SCALE_NORMAL);
 const BALL_SCALE_VECTOR_ENLARGED = new THREE.Vector3(BALL_SCALE_ENLARGED, BALL_SCALE_ENLARGED, BALL_SCALE_ENLARGED);
 
@@ -536,6 +539,36 @@ export function removeTrajectoryLine() {
 }
 
 // --- Ball and Tee Visibility/Positioning ---
+// --- Ball Halo (locator ring) ---
+// The ball renders close to true scale, which is hard to spot from most
+// cameras. A soft ring marks its resting position on every lie; it hides
+// while the ball is in motion.
+let ballHaloMesh = null;
+const BALL_HALO_LIFT = 0.008; // Above the surface's render layer, below the ball
+
+function ensureBallHalo() {
+    if (ballHaloMesh || !scene) return;
+    const geom = new THREE.RingGeometry(0.22, 0.34, 40);
+    geom.rotateX(-Math.PI / 2);
+    const mat = new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.55,
+        depthWrite: false,
+    });
+    ballHaloMesh = new THREE.Mesh(geom, mat);
+    ballHaloMesh.renderOrder = 5;
+    ballHaloMesh.visible = false;
+    scene.add(ballHaloMesh);
+}
+
+export function setBallHalo(visible, x = 0, z = 0, surfaceLayerHeight = 0.06) {
+    ensureBallHalo();
+    if (!ballHaloMesh) return;
+    ballHaloMesh.visible = visible;
+    if (visible) ballHaloMesh.position.set(x, surfaceLayerHeight + BALL_HALO_LIFT, z);
+}
+
 export function showBallAtAddress(position = null, surfaceType = null) {
     if (!ball) return;
 
@@ -564,10 +597,10 @@ export function showBallAtAddress(position = null, surfaceType = null) {
             const clubType = selectedClub?.type || 'iron';
             const useLargeTee = clubType === 'driver' || clubType === 'wood';
 
-            // Tee heights accounting for 10x ball scale (visual representation)
-            // The ball is scaled 10x for visibility, so tee height needs similar scaling
-            const largeTeeHeight = 0.50; // 50mm tee with 10x visual scale
-            const smallTeeHeight = 0.15; // 15mm tee with 10x visual scale
+            // Tee heights accounting for the enlarged ball scale (3.5x)
+            // Real tee heights (50mm / 15mm) times the visual scale factor
+            const largeTeeHeight = 0.175; // 50mm tee at 3.5x visual scale
+            const smallTeeHeight = 0.055; // 15mm tee at 3.5x visual scale
             teeHeightOffset = useLargeTee ? largeTeeHeight : smallTeeHeight;
 
             // Position and show appropriate tee
@@ -601,6 +634,9 @@ export function showBallAtAddress(position = null, surfaceType = null) {
 
     ball.position.copy(ballPos);
     ball.visible = true;
+
+    // Locator ring on every lie, at that surface's render layer height
+    setBallHalo(true, ballPos.x, ballPos.z, surfaceProps?.height ?? 0);
 }
 
 // Function to hide the ball and tee
@@ -608,6 +644,7 @@ export function hideBall() {
     if (ball) {
         ball.visible = false;
     }
+    setBallHalo(false);
     if (teeMesh) {
         teeMesh.visible = false;
     }
@@ -619,6 +656,8 @@ export function hideBall() {
 // Function to handle the animation logic, potentially called by visuals.js
 export function startBallAnimation(points, duration, onCompleteCallback = null, isHoledOut = false, holedOutPosition = null, trajectoryColor = 0xffff00) { // Add callback, isHoledOut, holedOutPosition, and color parameters
      if (!scene) return; // Guard against uninitialized scene
+
+    setBallHalo(false); // Ball is leaving its resting spot
 
     // Store the callback and holed-out state
     currentAnimationCallback = onCompleteCallback;
@@ -1204,14 +1243,14 @@ function updateStaticCameraView() {
     let targetHeight;
     // Use staticCameraHeightLevel for height calculation, applying the threshold logic
     // The threshold logic here might need re-evaluation if baseHeight was meant to be part of the interpolation.
-    // For now, height is purely based on staticCameraHeightLevel and fixed min/max.
-    if (staticCameraHeightLevel <= STATIC_ZOOM_MAX_HEIGHT_THRESHOLD) {
-        const heightInterpFactor = staticCameraHeightLevel / STATIC_ZOOM_MAX_HEIGHT_THRESHOLD;
-        targetHeight = THREE.MathUtils.lerp(STATIC_ZOOM_MIN_HEIGHT, STATIC_ZOOM_MAX_HEIGHT, heightInterpFactor);
-    } else {
-        targetHeight = STATIC_ZOOM_MAX_HEIGHT; // Cap at max height
-    }
-    targetHeight = Math.max(STATIC_ZOOM_MIN_HEIGHT, targetHeight); // Ensure min height
+    // Height zoom is RELATIVE to the current view's baseline height, like
+    // distance already is. An absolute 0.5–50m range put the camera ~25m up
+    // for every view at the default level — comical for a 5m putt whose
+    // baseline is 1.5m. Level 0 = 30% of baseline, level 1 = 200%.
+    const viewBaseHeight = Math.max(baseCamPosOffset.y, STATIC_ZOOM_MIN_HEIGHT);
+    const heightInterpFactor = Math.min(staticCameraHeightLevel, STATIC_ZOOM_MAX_HEIGHT_THRESHOLD) / STATIC_ZOOM_MAX_HEIGHT_THRESHOLD;
+    targetHeight = THREE.MathUtils.lerp(viewBaseHeight * 0.3, viewBaseHeight * 2.0, heightInterpFactor);
+    targetHeight = Math.max(STATIC_ZOOM_MIN_HEIGHT, Math.min(STATIC_ZOOM_MAX_HEIGHT, targetHeight));
 
     // 3. Construct the New Base Camera Position Offset (before rotation)
     // Find the original direction vector on the XZ plane

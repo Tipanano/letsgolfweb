@@ -21,6 +21,8 @@ import { getFlagPosition as getTargetFlagPosition } from './visuals/targetView.j
 import { isLocalPlayerTurn } from './multiplayerManager.js'; // Import turn check for multiplayer
 // Import swing arc visualizer
 import * as SwingArc from './swingArcVisualizer.js';
+// Rhythm putting (mapping toggle)
+import * as RhythmPutt from './rhythmPutt.js';
 // --- Constants for Aiming ---
 const AIM_INCREMENT_FULL = 0.5; // Degrees per key press
 const AIM_INCREMENT_CHIP = 0.2; // Degrees per key press
@@ -323,74 +325,63 @@ function handleFullSwingKeyDown(event, gameState) {
 }
 
 function handleChipKeyDown(event, gameState) {
-    // Start Backswing with 'w'
-    if (event.key === 'w' && gameState === 'ready') {
-        // Check if it's the player's turn in multiplayer
-        if (!isLocalPlayerTurn()) {
-            updateStatus('Wait for your turn!');
-            return;
+    // Rhythm chipping: tap 'w' to set tempo, first 'i' on the beat to strike,
+    // optional second 'i' on the next beat to shape (early=draw, late=fade).
+    if (event.key === 'w') {
+        if (event.repeat) return; // Held key auto-repeat is not a tap
+        if (gameState === 'ready' || gameState === 'chipRhythm') {
+            GameLogic.recordChipRhythmTap();
         }
-        GameLogic.startBackswing();
+        return;
     }
 
-    // Capture chip downswing keys ('a', then 'i')
-    if (gameState === 'chipDownswingWaiting' && GameLogic.getDownswingPhaseStartTime()) {
-        const timeNow = performance.now();
-        const downswingStartTime = GameLogic.getDownswingPhaseStartTime();
-        const offset = timeNow - downswingStartTime;
+    if (event.key === 'i') {
+        if (gameState === 'chipRhythm') {
+            GameLogic.strikeRhythmChip();
+        } else if (gameState === 'chipShapeWindow') {
+            GameLogic.shapeRhythmChip();
+        }
+        return;
+    }
 
-        // Chip uses 'a' for rotation start
-        if (event.key === 'a' && !GameLogic.getChipRotationStartTime()) {
-            GameLogic.recordChipKey('rotation', timeNow); // New action function
-            showKeyPressMarker('a', offset, 1.0); // Update UI
-            // Mark on arc visualizer - use actual chip downswing duration
-            const backswingDuration = getBackswingDuration();
-            const chipDownswingDuration = Math.max(backswingDuration * 1.5, 1000);
-            const downswingProgress = Math.min(1.0, offset / chipDownswingDuration);
-            SwingArc.markKeyPressOnArc('a', downswingProgress);
-            updateStatus('Chip: Rotation...'); // Update UI
-            // updateDebugTimingInfo(...); // Chip debug needed
-        }
-        // Chip uses 'i' for hit/wrists, must be after 'a'
-        else if (event.key === 'i' && GameLogic.getChipRotationStartTime() && !GameLogic.getChipWristsStartTime()) {
-            GameLogic.recordChipKey('hit', timeNow); // New action function
-            showKeyPressMarker('i', offset, 1.0); // Update UI
-            // Mark on arc visualizer - use actual chip downswing duration
-            const backswingDuration = getBackswingDuration();
-            const chipDownswingDuration = Math.max(backswingDuration * 1.5, 1000);
-            const downswingProgress = Math.min(1.0, offset / chipDownswingDuration);
-            SwingArc.markKeyPressOnArc('i', downswingProgress);
-            // updateDebugTimingInfo(...);
-            GameLogic.triggerChipCalc(); // Trigger calculation
-        }
+    // Toggle tempo mapping direction (shared with putting)
+    if ((event.key === 't' || event.key === 'T') && (gameState === 'ready' || gameState === 'chipRhythm')) {
+        const fastIsFar = RhythmPutt.toggleMapping();
+        updateStatus(`Tempo mapping: ${fastIsFar ? 'fast taps = LONG shot' : 'fast taps = SHORT shot'}`);
+        GameLogic.refreshRhythmChipUI();
+        return;
+    }
+
+    if (event.key === 'Escape' && gameState === 'chipRhythm') {
+        GameLogic.cancelChipRhythm();
     }
 }
 
 function handlePuttKeyDown(event, gameState) {
-    // Start Backswing with 'w'
-    if (event.key === 'w' && gameState === 'ready') {
-        // Check if it's the player's turn in multiplayer
-        if (!isLocalPlayerTurn()) {
-            updateStatus('Wait for your turn!');
-            return;
+    // Rhythm putting: tap 'w' repeatedly to set tempo, 'i' on the beat to strike.
+    if (event.key === 'w') {
+        if (event.repeat) return; // Held key auto-repeat is not a tap
+        if (gameState === 'ready' || gameState === 'puttRhythm') {
+            GameLogic.recordPuttRhythmTap();
         }
-        GameLogic.startBackswing();
+        return;
     }
 
-    // Capture putt hit key ('i')
-    if (gameState === 'puttDownswingWaiting' && GameLogic.getDownswingPhaseStartTime()) {
-        const timeNow = performance.now();
-        const downswingStartTime = GameLogic.getDownswingPhaseStartTime();
-        const offset = timeNow - downswingStartTime;
+    if (event.key === 'i' && gameState === 'puttRhythm') {
+        GameLogic.strikeRhythmPutt();
+        return;
+    }
 
-        if (event.key === 'i' && !GameLogic.getPuttHitTime()) {
-            GameLogic.recordPuttKey('hit', timeNow); // New action function
-            // Mark on arc visualizer - putts use fixed 2000ms duration (matches physics and UI)
-            const PUTT_VISUAL_DURATION_MS = 2000;
-            const downswingProgress = Math.min(1.0, offset / PUTT_VISUAL_DURATION_MS);
-            SwingArc.markKeyPressOnArc('i', downswingProgress);
-            GameLogic.triggerPuttCalc(); // Trigger calculation
-        }
+    // Toggle tempo mapping direction (fast taps = far vs. fast taps = short)
+    if ((event.key === 't' || event.key === 'T') && (gameState === 'ready' || gameState === 'puttRhythm')) {
+        const fastIsFar = RhythmPutt.toggleMapping();
+        updateStatus(`Putt tempo mapping: ${fastIsFar ? 'fast taps = LONG putt' : 'fast taps = SHORT putt'}`);
+        GameLogic.refreshRhythmPuttUI();
+        return;
+    }
+
+    if (event.key === 'Escape' && gameState === 'puttRhythm') {
+        GameLogic.cancelPuttRhythm();
     }
 }
 
@@ -405,16 +396,11 @@ function handleFullSwingKeyUp(event, gameState) {
 }
 
 function handleChipKeyUp(event, gameState) {
-    if (event.key === 'w' && gameState === 'backswing') {
-        GameLogic.endBackswing(); // Re-use same action function
-        // updateDebugTimingInfo(...); // Chip debug needed
-    }
+    // Rhythm chipping uses discrete taps — nothing to do on key release.
 }
 
 function handlePuttKeyUp(event, gameState) {
-     if (event.key === 'w' && gameState === 'backswing') {
-        GameLogic.endBackswing(); // Re-use same action function
-    }
+    // Rhythm putting uses discrete taps — nothing to do on key release.
 }
 
 // --- Mouse Click Handler ---

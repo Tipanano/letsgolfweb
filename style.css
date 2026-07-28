@@ -489,64 +489,231 @@ body.mode-closest-to-flag #closest-to-flag-info {
 }
 
 /* --- Main Menu & Game View --- */
+/* === Main Menu (fullscreen overlay, dark course theme) === */
 #main-menu {
+    position: fixed;
+    inset: 0;
+    z-index: 5000;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    min-height: 90vh; /* Adjusted height */
-    text-align: center;
-    padding: 20px;
-    width: 100%;
+    padding: 18px 20px 28px;
     box-sizing: border-box;
-    background: linear-gradient(to bottom, #dcedc8, #c8e6c9); /* Light green gradient */
+    overflow-y: auto;
+    background:
+        radial-gradient(1100px 500px at 50% -150px, rgba(125, 255, 160, 0.16), transparent 60%),
+        linear-gradient(to bottom, #10231a, #16301f 55%, #12281a);
+    color: #eaf6ec;
 }
 
-#main-menu h2 {
-    font-size: 2em;
-    color: #1b5e20; /* Darker green for main menu title */
-    margin-bottom: 40px;
-    border-bottom: none;
+.menu-topbar {
+    width: 100%;
+    max-width: 760px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
 }
 
-#main-menu > div {
-    margin-bottom: 25px;
-    padding: 25px;
-    border: none; /* Remove border */
-    border-radius: 12px; /* Softer radius */
-    background-color: rgba(255, 255, 255, 0.8); /* Semi-transparent white */
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); /* Softer shadow */
-    width: 90%;
-    max-width: 450px;
+#player-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
-#main-menu strong {
-    display: block;
-    margin-bottom: 10px;
-    color: #2e7d32; /* Medium Green */
-    font-size: 1.1em;
+#player-type-badge {
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 0.72em;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    background: rgba(125, 255, 160, 0.18);
+    color: #a9f0bc;
+    border: 1px solid rgba(125, 255, 160, 0.35);
 }
 
-#main-menu button {
-    padding: 12px 20px;
-    font-size: 1em;
+#player-name {
     font-weight: 600;
-    margin: 8px;
-    cursor: pointer;
+    color: #eaf6ec;
+}
+
+.menu-account-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.menu-hero {
+    text-align: center;
+    margin: 7vh 0 5vh;
+}
+
+.menu-title {
+    font-size: 3.2em;
+    font-weight: 700;
+    color: #ffffff;
+    margin: 0;
     border: none;
-    border-radius: 6px;
-    background-color: #4caf50; /* Green button */
-    color: white;
-    transition: background-color 0.3s ease, transform 0.1s ease;
+    text-shadow: 0 4px 24px rgba(0, 0, 0, 0.45);
 }
 
-#main-menu button:hover {
-    background-color: #388e3c; /* Darker green on hover */
-    transform: translateY(-1px);
+.menu-tagline {
+    margin: 10px 0 0;
+    font-size: 1.05em;
+    color: rgba(234, 246, 236, 0.65);
 }
 
-#main-menu button:active {
-    transform: translateY(0px);
+.menu-cards {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(230px, 300px));
+    gap: 14px;
+    justify-content: center;
+    width: 100%;
+    max-width: 760px;
+}
+
+.menu-card {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 18px 20px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.06);
+    color: #eaf6ec;
+    text-align: left;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.menu-card:hover {
+    background: rgba(125, 255, 160, 0.12);
+    border-color: rgba(125, 255, 160, 0.45);
+    transform: translateY(-2px);
+}
+
+.menu-card:active { transform: translateY(0); }
+
+.menu-card-icon { font-size: 1.7em; }
+
+.menu-card-title {
+    font-size: 1.15em;
+    font-weight: 700;
+}
+
+.menu-card-desc {
+    font-size: 0.85em;
+    color: rgba(234, 246, 236, 0.6);
+}
+
+#practice-submenu {
+    grid-column: 1 / -1;
+    padding: 6px 4px;
+}
+
+#practice-submenu .menu-subcard {
+    padding: 12px 18px;
+    margin: 4px 6px 4px 0;
+    border-radius: 10px;
+    border: 1px solid rgba(125, 255, 160, 0.35);
+    background: rgba(125, 255, 160, 0.10);
+    color: #eaf6ec;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+#practice-submenu .menu-subcard:hover {
+    background: rgba(125, 255, 160, 0.24);
+}
+
+.menu-panel {
+    width: 100%;
+    max-width: 760px;
+    margin-top: 22px;
+    padding: 14px 18px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    background: rgba(0, 0, 0, 0.18);
+}
+
+.menu-panel-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.menu-panel-head strong { color: #eaf6ec; }
+
+.menu-beta-tag {
+    font-size: 0.7em;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: rgba(255, 215, 106, 0.18);
+    color: #ffd76a;
+    border: 1px solid rgba(255, 215, 106, 0.4);
+}
+
+#connection-status {
+    margin-left: auto;
+    font-size: 0.82em;
+    color: rgba(234, 246, 236, 0.55);
+}
+
+.menu-panel-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.menu-chip-btn {
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.07);
+    color: #eaf6ec;
+    font-weight: 600;
+    font-size: 0.88em;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.menu-chip-btn:hover { background: rgba(255, 255, 255, 0.16); }
+
+.menu-chip-primary {
+    background: #2f6b3f;
+    border-color: rgba(125, 255, 160, 0.5);
+}
+
+.menu-chip-primary:hover { background: #3a8350; }
+
+.menu-footer {
+    margin-top: 26px;
+}
+
+.menu-link-btn {
+    background: none;
+    border: none;
+    color: rgba(234, 246, 236, 0.7);
+    font-size: 0.95em;
+    font-family: inherit;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.menu-link-btn:hover { color: #7dffa0; }
+
+@media (max-width: 560px) {
+    .menu-cards { grid-template-columns: 1fr; }
+    .menu-title { font-size: 2.4em; }
 }
 
 #back-to-menu-button {

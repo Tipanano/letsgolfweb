@@ -44,6 +44,15 @@ export {
     recordDownswingKey,
     recordChipKey,
     recordPuttKey,
+    recordPuttRhythmTap,  // Rhythm putt: 'w' tap
+    strikeRhythmPutt,     // Rhythm putt: 'i' strike
+    cancelPuttRhythm,     // Rhythm putt: Escape cancel
+    refreshRhythmPuttUI,  // Rhythm putt: HUD/preview refresh (e.g. after mapping toggle)
+    recordChipRhythmTap,  // Rhythm chip: 'w' tap
+    strikeRhythmChip,     // Rhythm chip: first 'i' (strike, opens shape window)
+    shapeRhythmChip,      // Rhythm chip: second 'i' (draw/spinner/fade)
+    cancelChipRhythm,     // Rhythm chip: Escape cancel
+    refreshRhythmChipUI,  // Rhythm chip: HUD/preview refresh
     triggerFullSwingCalc, // Keep export for animation timeout trigger
     triggerChipCalc,      // Keep export for animation timeout trigger
     triggerPuttCalc,      // Keep export for animation timeout trigger

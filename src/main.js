@@ -50,7 +50,8 @@ function generateNewCTFHole() {
 
 
 // Function to change the game mode
-export async function setGameMode(newMode, initialHoleName = null, targetDistance = null) { // Made async, added initialHoleName and targetDistance
+// practiceType: 'chip' | 'putt' — starts play-hole mode as the short-game practice green
+export async function setGameMode(newMode, initialHoleName = null, targetDistance = null, practiceType = null) { // Made async, added initialHoleName and targetDistance
     if (!Object.values(GAME_MODES).includes(newMode)) {
         console.error(`Attempted to switch to invalid game mode: ${newMode}`);
         return;
@@ -97,11 +98,16 @@ export async function setGameMode(newMode, initialHoleName = null, targetDistanc
         logic.resetSwing(); // Reset swing state for CTF mode (sets gameState to 'ready')
         visuals.showBallAtAddress(); // Ensure ball is shown
     } else if (currentMode === GAME_MODES.PLAY_HOLE) {
-        // If initialHoleName is provided (e.g. from switchGameToHole calling setGameMode), use it.
-        // Otherwise, playHole.initializeMode will use its default or load saved state.
-        await playHole.initializeMode(initialHoleName); 
-        // visuals.switchToHoleView() is called by playHole.initializeMode via visuals.activateHoleViewCamera()
-        // Ball position is handled by playHole.initializeMode.
+        if (practiceType) {
+            // Short-game practice green (chipping/putting practice)
+            await playHole.initializePracticeMode(practiceType);
+        } else {
+            // If initialHoleName is provided (e.g. from switchGameToHole calling setGameMode), use it.
+            // Otherwise, playHole.initializeMode will use its default or load saved state.
+            await playHole.initializeMode(initialHoleName);
+            // visuals.switchToHoleView() is called by playHole.initializeMode via visuals.activateHoleViewCamera()
+            // Ball position is handled by playHole.initializeMode.
+        }
     }
     
 
@@ -258,11 +264,35 @@ async function checkMultiplayerBeforeSinglePlayer() {
     return true; // No active game, proceed with single-player
 }
 
+// Practice button toggles the practice submenu (Range / Chipping / Putting)
+document.getElementById('mode-btn-practice')?.addEventListener('click', () => {
+    const submenu = document.getElementById('practice-submenu');
+    if (submenu) {
+        submenu.style.display = submenu.style.display === 'none' ? 'block' : 'none';
+    }
+});
+
 document.getElementById('mode-btn-range')?.addEventListener('click', async () => {
     const canProceed = await checkMultiplayerBeforeSinglePlayer();
     if (canProceed) {
         ui.showGameView();
         setGameMode(GAME_MODES.RANGE);
+    }
+});
+
+document.getElementById('mode-btn-chipping')?.addEventListener('click', async () => {
+    const canProceed = await checkMultiplayerBeforeSinglePlayer();
+    if (canProceed) {
+        ui.showGameView();
+        setGameMode(GAME_MODES.PLAY_HOLE, null, null, 'chip');
+    }
+});
+
+document.getElementById('mode-btn-putting')?.addEventListener('click', async () => {
+    const canProceed = await checkMultiplayerBeforeSinglePlayer();
+    if (canProceed) {
+        ui.showGameView();
+        setGameMode(GAME_MODES.PLAY_HOLE, null, null, 'putt');
     }
 });
 

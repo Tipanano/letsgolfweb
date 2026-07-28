@@ -9,6 +9,7 @@ import { getCurrentShotType } from './gameLogic.js'; // Import shot type getter
 import { setShotDirectionAngle, getCurrentTargetLineAngle, getShotDirectionAngle, setGameState } from './gameLogic/state.js'; // Import state setter for angle and game state
 import { getCurrentGameMode } from './main.js'; // Import game mode getter
 import { YARDS_TO_METERS } from './utils/unitConversions.js'; // Import conversion constant
+import * as GreenContours from './greenContours.js'; // Smooth green elevation field
 import * as multiplayerManager from './multiplayerManager.js'; // Import multiplayer manager
 import * as ui from './ui.js'; // Import UI functions
 import { buildTerrainMesh, getTerrainHeight, getTerrainInfo } from './terrainHeight.js'; // Import terrain height system
@@ -103,6 +104,7 @@ export function switchToRangeView(initialScene = null) {
 
     unloadCurrentView(); // Unload previous view first (removes target elements etc.)
     currentVisualMode = VISUAL_MODES.RANGE;
+    GreenContours.setActiveContour(null); // Range is flat
     TargetVisuals.hideTargetElements(); // Ensure target elements are hidden
     RangeVisuals.initRangeVisuals(sceneToUse); // Add/show range elements
     CoreVisuals.applyStaticCameraView('range'); // Set camera to static range view
@@ -167,6 +169,10 @@ export function switchToHoleView(holeLayout, initialScene = null) {
 
 // Wrapper function called by playHole.js
 export function drawHole(holeLayout) {
+    // Activate the contour field BEFORE drawing: flag/cup heights and the
+    // displaced surface meshes all read it during rendering.
+    GreenContours.setActiveContour(holeLayout?.greenContour || null);
+
     switchToHoleView(holeLayout);
 
     // Build terrain mesh for height lookups
@@ -545,10 +551,13 @@ export const drawHoleLayout = HoleVisuals.drawHoleLayout;
 
 // Export terrain height query functions
 export function queryTerrainHeight(x, z) {
+    // Analytic green contour (smooth elevation) sits on top of the base
+    // terrain mesh (flat polygons today, vertex heights later).
+    const contourHeight = GreenContours.heightAt(x, z);
     if (!currentTerrainMesh) {
-        return 0; // Default ground level if no terrain loaded
+        return contourHeight;
     }
-    return getTerrainHeight(x, z, currentTerrainMesh);
+    return getTerrainHeight(x, z, currentTerrainMesh) + contourHeight;
 }
 
 export function queryTerrainInfo(x, z) {

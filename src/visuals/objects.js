@@ -1,7 +1,7 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
 // Import scaling factors if needed directly, or pass them in
 // For now, let's assume a fixed scale factor matching the ball's enlarged scale
-const TEE_SCALE_FACTOR = 10.0; // Matches BALL_SCALE_ENLARGED from core.js
+const TEE_SCALE_FACTOR = 3.5; // Matches BALL_SCALE_ENLARGED from core.js
 
 /**
  * Creates a scaled Three.js mesh representing a golf tee.

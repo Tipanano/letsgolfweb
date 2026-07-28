@@ -7,6 +7,237 @@
 
 import { clubs } from './clubs.js'; // May need club data (loft)
 import { getSurfaceProperties } from './surfaces.js'; // Import surface properties getter
+import { tempoToPower } from './rhythmPutt.js'; // Shared rhythm tempo mapping
+
+// --- Tunable Rhythm Chip Parameters ---
+// Direction (strike 'i' vs the beat — same convention as putting)
+const RCHIP_PURE_WINDOW_FRAC = 0.06;   // |beat deviation| under 6% of tempo = dead straight
+const RCHIP_MAX_FACE_FRAC = 0.35;      // Face angle effect maxes out here
+const RCHIP_MAX_FACE_DEG = 8.0;        // Max push/pull face angle from strike timing
+
+// Contact quality (driven by tempo steadiness — a wobbly rhythm risks fat/thin,
+// scaled by the lie's strike forgiveness; this is where duffs come from)
+const RCHIP_CONTACT_BASE_THRESHOLD = 0.085; // Contact-error units before a mishit
+const RCHIP_CV_RISK_FACTOR = 1.0;      // How strongly tempo wobble feeds contact error
+const RCHIP_OFFBEAT_RISK_FACTOR = 0.5; // Strikes way off the beat also risk contact
+const RCHIP_OFFBEAT_RISK_START = 0.20; // ...but only beyond this |deviation| fraction
+const RCHIP_DUFF_FACTOR = 1.8;         // Contact error this far past the threshold = full duff
+const RCHIP_POWER_CURVE = 1.25;        // Shaping of tempo power → clubhead speed
+
+// Shape tap (optional second 'i' vs the beat after the strike)
+const RCHIP_SHAPE_PURE_FRAC = 0.10;    // Within this = spinner (extra backspin)
+const RCHIP_SHAPE_MAX_FRAC = 0.45;     // Sidespin effect maxes out here
+const RCHIP_SHAPE_MAX_SIDESPIN = 650;  // RPM of added draw/fade spin
+const RCHIP_SPINNER_BACKSPIN_MULT = 1.30; // On-beat shape tap = extra bite
+
+/** Standard normal sample (Box-Muller). */
+function gaussianRandom() {
+    let u = 0, v = 0;
+    while (u === 0) u = Math.random();
+    while (v === 0) v = Math.random();
+    return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+}
+
+/**
+ * Clubhead delivery for a rhythm chip: tempo → clubhead speed, stance/club →
+ * loft and attack angle. Shared by the impact calculation and the preview.
+ */
+function rhythmChipDelivery(tempoMs, club, ballPositionFactor, currentSurface) {
+    const power = MIN_CHIP_POWER_FACTOR +
+        (MAX_CHIP_POWER_FACTOR - MIN_CHIP_POWER_FACTOR) *
+        Math.pow(tempoToPower(tempoMs), RCHIP_POWER_CURVE);
+    const clubheadSpeed = club.basePotentialSpeed * 0.45 * power;
+
+    const dynamicLoft = club.loft - ballPositionFactor * BALLPOS_LOFT_EFFECT;
+
+    let aoaFromBallPosition = -ballPositionFactor * BALLPOS_AOA_EFFECT;
+    if (currentSurface.toLowerCase() !== 'tee' && aoaFromBallPosition > 0) {
+        aoaFromBallPosition = Math.min(aoaFromBallPosition, MAX_NON_TEE_AOA_BONUS_CHIP);
+    }
+    const attackAngle = BASE_CHIP_AOA + aoaFromBallPosition;
+
+    return { power, clubheadSpeed, dynamicLoft, attackAngle };
+}
+
+/**
+ * Rough carry estimate (meters) for the HUD/preview while tapping.
+ * Ideal-contact projectile with a speed-dependent drag knockdown — a learning
+ * aid, deliberately approximate.
+ */
+export function estimateRhythmChipCarry(tempoMs, club, ballPositionFactor, currentSurface) {
+    const d = rhythmChipDelivery(tempoMs, club, ballPositionFactor, currentSurface);
+    const ballSpeedMps = d.clubheadSpeed * BASE_CHIP_SMASH * 0.44704;
+    const launchRad = clamp(d.dynamicLoft * 0.75 + d.attackAngle * 0.5, 1, 85) * Math.PI / 180;
+    const vacuumCarry = (ballSpeedMps * ballSpeedMps) * Math.sin(2 * launchRad) / 9.81;
+    const dragFactor = clamp(1 - ballSpeedMps * 0.014, 0.55, 0.92);
+    return Math.max(0.3, vacuumCarry * dragFactor);
+}
+
+/**
+ * Calculates chip impact from a rhythm strike.
+ *
+ * Inputs (from rhythmPutt.js):
+ *   strike = { tempoMs, cv, beatDeviationMs, shapeDevFrac|null }
+ * Skill model:
+ *   - Tempo → power (carry), normalized per club.
+ *   - Strike tap vs the beat → face angle (early = push right, late = pull left).
+ *   - Tempo steadiness (cv) → contact quality, scaled by lie forgiveness and
+ *     ball position. Shaky rhythm from a bad lie is where duffs live.
+ *   - Optional shape tap → sidespin (early = draw, late = fade) or extra
+ *     backspin (on the beat).
+ */
+export function calculateRhythmChipImpact(strike, club, ballPositionFactor, currentSurface) {
+    const { tempoMs, cv, beatDeviationMs, shapeDevFrac } = strike;
+    const devFrac = clamp(beatDeviationMs / tempoMs, -1, 1);
+
+    const surfaceProps = getSurfaceProperties(currentSurface);
+    const delivery = rhythmChipDelivery(tempoMs, club, ballPositionFactor, currentSurface);
+    const { clubheadSpeed, dynamicLoft, attackAngle } = delivery;
+
+    // --- Direction: strike tap vs the beat (same feel as putting) ---
+    let faceAngle = 0;
+    if (Math.abs(devFrac) > RCHIP_PURE_WINDOW_FRAC) {
+        const effect = clamp(
+            (Math.abs(devFrac) - RCHIP_PURE_WINDOW_FRAC) / (RCHIP_MAX_FACE_FRAC - RCHIP_PURE_WINDOW_FRAC),
+            0, 1);
+        faceAngle = -Math.sign(devFrac) * effect * RCHIP_MAX_FACE_DEG; // Early = push right
+    }
+    faceAngle = clamp(faceAngle, -MAX_FACE_ANGLE_CHIP, MAX_FACE_ANGLE_CHIP);
+
+    // --- Contact quality: steadiness is the skill ---
+    const offbeatRisk = Math.max(0, Math.abs(devFrac) - RCHIP_OFFBEAT_RISK_START) * RCHIP_OFFBEAT_RISK_FACTOR;
+    const contactRisk = cv * RCHIP_CV_RISK_FACTOR + offbeatRisk;
+    const contactError = Math.abs(gaussianRandom()) * contactRisk;
+
+    const fatForgiveness = surfaceProps?.strikeFactors?.fatForgiveness || 1.0;
+    const thinForgiveness = surfaceProps?.strikeFactors?.thinForgiveness || 1.0;
+    // Forward ball (factor < 0) = easier to thin; back ball (factor > 0) = easier to fat
+    const thinThreshold = RCHIP_CONTACT_BASE_THRESHOLD * thinForgiveness * (1 + ballPositionFactor * 0.3);
+    const fatThreshold = RCHIP_CONTACT_BASE_THRESHOLD * fatForgiveness * (1 - ballPositionFactor * 0.3);
+
+    // Miss side: an early strike leans thin, a late one leans fat (matches the
+    // legacy model); near the beat, ball position decides; ties flip a coin.
+    let missSide;
+    if (devFrac < -0.1) missSide = 'thin';
+    else if (devFrac > 0.1) missSide = 'fat';
+    else if (ballPositionFactor < -0.15) missSide = 'thin';
+    else if (ballPositionFactor > 0.15) missSide = 'fat';
+    else missSide = Math.random() < 0.5 ? 'thin' : 'fat';
+
+    let strikeQuality = 'Center';
+    const sideThreshold = missSide === 'thin' ? thinThreshold : fatThreshold;
+    if (contactError > sideThreshold * RCHIP_DUFF_FACTOR) {
+        strikeQuality = 'Duff';
+    } else if (contactError > sideThreshold) {
+        strikeQuality = missSide === 'thin' ? 'Thin' : 'Fat';
+    }
+
+    // --- Smash factor / ball speed (same quality modifiers as the legacy model) ---
+    let smashFactor = BASE_CHIP_SMASH;
+    if (strikeQuality === 'Fat') {
+        smashFactor *= (currentSurface.toUpperCase() === 'BUNKER') ? (1 - 0.15) : (1 - 0.25);
+    } else if (strikeQuality === 'Thin') {
+        smashFactor *= 1.4;
+    } else if (strikeQuality === 'Duff') {
+        smashFactor *= 0.6;
+    }
+    let ballSpeed = Math.max(3, clubheadSpeed * smashFactor);
+
+    // --- Launch angle ---
+    let launchAngle = dynamicLoft * 0.75 + attackAngle * 0.5;
+    if (strikeQuality === 'Thin') launchAngle = Math.min(launchAngle * 0.35, 8); // Bladed: comes out low and hot
+
+    // --- Backspin ---
+    let backSpin = CHIP_BASE_BACKSPIN +
+        (dynamicLoft * CHIP_BACKSPIN_LOFT_FACTOR) +
+        (clubheadSpeed * CHIP_BACKSPIN_SPEED_FACTOR) +
+        (attackAngle * CHIP_BACKSPIN_AOA_FACTOR);
+    if (strikeQuality === 'Fat') backSpin *= (currentSurface.toUpperCase() === 'BUNKER') ? 0.7 : 0.5;
+    else if (strikeQuality === 'Thin') backSpin *= 0.3;
+    else if (strikeQuality === 'Duff') backSpin *= 0.4;
+
+    // --- Sidespin: face (push/pull) + optional shape tap ---
+    let sideSpin = faceAngle * CHIP_SIDESPIN_FACE_FACTOR;
+    if (Math.abs(faceAngle) > 1.0) {
+        sideSpin += (faceAngle / 5.0) * clubheadSpeed * CHIP_SIDESPIN_SPEED_FACTOR;
+    }
+
+    let shapeLabel = null;
+    if (shapeDevFrac !== null && shapeDevFrac !== undefined && strikeQuality === 'Center') {
+        if (Math.abs(shapeDevFrac) <= RCHIP_SHAPE_PURE_FRAC) {
+            backSpin *= RCHIP_SPINNER_BACKSPIN_MULT; // On the beat: spinner
+            shapeLabel = 'spinner';
+        } else {
+            const effect = clamp(
+                (Math.abs(shapeDevFrac) - RCHIP_SHAPE_PURE_FRAC) / (RCHIP_SHAPE_MAX_FRAC - RCHIP_SHAPE_PURE_FRAC),
+                0, 1);
+            // Early = draw (hook, negative), late = fade (slice, positive)
+            sideSpin += Math.sign(shapeDevFrac) * effect * RCHIP_SHAPE_MAX_SIDESPIN;
+            shapeLabel = shapeDevFrac < 0 ? 'draw' : 'fade';
+        }
+    }
+    sideSpin = clamp(sideSpin, -MAX_CHIP_SIDESPIN_RPM, MAX_CHIP_SIDESPIN_RPM);
+
+    // --- Surface flight modification (same as legacy) ---
+    const flightMod = surfaceProps?.flightModification;
+    if (flightMod) {
+        let velReduction = flightMod.velocityReduction || 0;
+        if (Array.isArray(velReduction)) {
+            const [min, max] = velReduction;
+            velReduction = min + Math.random() * (max - min);
+        }
+        ballSpeed *= (1 - velReduction);
+
+        let spinReduction = flightMod.spinReduction || 0;
+        if (Array.isArray(spinReduction)) {
+            const [min, max] = spinReduction;
+            spinReduction = min + Math.random() * (max - min);
+        }
+        backSpin *= (1 - spinReduction);
+        sideSpin *= (1 - spinReduction);
+
+        launchAngle += flightMod.launchAngleChange || 0;
+    }
+
+    launchAngle = clamp(launchAngle, 1, 85);
+    backSpin = clamp(backSpin, 100, 8000);
+    sideSpin = clamp(sideSpin, -MAX_CHIP_SIDESPIN_RPM, MAX_CHIP_SIDESPIN_RPM);
+
+    let message = generateChipMessage(strikeQuality, dynamicLoft, attackAngle, ballSpeed, backSpin);
+    if (shapeLabel === 'draw') message += ' (draw spin)';
+    else if (shapeLabel === 'fade') message += ' (cut spin)';
+    else if (shapeLabel === 'spinner') message += ' (extra bite)';
+
+    console.log('\n🏌️ RHYTHM CHIP');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log(`   Club: ${club.name}, tempo ${tempoMs.toFixed(0)}ms (cv ${(cv * 100).toFixed(1)}%)`);
+    console.log(`   Strike deviation: ${(devFrac * 100).toFixed(0)}% of tempo → face ${faceAngle.toFixed(1)}°`);
+    console.log(`   Contact: risk ${contactRisk.toFixed(3)}, error ${contactError.toFixed(3)} vs thr ${sideThreshold.toFixed(3)} → ${strikeQuality}`);
+    console.log(`   Shape tap: ${shapeDevFrac === null || shapeDevFrac === undefined ? 'none' : (shapeDevFrac * 100).toFixed(0) + '%'} → ${shapeLabel || 'stock'}`);
+    console.log(`   Ball: ${ballSpeed.toFixed(1)} mph, launch ${launchAngle.toFixed(1)}°, spin ${backSpin.toFixed(0)}/${sideSpin.toFixed(0)} rpm`);
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+    return {
+        timingDeviations: { hitDeviation: beatDeviationMs },
+        clubHeadSpeed: clubheadSpeed,
+        potentialCHS: clubheadSpeed,
+        actualCHS: clubheadSpeed,
+        dynamicLoft,
+        attackAngle,
+        absoluteFaceAngle: faceAngle,
+        faceAngleRelPath: faceAngle,
+        clubPathAngle: 0,
+        strikeQuality,
+        smashFactor,
+        ballSpeed,
+        launchAngle,
+        spinAxisTilt: sideSpin / 100,
+        backSpin,
+        sideSpin,
+        rhythm: { tempoMs, cv, beatDeviationMs, shapeDevFrac },
+        message,
+    };
+}
 
 // --- Tunable Chip Parameters ---
 // Power/Speed

@@ -1,7 +1,7 @@
 import { getWind, getTemperature } from './state.js';
 import { handleObstacleCollision } from '../obstaclePhysics.js';
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
-import { getSurfaceProperties } from '../surfaces.js';
+import { getSurfaceProperties, SURFACES } from '../surfaces.js';
 import { getFlagPosition } from '../visuals/holeView.js';
 import { BALL_RADIUS } from '../visuals/core.js';
 import { getSurfaceTypeAtPoint } from '../utils/gameUtils.js';
@@ -493,6 +493,13 @@ const SURFACE_CHECK_DIST    = 0.25;           // m
  *   thick rough (rollOut 0.15) → ~0.45
  */
 function rollingFrictionFor(surfaceProps) {
+    // getSurfaceProperties() overwrites the green's hand-set friction (0.08)
+    // with a rollOut-derived 0.2, which made greens roll 2.5× too slow. Use
+    // the raw value for the green only — other surfaces keep the derived
+    // value so full-swing rollout tuning is unaffected.
+    if (surfaceProps?.name === SURFACES.GREEN.name && SURFACES.GREEN.friction !== undefined) {
+        return SURFACES.GREEN.friction;
+    }
     if (surfaceProps?.friction !== undefined) return surfaceProps.friction;
     const rollOut = surfaceProps?.rollOut ?? 0.5;
     return 0.63 * Math.exp(-2.3 * rollOut);
@@ -656,15 +663,18 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
         }
     }
 
-    // Final lie offset
+    // Final stored position uses the PHYSICAL convention: terrain + ball radius.
+    // Display code (showBallAtAddress) adds the surface's ballLieOffset on top —
+    // baking it in here double-applied the offset and made the ball pop up
+    // after every shot. Roll trajectory points keep their display heights so
+    // the animation ends where the resting ball will be shown.
     if (!isHoledOut) {
         const finalProps = getSurfaceProperties(currentSurface);
-        if (finalProps && typeof finalProps.ballLieOffset === 'number' && finalProps.ballLieOffset !== -1) {
-            position.y = queryTerrainHeight(position.x, position.z) + BALL_RADIUS + finalProps.ballLieOffset;
-        } else if (finalProps?.ballLieOffset === -1) {
-            position.y = (finalProps.height ?? 0) - BALL_RADIUS * 2;
+        if (finalProps?.ballLieOffset === -1) {
+            position.y = (finalProps.height ?? 0) - BALL_RADIUS * 2; // Submerged (water)
+        } else {
+            position.y = queryTerrainHeight(position.x, position.z) + BALL_RADIUS;
         }
-        if (rollPoints.length > 0) rollPoints[rollPoints.length - 1].y = position.y;
     }
 
     return {

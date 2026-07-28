@@ -1,4 +1,5 @@
 import { clubs } from '../clubs.js';
+import { reset as resetRhythmPutt } from '../rhythmPutt.js';
 import { setupTimingBarWindows, setBallPosition, getBallPositionLevels, setSwingSpeedControlState, updateTimingBarVisibility, setSelectedClubButton, setShotTypeRadio, setPutterControlsVisibility, updateControlsForShotType, setupBackswingBar } from '../ui.js'; // Added setShotTypeRadio
 // Import resetStaticCameraZoom along with other camera functions if needed, or just visuals module
 import { resetStaticCameraZoom } from '../visuals/core.js'; // Import the new zoom reset function
@@ -286,6 +287,7 @@ export function resetSwingState() { // Added 'export' keyword here
     chipRotationStartTime = null; // Chip reset
     chipWristsStartTime = null; // Chip reset
     puttHitTime = null; // Putt reset
+    resetRhythmPutt(); // Clear rhythm putt taps
 
     // Stop animations if still running (Need to handle cancellation logic elsewhere now)
     // This function should only reset the state variables.
@@ -331,6 +333,7 @@ export function resetSwingVariablesOnly() { // Added 'export' keyword here
     chipRotationStartTime = null; // Chip reset
     chipWristsStartTime = null; // Chip reset
     puttHitTime = null; // Putt reset
+    resetRhythmPutt(); // Clear rhythm putt taps
 
     // Stop animations if still running (Need to handle cancellation logic elsewhere now)
     // This function should only reset the state variables.

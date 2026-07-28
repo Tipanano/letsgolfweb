@@ -13,8 +13,10 @@ import {
     stopPuttDownswingAnimation, stopAllAnimations // Import animation controls
 } from './animations.js';
 import {
-    updateStatus, resetUIForNewShot, updateDebugTimingInfo, clearClubSelection, setSelectedClubButton // Import UI functions (resetUIForNewShot is already imported)
+    updateStatus, resetUIForNewShot, updateDebugTimingInfo, clearClubSelection, setSelectedClubButton, // Import UI functions (resetUIForNewShot is already imported)
+    getBallPositionIndex as getBallPositionIndexUI, getBallPositionLevels as getBallPositionLevelsUI
 } from '../ui.js';
+import { estimateRhythmChipCarry } from '../chipPhysics.js';
 import { gameAlert } from '../ui/gameAlert.js';
 // Import calculation functions directly
 import { calculateFullSwingShot, calculateChipShot, calculatePuttShot } from './calculations.js';
@@ -29,7 +31,8 @@ import {
     getHoleJustCompleted,
     prepareForTeeShotAfterHoleOut,
     returnToTee,
-    moveToFormerPosition
+    moveToFormerPosition,
+    isPracticeMode
 } from '../modes/playHole.js';
 import { getFlagPosition, setFlagstickVisibility } from '../visuals/holeView.js'; // Import flag position getter AND visibility setter
 import { getActiveCameraMode, setCameraBehindBall, snapFollowCameraToBall, CameraMode, removeTrajectoryLine, applyAimAngleToCamera, setCameraBehindBallLookingAtTarget, setInitialFollowCameraLookingAtTarget, setBallScale, resetStaticCameraZoom } from '../visuals/core.js'; // Import camera functions, line removal, aim application, setBallScale, AND resetStaticCameraZoom
@@ -37,6 +40,12 @@ import { resetVisuals } from '../visuals.js'; // Import resetVisuals to update b
 import { getSurfaceTypeAtPoint } from '../utils/gameUtils.js'; // Import surface checker
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js'; // Need THREE for Vector3
 import * as multiplayerManager from '../multiplayerManager.js'; // Import multiplayer manager
+// Rhythm putting
+import * as RhythmPutt from '../rhythmPutt.js';
+import { updatePuttPreview, hidePuttPreview } from '../visuals/puttPreview.js';
+import { updateRhythmHud, hideRhythmHud, flashBeat, showRhythmHud } from '../ui/rhythmPuttHud.js';
+import { ball } from '../visuals/core.js';
+import { getCurrentTargetLineAngle, getShotDirectionAngle } from './state.js';
 
 // --- Sound Effects ---
 const regularShotSound = new Audio('assets/sounds/regular_shot.mp3');
@@ -247,6 +256,238 @@ export function triggerChipCalc() {
     }
 }
 
+// --- Rhythm Putting Actions ---
+
+/**
+ * Handles a 'w' tap for the rhythm putt input. The first tap moves the game
+ * into the 'puttRhythm' state; subsequent taps refine the tempo.
+ */
+export function recordPuttRhythmTap() {
+    if (getCurrentShotType() !== 'putt') return;
+    const state = getGameState();
+    if (state !== 'ready' && state !== 'puttRhythm') return;
+
+    if (state === 'ready') {
+        if (!getSelectedClub()) {
+            gameAlert.show('Please select a club before starting your swing');
+            return;
+        }
+        if (multiplayerManager.hasLocalPlayerShot()) {
+            updateStatus('You have already taken your shot!');
+            return;
+        }
+        if (!multiplayerManager.isLocalPlayerTurn()) {
+            updateStatus('Wait for your turn!');
+            return;
+        }
+        setGameState('puttRhythm');
+        resetUIForNewShot();
+        multiplayerManager.onShotStarted();
+        showRhythmHud();
+        updateStatus('Putt: tap w to a rhythm...');
+    }
+
+    const result = RhythmPutt.recordTap(performance.now());
+    if (!result.accepted) return;
+
+    flashBeat();
+    if (result.restarted) {
+        updateStatus('Tempo expired — building a new rhythm');
+    }
+    refreshRhythmPuttUI(result);
+}
+
+/** Refreshes the HUD and ground preview from the current rhythm state. */
+export function refreshRhythmPuttUI(snapshot = null) {
+    if (getGameState() !== 'puttRhythm') return;
+    const snap = snapshot || RhythmPutt.getSnapshot();
+
+    updateRhythmHud(snap, RhythmPutt.MIN_TAPS_TO_ARM);
+
+    if (snap.tempoMs && ball) {
+        const aimAngleRad = (getCurrentTargetLineAngle() + getShotDirectionAngle()) * Math.PI / 180;
+        // Dispersion preview: ± roughly 2 sigma of the injected distance noise
+        const spreadFrac = Math.min(0.5, 2 * snap.cv * 0.6 + 0.02);
+        updatePuttPreview({
+            ballPos: ball.position,
+            aimAngleRad,
+            distanceMeters: snap.distanceMeters,
+            spreadFrac,
+            armed: snap.armed,
+        });
+    }
+}
+
+/**
+ * Handles the 'i' press: scores the strike against the player's own beat and
+ * fires the putt calculation.
+ */
+export function strikeRhythmPutt() {
+    if (getCurrentShotType() !== 'putt' || getGameState() !== 'puttRhythm') return;
+
+    const strike = RhythmPutt.scoreStrike(performance.now());
+    if (!strike) {
+        // Not armed yet, or the rhythm expired (scoreStrike resets it then)
+        updateRhythmHud(RhythmPutt.getSnapshot(), RhythmPutt.MIN_TAPS_TO_ARM);
+        updateStatus('Keep tapping w — need a settled tempo before striking');
+        return;
+    }
+
+    hidePuttPreview();
+    hideRhythmHud();
+    puttShotSound.play().catch(e => console.error("Error playing putt shot sound:", e));
+    setGameState('calculatingPutt');
+    calculatePuttShot();
+    RhythmPutt.reset();
+}
+
+/** Cancels an in-progress rhythm putt (Escape). */
+export function cancelPuttRhythm() {
+    if (getGameState() !== 'puttRhythm') return;
+    RhythmPutt.reset();
+    hidePuttPreview();
+    hideRhythmHud();
+    setGameState('ready');
+    updateStatus('Putt cancelled — Ready');
+}
+
+// --- Rhythm Chipping Actions ---
+// Same tap mechanic as putting, plus an optional SECOND 'i' scored against the
+// beat after the strike: early = draw, on the beat = extra spin, late = fade.
+
+let chipShapeTimerId = null;
+
+/** Handles a 'w' tap for the rhythm chip input. */
+export function recordChipRhythmTap() {
+    if (getCurrentShotType() !== 'chip') return;
+    const state = getGameState();
+    if (state !== 'ready' && state !== 'chipRhythm') return;
+
+    if (state === 'ready') {
+        if (!getSelectedClub()) {
+            gameAlert.show('Please select a club before starting your swing');
+            return;
+        }
+        if (multiplayerManager.hasLocalPlayerShot()) {
+            updateStatus('You have already taken your shot!');
+            return;
+        }
+        if (!multiplayerManager.isLocalPlayerTurn()) {
+            updateStatus('Wait for your turn!');
+            return;
+        }
+        setGameState('chipRhythm');
+        resetUIForNewShot();
+        multiplayerManager.onShotStarted();
+        showRhythmHud();
+        updateStatus('Chip: tap w to a rhythm...');
+    }
+
+    const result = RhythmPutt.recordTap(performance.now());
+    if (!result.accepted) return;
+
+    flashBeat();
+    if (result.restarted) {
+        updateStatus('Tempo expired — building a new rhythm');
+    }
+    refreshRhythmChipUI(result);
+}
+
+/** Refreshes the HUD and carry preview from the current rhythm state (chip). */
+export function refreshRhythmChipUI(snapshot = null) {
+    if (getGameState() !== 'chipRhythm') return;
+    const snap = snapshot || RhythmPutt.getSnapshot();
+    const club = getSelectedClub();
+
+    let carry = null;
+    if (snap.tempoMs && club) {
+        const { lie, ballPositionFactor } = _getChipContext();
+        carry = estimateRhythmChipCarry(snap.tempoMs, club, ballPositionFactor, lie);
+    }
+
+    updateRhythmHud({ ...snap, distanceMeters: carry }, RhythmPutt.MIN_TAPS_TO_ARM,
+        snap.armed ? 'Press i on the beat to chip' : null);
+
+    if (carry !== null && ball) {
+        const aimAngleRad = (getCurrentTargetLineAngle() + getShotDirectionAngle()) * Math.PI / 180;
+        const spreadFrac = Math.min(0.5, 2 * snap.cv * 0.8 + 0.04);
+        updatePuttPreview({
+            ballPos: ball.position,
+            aimAngleRad,
+            distanceMeters: carry,
+            spreadFrac,
+            armed: snap.armed,
+        });
+    }
+}
+
+/** Current lie + ball position factor for chip physics/preview. */
+function _getChipContext() {
+    let lie = 'FAIRWAY';
+    if (getCurrentGameMode() === 'play-hole') {
+        lie = (getPlayHoleLie() || 'FAIRWAY').toUpperCase().replace(' ', '_');
+    }
+    const levels = getBallPositionLevelsUI();
+    const centerIndex = Math.floor(levels / 2);
+    const index = getBallPositionIndexUI();
+    const ballPositionFactor = levels > 1 ? (centerIndex - index) / centerIndex : 0;
+    return { lie, ballPositionFactor };
+}
+
+/** First 'i': strike. Opens the shape window (one beat) before the shot fires. */
+export function strikeRhythmChip() {
+    if (getCurrentShotType() !== 'chip' || getGameState() !== 'chipRhythm') return;
+
+    const strike = RhythmPutt.scoreStrike(performance.now());
+    if (!strike) {
+        updateRhythmHud(RhythmPutt.getSnapshot(), RhythmPutt.MIN_TAPS_TO_ARM);
+        updateStatus('Keep tapping w — need a settled tempo before striking');
+        return;
+    }
+
+    setGameState('chipShapeWindow');
+    updateStatus('Shape it: i early = draw · on beat = spin · late = fade');
+    updateRhythmHud({ ...RhythmPutt.getSnapshot(), tempoMs: strike.tempoMs, cv: strike.cv, armed: true, distanceMeters: null },
+        RhythmPutt.MIN_TAPS_TO_ARM, 'Shape: i early=draw · beat=spin · late=fade');
+
+    // No shape tap within the window → fire with stock spin
+    chipShapeTimerId = setTimeout(() => {
+        chipShapeTimerId = null;
+        _fireRhythmChip();
+    }, RhythmPutt.shapeWindowMs());
+}
+
+/** Second 'i': shape tap (draw/spinner/fade), then fire. */
+export function shapeRhythmChip() {
+    if (getCurrentShotType() !== 'chip' || getGameState() !== 'chipShapeWindow') return;
+    if (chipShapeTimerId) {
+        clearTimeout(chipShapeTimerId);
+        chipShapeTimerId = null;
+    }
+    RhythmPutt.scoreShape(performance.now());
+    _fireRhythmChip();
+}
+
+function _fireRhythmChip() {
+    if (getGameState() !== 'chipShapeWindow') return;
+    hidePuttPreview();
+    hideRhythmHud();
+    chipShotSound.play().catch(e => console.error("Error playing chip shot sound:", e));
+    setGameState('calculatingChip');
+    calculateChipShot();
+    RhythmPutt.reset();
+}
+
+/** Cancels an in-progress rhythm chip (Escape, before the strike). */
+export function cancelChipRhythm() {
+    if (getGameState() !== 'chipRhythm') return;
+    RhythmPutt.reset();
+    hidePuttPreview();
+    hideRhythmHud();
+    setGameState('ready');
+    updateStatus('Chip cancelled — Ready');
+}
+
 export function triggerPuttCalc() {
     const shotType = getCurrentShotType();
     const state = getGameState(); // Keep only one declaration
@@ -275,6 +516,13 @@ export function resetSwing() {
     const currentMode = getCurrentGameMode();
 
     stopAllAnimations();
+    RhythmPutt.reset();
+    hidePuttPreview();
+    hideRhythmHud();
+    if (chipShapeTimerId) {
+        clearTimeout(chipShapeTimerId);
+        chipShapeTimerId = null;
+    }
 
     // RANGE MODE: Always return to tee
     if (currentMode === 'range') {
@@ -382,8 +630,9 @@ function _prepareNextShotAtCurrentPosition() {
             // Auto-select putter when on the green
             setSelectedClub('PT');
             setSelectedClubButton('PT');
-        } else {
-            // Clear club selection - player must choose club for each shot
+        } else if (!isPracticeMode()) {
+            // Clear club selection - player must choose club for each shot.
+            // Practice keeps the current club so repeated chips flow.
             clearSelectedClub(); // Clear from game state
             clearClubSelection(); // Clear from UI
         }

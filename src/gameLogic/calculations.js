@@ -15,8 +15,9 @@ import { ctfConfigToHoleLayout } from '../holeConfigGenerator.js'; // Import CTF
 import { stopFullDownswingAnimation, stopChipDownswingAnimation /* Putt stopped in actions */ } from './animations.js';
 import { updateStatus, getBallPositionIndex, getBallPositionLevels, displayIdealJPressWindowOnBackswing, displayDownswingFeedbackWindows } from '../ui.js'; // Added displayDownswingFeedbackWindows
 import { calculateImpactPhysics } from '../swingPhysics.js';
-import { calculateChipImpact } from '../chipPhysics.js';
-import { calculatePuttImpact } from '../puttPhysics.js';
+import { calculateChipImpact, calculateRhythmChipImpact } from '../chipPhysics.js';
+import { calculatePuttImpact, calculateRhythmPuttImpact } from '../puttPhysics.js';
+import { consumeStrike as consumeRhythmStrike } from '../rhythmPutt.js';
 // Import both simulation functions and HOLE_RADIUS
 import { simulateFlightStepByStep, simulateBouncePhase, simulateGroundRoll, HOLE_RADIUS_METERS } from './simulation.js';
 import { getSurfaceProperties } from '../surfaces.js'; // Import surface properties getter
@@ -381,7 +382,11 @@ export function calculateChipShot() {
     currentSurface = currentSurface.toUpperCase().replace(' ', '_');
 
     // --- Call chip physics ---
-    const impactResult = calculateChipImpact(backswingDuration, rotationOffset, hitOffset, selectedClub, ballPositionFactor, currentSurface); // Pass currentSurface
+    // Rhythm chipping: strike scored against the player's tap tempo.
+    const rhythmStrike = consumeRhythmStrike();
+    const impactResult = rhythmStrike
+        ? calculateRhythmChipImpact(rhythmStrike, selectedClub, ballPositionFactor, currentSurface)
+        : calculateChipImpact(backswingDuration, rotationOffset, hitOffset, selectedClub, ballPositionFactor, currentSurface); // Legacy fallback
 
     // --- Use results ---
     const ballSpeed = impactResult.ballSpeed;
@@ -588,13 +593,20 @@ export function calculatePuttShot() {
     updateStatus('Calculating Putt...');
 
     // --- Prepare Inputs ---
-    const backswingDuration = getBackswingDuration();
-    const downswingPhaseStartTime = getDownswingPhaseStartTime();
-    const puttHitTime = getPuttHitTime();
-    const hitOffset = puttHitTime ? puttHitTime - downswingPhaseStartTime : null;
+    // Rhythm putting: the strike scored against the player's tap tempo.
+    const rhythmStrike = consumeRhythmStrike();
 
-    // --- Call putt physics ---
-    const impactResult = calculatePuttImpact(backswingDuration, hitOffset);
+    let impactResult;
+    if (rhythmStrike) {
+        impactResult = calculateRhythmPuttImpact(rhythmStrike);
+    } else {
+        // Legacy fallback (e.g. timeout path): hold-w-for-power scheme
+        const backswingDuration = getBackswingDuration();
+        const downswingPhaseStartTime = getDownswingPhaseStartTime();
+        const puttHitTime = getPuttHitTime();
+        const hitOffset = puttHitTime ? puttHitTime - downswingPhaseStartTime : null;
+        impactResult = calculatePuttImpact(backswingDuration, hitOffset);
+    }
 
     // --- Use results ---
     const ballSpeed = impactResult.ballSpeed; // This is speed in mph, need m/s for simulation
@@ -646,10 +658,15 @@ export function calculatePuttShot() {
     isHoledOut = groundRollResult.isHoledOut;
     const totalAnimationTime = groundRollResult.endTime || 0;
 
-    // Prepend initial position with time=0 to the roll trajectory (keeps timestamps)
+    // Prepend initial position with time=0 to the roll trajectory (keeps timestamps).
+    // Use the roll's display height (terrain + radius + lie offset) so the
+    // animation starts exactly where the resting ball is shown — initialPosition.y
+    // is the physical height and would make the ball dip at stroke start.
+    const rollPts = groundRollResult.rollTrajectoryPoints || [];
+    const startY = rollPts.length > 0 ? rollPts[0].y : initialPosition.y;
     const puttTrajectory = [
-        { x: initialPosition.x, y: initialPosition.y, z: initialPosition.z, time: 0 }
-    ].concat(groundRollResult.rollTrajectoryPoints || []);
+        { x: initialPosition.x, y: startY, z: initialPosition.z, time: 0 }
+    ].concat(rollPts);
 
     // Calculate final distances
     const dxTotal = finalPosition.x - initialPosition.x;
@@ -671,6 +688,20 @@ export function calculatePuttShot() {
     // --- Determine Result Message ---
     if (isHoledOut) {
         resultMessage += " Sunk!";
+    } else if (currentMode === 'play-hole' && currentHoleLayout?.flagPosition) {
+        // Leave feedback: how far past/short of the hole the putt finished.
+        const flag = currentHoleLayout.flagPosition;
+        const remaining = Math.hypot(finalPosition.x - flag.x, finalPosition.z - flag.z);
+        const startDist = Math.hypot(initialPosition.x - flag.x, initialPosition.z - flag.z);
+        if (startDist > 0.01) {
+            const dirX = (flag.x - initialPosition.x) / startDist;
+            const dirZ = (flag.z - initialPosition.z) / startDist;
+            const beyond = (finalPosition.x - flag.x) * dirX + (finalPosition.z - flag.z) * dirZ > 0;
+            const distText = remaining < 1
+                ? `${(remaining * 100).toFixed(0)} cm`
+                : `${remaining.toFixed(1)} m`;
+            resultMessage += ` — ${distText} ${beyond ? 'past' : 'short'}`;
+        }
     }
 
     // --- Prepare Shot Data Object ---

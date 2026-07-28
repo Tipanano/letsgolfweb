@@ -137,7 +137,7 @@ export function drawHoleLayout(holeLayout) {
 
         // Position the hole centered at the flag position, using actual terrain height at that XZ position
         const terrainHeightAtFlag = queryTerrainHeight(currentFlagPosition.x, currentFlagPosition.z);
-        const holeTopEdgeY = terrainHeightAtFlag + 0.01; // Place top just at green surface
+        const holeTopEdgeY = terrainHeightAtFlag + 0.065; // Just above the green's layer height (0.06)
         const holeCenterY = holeTopEdgeY - (holeDepth / 2); // Calculate center Y
 
         holeMesh.position.set(
