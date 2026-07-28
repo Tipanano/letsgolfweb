@@ -11,6 +11,7 @@ import { getCurrentGameMode } from './main.js'; // Import game mode getter
 import { YARDS_TO_METERS } from './utils/unitConversions.js'; // Import conversion constant
 import * as GreenContours from './greenContours.js'; // Smooth green elevation field
 import * as SlopeOverlay from './visuals/slopeOverlay.js'; // Green-reading arrows
+import * as RhythmHud from './ui/rhythmPuttHud.js'; // Shared prompt/tempo pill
 import * as multiplayerManager from './multiplayerManager.js'; // Import multiplayer manager
 import * as ui from './ui.js'; // Import UI functions
 import { buildTerrainMesh, getTerrainHeight, getTerrainInfo } from './terrainHeight.js'; // Import terrain height system
@@ -321,6 +322,7 @@ export function animateBallFlightWithLanding(shotData, trajectoryColor = 0xffff0
             console.log('🎬 [ANIMATION] Setting gameState to result');
             // Set game state to 'result' now that animation is complete (allows 'n' key to work)
             setGameState('result');
+            RhythmHud.showAddressHint('next');
         } else {
             console.log('🎬 [ANIMATION] NOT setting gameState (watching other player)');
         }

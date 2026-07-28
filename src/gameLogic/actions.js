@@ -44,7 +44,7 @@ import * as multiplayerManager from '../multiplayerManager.js'; // Import multip
 // Rhythm putting
 import * as RhythmPutt from '../rhythmPutt.js';
 import { updatePuttPreview, hidePuttPreview } from '../visuals/puttPreview.js';
-import { updateRhythmHud, hideRhythmHud, flashBeat, showRhythmHud } from '../ui/rhythmPuttHud.js';
+import { updateRhythmHud, hideRhythmHud, flashBeat, showRhythmHud, showAddressHint } from '../ui/rhythmPuttHud.js';
 import { ball } from '../visuals/core.js';
 import { getCurrentTargetLineAngle, getShotDirectionAngle } from './state.js';
 
@@ -82,6 +82,7 @@ export function startBackswing() {
     setBackswingStartTime(performance.now());
     updateStatus(`${shotType.charAt(0).toUpperCase() + shotType.slice(1)} Backswing...`);
     resetUIForNewShot(); // Reset UI elements (preserving ball position)
+    hideRhythmHud(); // Swing bars/arc take over from the address prompt
 
     // Notify multiplayer manager that shot has started
     multiplayerManager.onShotStarted();
@@ -347,9 +348,9 @@ export function cancelPuttRhythm() {
     if (getGameState() !== 'puttRhythm') return;
     RhythmPutt.reset();
     hidePuttPreview();
-    hideRhythmHud();
     setGameState('ready');
     updateStatus('Putt cancelled — Ready');
+    showAddressHint('putt');
 }
 
 // --- Rhythm Chipping Actions ---
@@ -484,9 +485,9 @@ export function cancelChipRhythm() {
     if (getGameState() !== 'chipRhythm') return;
     RhythmPutt.reset();
     hidePuttPreview();
-    hideRhythmHud();
     setGameState('ready');
     updateStatus('Chip cancelled — Ready');
+    showAddressHint('chip');
 }
 
 export function triggerPuttCalc() {
@@ -528,12 +529,14 @@ export function resetSwing() {
     // RANGE MODE: Always return to tee
     if (currentMode === 'range') {
         resetSwingState(); // Full reset with UI and visuals
+        showAddressHint(getCurrentShotType(), { hasClub: !!getSelectedClub() });
         return;
     }
 
     // CLOSEST TO FLAG MODE: Always return to tee
     if (currentMode === 'closest-to-flag') {
         resetSwingState(); // Full reset with UI and visuals
+        showAddressHint(getCurrentShotType(), { hasClub: !!getSelectedClub() });
         return;
     }
 
@@ -546,6 +549,7 @@ export function resetSwing() {
             console.log('resetSwing: Hole completed, returning to tee');
             returnToTee(); // Updates playHole internal state
             resetSwingState(); // Full reset with UI and visuals (gets position from playHole)
+            showAddressHint(getCurrentShotType(), { hasClub: !!getSelectedClub() });
             return;
         }
 
@@ -674,6 +678,10 @@ function _prepareNextShotAtCurrentPosition() {
              // Optionally reset to a default view if positions are missing
              // CoreVisuals.resetCameraPosition(); // Example fallback
         }
+
+        // At-address prompt for the next shot (re-read the type: auto putter
+        // selection above may have just changed it)
+        showAddressHint(getCurrentShotType(), { hasClub: !!getSelectedClub() });
     }
     // Does NOT call visuals.resetVisuals()
 }

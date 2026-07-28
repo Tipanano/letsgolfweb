@@ -71,6 +71,33 @@ function injectStyles() {
         .rhythm-steady-good { color: #7dffa0; }
         .rhythm-steady-ok   { color: #ffd76a; }
         .rhythm-steady-bad  { color: #ff8a7a; }
+        #rhythm-putt-hud.hint-mode #rhythm-putt-distance,
+        #rhythm-putt-hud.hint-mode #rhythm-putt-tempo { display: none; }
+        #rhythm-putt-hud.hint-mode #rhythm-putt-hint { font-size: 15px; }
+        #rhythm-putt-hud kbd {
+            display: inline-block;
+            padding: 1px 8px;
+            margin: 0 2px;
+            border: 1px solid rgba(125, 255, 160, 0.45);
+            border-radius: 5px;
+            background: rgba(125, 255, 160, 0.12);
+            color: #a9f0bc;
+            font-family: inherit;
+            font-weight: 700;
+            font-size: 0.9em;
+        }
+        .rhythm-subkeys {
+            display: block;
+            margin-top: 3px;
+            font-size: 11px;
+            opacity: 0.55;
+        }
+        .rhythm-subkeys kbd {
+            padding: 0 5px;
+            border-color: rgba(255,255,255,0.25) !important;
+            background: rgba(255,255,255,0.06) !important;
+            color: inherit !important;
+        }
     `;
     document.head.appendChild(style);
 }
@@ -107,6 +134,39 @@ export function showRhythmHud() {
     hudEl.classList.add('visible');
 }
 
+/**
+ * At-address prompt: tells the player the first move for the current shot
+ * type ('full' | 'chip' | 'putt'), or 'next' after a shot, or to pick a club.
+ * The pill switches back to the live tempo display once tapping starts.
+ */
+export function showAddressHint(type, { hasClub = true } = {}) {
+    ensureCreated();
+    showRhythmHud();
+    hudEl.classList.add('hint-mode');
+    pulseEl.classList.remove('beat');
+    distanceEl.textContent = '';
+    tempoEl.textContent = '';
+
+    let html;
+    if (type === 'next') {
+        html = '<kbd>N</kbd> next shot';
+    } else if (!hasClub) {
+        html = 'Pick a club to play your shot';
+    } else if (type === 'putt') {
+        html = 'Tap <kbd>W</kbd> to a rhythm — tempo sets distance';
+    } else if (type === 'chip') {
+        html = 'Tap <kbd>W</kbd> to a rhythm — tempo sets carry';
+    } else {
+        html = 'Hold <kbd>W</kbd> for backswing — release at the top';
+    }
+
+    if (type !== 'next' && hasClub) {
+        const extras = (type === 'putt' || type === 'chip') ? ' · <kbd>G</kbd> slopes' : '';
+        html += `<span class="rhythm-subkeys"><kbd>←</kbd><kbd>→</kbd> aim · <kbd>H</kbd> aim at flag${extras}</span>`;
+    }
+    hintEl.innerHTML = html;
+}
+
 export function hideRhythmHud() {
     if (hudEl) hudEl.classList.remove('visible');
 }
@@ -128,6 +188,7 @@ export function flashBeat() {
 export function updateRhythmHud(snap, minTaps = 3, hintOverride = null) {
     ensureCreated();
     showRhythmHud();
+    hudEl.classList.remove('hint-mode');
 
     if (!snap.tempoMs) {
         distanceEl.textContent = '–';

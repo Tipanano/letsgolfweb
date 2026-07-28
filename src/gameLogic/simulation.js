@@ -17,6 +17,10 @@ const BALL_AREA      = Math.PI * BALL_R * BALL_R;
 const BALL_MASS      = 0.04593;            // kg
 const BALL_I         = (2 / 5) * BALL_MASS * BALL_R * BALL_R; // sphere moment of inertia
 const GRAVITY        = 9.81;               // m/s^2
+
+// Per-step physics tracing (flight/roll telemetry every shot). Turn on when
+// tuning; off by default to keep the console usable.
+const PHYSICS_LOG = false;
 const AIR_VISCOSITY  = 1.81e-5;            // Pa·s, dynamic viscosity of air at ~15 °C
 
 // ============================================================
@@ -235,7 +239,7 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club, 
         const dxh = position.x - initialPos.x;
         const dzh = position.z - initialPos.z;
         const horizDist = Math.sqrt(dxh * dxh + dzh * dzh);
-        if (horizDist - lastLoggedDistance >= LOG_INTERVAL_M) {
+        if (PHYSICS_LOG && horizDist - lastLoggedDistance >= LOG_INTERVAL_M) {
             const speed = Math.sqrt(velocity.x ** 2 + velocity.y ** 2 + velocity.z ** 2);
             const hSpeed = Math.sqrt(velocity.x ** 2 + velocity.z ** 2);
             const Re = airDensity * speed * BALL_DIAMETER / AIR_VISCOSITY;
@@ -419,12 +423,14 @@ export function simulateBouncePhase(landingPosition, landingVelocity, landingAng
             const newHSpeed = Math.sqrt(velocity.x ** 2 + velocity.z ** 2);
             const newBsRPM = Math.abs(omega.x) * 60 / (2 * Math.PI);
 
-            console.log(`\n⚾ BOUNCE #${bounceCount} (${currentSurfaceType}):`);
-            console.log(`   Impact: ${impactSpeed.toFixed(2)} m/s  (H: ${hSpeed.toFixed(2)}, V: ${Math.abs(before.y).toFixed(2)})`);
-            console.log(`   CoR: ${cor.toFixed(2)}  μ: ${mu.toFixed(2)}`);
-            console.log(`   Vy: ${Math.abs(before.y).toFixed(2)} → ${velocity.y.toFixed(2)} m/s`);
-            console.log(`   H-speed: ${hSpeed.toFixed(2)} → ${newHSpeed.toFixed(2)} m/s`);
-            console.log(`   Backspin: ${bsRPM.toFixed(0)} → ${newBsRPM.toFixed(0)} rpm`);
+            if (PHYSICS_LOG) {
+                console.log(`\n⚾ BOUNCE #${bounceCount} (${currentSurfaceType}):`);
+                console.log(`   Impact: ${impactSpeed.toFixed(2)} m/s  (H: ${hSpeed.toFixed(2)}, V: ${Math.abs(before.y).toFixed(2)})`);
+                console.log(`   CoR: ${cor.toFixed(2)}  μ: ${mu.toFixed(2)}`);
+                console.log(`   Vy: ${Math.abs(before.y).toFixed(2)} → ${velocity.y.toFixed(2)} m/s`);
+                console.log(`   H-speed: ${hSpeed.toFixed(2)} → ${newHSpeed.toFixed(2)} m/s`);
+                console.log(`   Backspin: ${bsRPM.toFixed(0)} → ${newBsRPM.toFixed(0)} rpm`);
+            }
 
             // Stop bouncing when upward velocity is too small to lift the ball clear
             if (velocity.y < MIN_BOUNCE_VY) {
@@ -564,7 +570,7 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
     while (true) {
         const speed = velocity.length();
 
-        if (time >= nextLogTime && speed > MIN_ROLL_SPEED) {
+        if (PHYSICS_LOG && time >= nextLogTime && speed > MIN_ROLL_SPEED) {
             console.log(`\n🏃 ROLL @ ${totalRolled.toFixed(1)}m (${time.toFixed(2)}s):`);
             console.log(`   Surface: ${currentSurface}`);
             console.log(`   Speed: ${speed.toFixed(2)} m/s`);

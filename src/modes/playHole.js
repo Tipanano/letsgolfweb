@@ -2,7 +2,8 @@
 import * as ui from '../ui.js';
 import { savePlayHoleState } from '../gameLogic/persistentGameState.js';
 import * as visuals from '../visuals.js'; // To trigger drawing
-import { setShotType, getCurrentShotType, setSelectedClub, getGameState } from '../gameLogic/state.js'; // Import setShotType, getCurrentShotType, and setSelectedClub
+import { setShotType, getCurrentShotType, setSelectedClub, getSelectedClub, getGameState } from '../gameLogic/state.js'; // Import setShotType, getCurrentShotType, and setSelectedClub
+import { showAddressHint } from '../ui/rhythmPuttHud.js';
 import { BALL_RADIUS } from '../visuals/core.js'; // For calculations
 import { playerManager } from '../playerManager.js'; // Import playerManager
 import {
@@ -281,6 +282,14 @@ export async function applyPracticePlacement(preset, force = false) {
     ui.updateStatus(hasContour()
         ? `${preset.label} — Ready · press g to read the slopes`
         : `${preset.label} — Ready`);
+
+    // Assert the at-address prompt after mode-entry churn (fullscreen toggle,
+    // control rebuilds) settles — the last writer wins on the shared pill.
+    setTimeout(() => {
+        if (getGameState() === 'ready') {
+            showAddressHint(getCurrentShotType(), { hasClub: !!getSelectedClub() });
+        }
+    }, 600);
 }
 
 export function handleShotResult(shotData) {

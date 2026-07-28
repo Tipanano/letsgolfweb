@@ -1,5 +1,6 @@
 import { clubs } from '../clubs.js';
 import { reset as resetRhythmPutt } from '../rhythmPutt.js';
+import { showAddressHint } from '../ui/rhythmPuttHud.js';
 import { setupTimingBarWindows, setBallPosition, getBallPositionLevels, setSwingSpeedControlState, updateTimingBarVisibility, setSelectedClubButton, setShotTypeRadio, setPutterControlsVisibility, updateControlsForShotType, setupBackswingBar } from '../ui.js'; // Added setShotTypeRadio
 // Import resetStaticCameraZoom along with other camera functions if needed, or just visuals module
 import { resetStaticCameraZoom } from '../visuals/core.js'; // Import the new zoom reset function
@@ -211,12 +212,20 @@ export function setSelectedClub(clubKey) {
         console.warn(`Club ${clubKey} missing defaultBallPositionIndex. Setting to center.`);
         setBallPosition(Math.floor(getBallPositionLevels() / 2)); // Default to center index
     }
+
+    // Club chosen: refresh the at-address prompt
+    if (gameState === 'ready') {
+        showAddressHint(currentShotType, { hasClub: true });
+    }
 }
 
 // Function to clear club selection
 export function clearSelectedClub() {
     selectedClub = null;
     setPutterControlsVisibility(false); // Show all controls when club is cleared
+    if (gameState === 'ready') {
+        showAddressHint(currentShotType, { hasClub: false });
+    }
 }
 
 // New function to set the shot type
@@ -267,7 +276,12 @@ export function setShotType(type) {
             break;
     }
     // Reset swing state when changing type - consider if this is always desired
-    // resetSwingState(); 
+    // resetSwingState();
+
+    // Refresh the at-address prompt for the new shot type
+    if (gameState === 'ready') {
+        showAddressHint(type, { hasClub: !!selectedClub });
+    }
 }
 
 import { getCurrentGameMode } from '../main.js'; // Import to check mode
