@@ -27,13 +27,30 @@ const M_PER_DEG_LON_EQ = 111320;
 //   Single hole:  node tools/osm-import.mjs <overpass.json> <holeNamePattern> <out.json>
 //   Full course:  node tools/osm-import.mjs <overpass.json> --course "<pattern with {n}>" <holes> "<courseName>" <out.json>
 //   e.g.          node tools/osm-import.mjs carnoustie.json --course "^{n}\\. " 18 "Carnoustie Championship" course.json
-const argv = process.argv.slice(2);
+const argvAll = process.argv.slice(2);
+const ELEV = { dataset: null };
+const ei = argvAll.indexOf('--elevation');
+if (ei !== -1) { ELEV.dataset = argvAll[ei + 1]; argvAll.splice(ei, 2); }
+const argv = argvAll;
 const courseMode = argv[1] === '--course';
+
+async function fetchElevations(locs, dataset) {
+    const out = [];
+    for (let i = 0; i < locs.length; i += 100) {
+        const q = locs.slice(i, i + 100).map(p => p.lat.toFixed(6) + ',' + p.lon.toFixed(6)).join('|');
+        const res = await fetch(`https://api.opentopodata.org/v1/${dataset}?locations=${q}`);
+        const j = await res.json();
+        if (j.status !== 'OK') throw new Error(j.error || 'elevation API error');
+        out.push(...j.results.map(r => r.elevation));
+        await new Promise(r => setTimeout(r, 1100)); // Free-tier rate limit
+    }
+    return out;
+}
 
 const data = JSON.parse(readFileSync(argv[0], 'utf8'));
 const elements = data.elements || [];
 
-function convertHole(holeLine) {
+async function convertHole(holeLine) {
 // --- Local projection: meters east/north of the hole line start ---
 const lat0 = holeLine.geometry[0].lat;
 const lon0 = holeLine.geometry[0].lon;
@@ -93,20 +110,95 @@ const byType = { green: [], tee: [], fairway: [], bunker: [], water_hazard: [], 
 // features (greens/tees/bunkers) stay centroid-based to avoid grabbing
 // every neighbor.
 const LOOSE_TYPES = new Set(['fairway', 'rough', 'water_hazard']);
+// Hole line resampled every ~25m: courses that merge many holes into one
+// giant surface polygon (e.g. Augusta's 5 fairway ways) put every boundary
+// vertex far from the line, so also test line-samples against the interior.
+const lineSamples = [];
+for (let i = 0; i < linePts.length - 1; i++) {
+    const a = linePts[i], b = linePts[i + 1];
+    const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / 25));
+    for (let k = 0; k < n; k++) {
+        lineSamples.push({ x: a.x + ((b.x - a.x) * k) / n, z: a.z + ((b.z - a.z) * k) / n });
+    }
+}
+lineSamples.push(linePts[linePts.length - 1]);
 for (const el of elements) {
     if (el.type !== 'way') continue;
     const kind = el.tags?.golf;
     if (!(kind in byType)) continue;
     const pts = polygonOf(el);
     if (!pts) continue;
-    let near = distToPolyline(centroid(pts), linePts) <= CORRIDOR_HALF_WIDTH;
-    if (!near && LOOSE_TYPES.has(kind)) {
-        for (let i = 0; i < pts.length && !near; i += 2) {
-            near = distToPolyline(pts[i], linePts) <= CORRIDOR_HALF_WIDTH;
+    let near;
+    if (kind === 'fairway') {
+        // Fairways need positive evidence the hole plays THROUGH them:
+        // vertex proximity alone attaches the neighboring hole's fairway
+        // whenever a corner pokes into the corridor (Augusta 1 vs 9).
+        let inside = 0;
+        for (const s of lineSamples) if (pointInPoly(s, pts)) inside++;
+        near = inside >= Math.max(3, lineSamples.length * 0.15)
+            || distToPolyline(centroid(pts), linePts) <= CORRIDOR_HALF_WIDTH;
+    } else {
+        near = distToPolyline(centroid(pts), linePts) <= CORRIDOR_HALF_WIDTH;
+        if (!near && LOOSE_TYPES.has(kind)) {
+            for (let i = 0; i < pts.length && !near; i += 2) {
+                near = distToPolyline(pts[i], linePts) <= CORRIDOR_HALF_WIDTH;
+            }
+            for (let i = 0; i < lineSamples.length && !near; i++) {
+                near = pointInPoly(lineSamples[i], pts);
+            }
         }
     }
     if (near) byType[kind].push(pts);
 }
+
+// Merged multi-hole fairway blobs: even when this hole's line runs through
+// them, most of their area can belong to OTHER holes (Augusta 18 shares a
+// blob with 9). If under 45% of the polygon sits inside the corridor, drop
+// it — the ribbon synthesizer replaces it with a sane per-hole fairway.
+byType.fairway = byType.fairway.filter(pts => {
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const p of pts) {
+        minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+        minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z);
+    }
+    const step = Math.max(8, Math.max(maxX - minX, maxZ - minZ) / 20);
+    let inPoly = 0, inCorridor = 0;
+    for (let x = minX; x <= maxX; x += step) {
+        for (let z = minZ; z <= maxZ; z += step) {
+            if (!pointInPoly({ x, z }, pts)) continue;
+            inPoly++;
+            if (distToPolyline({ x, z }, linePts) <= CORRIDOR_HALF_WIDTH + 10) inCorridor++;
+        }
+    }
+    const keep = inPoly === 0 || inCorridor / inPoly >= 0.55;
+    if (!keep) console.error('  (dropped mostly-off-corridor fairway blob)');
+    return keep;
+});
+// Water beyond golf tagging: lakes/ponds (natural=water) and creeks/burns
+// (waterway lines, buffered into thin hazard polygons)
+for (const el of elements) {
+    if (el.type !== 'way' || byType.water_hazard.length >= 12) continue;
+    if (el.tags?.natural === 'water') {
+        const pts = polygonOf(el);
+        if (!pts) continue;
+        let near = distToPolyline(centroid(pts), linePts) <= CORRIDOR_HALF_WIDTH;
+        for (let i = 0; i < pts.length && !near; i += 2) {
+            near = distToPolyline(pts[i], linePts) <= CORRIDOR_HALF_WIDTH;
+        }
+        for (let i = 0; i < lineSamples.length && !near; i++) {
+            near = pointInPoly(lineSamples[i], pts);
+        }
+        if (near) byType.water_hazard.push(pts);
+    } else if (['stream', 'river', 'canal', 'ditch', 'drain'].includes(el.tags?.waterway)) {
+        const line = (el.geometry || []).map(project);
+        const seg = line.filter(p => distToPolyline(p, linePts) <= CORRIDOR_HALF_WIDTH + 25);
+        if (seg.length >= 2) {
+            const half = el.tags.waterway === 'river' ? 6 : 2.5;
+            byType.water_hazard.push(corridorPolygon(seg, half, 3));
+        }
+    }
+}
+
 console.log('Associated:', Object.fromEntries(Object.entries(byType).map(([k, v]) => [k, v.length])));
 
 // --- Tees: all boxes near the hole's start; play from the back tee ---
@@ -165,7 +257,13 @@ function corridorPolygon(line, halfWidth, cap) {
     }
     return [...left, ...right.reverse()];
 }
-const roughCorridor = corridorPolygon(linePts, ROUGH_HALF_WIDTH, ROUGH_END_CAP);
+// The corridor must cover the walk from the BACK tee: hole lines usually
+// start at the forward tee, leaving back tee boxes stranded in OOB scrub.
+const teeGap = Math.hypot(tee.center.x - linePts[0].x, tee.center.z - linePts[0].z);
+const corridorLine = teeGap > 10
+    ? [{ x: tee.center.x, z: tee.center.z }, ...linePts]
+    : linePts;
+const roughCorridor = corridorPolygon(corridorLine, ROUGH_HALF_WIDTH, ROUGH_END_CAP);
 
 // --- Background (OOB) box around everything ---
 let bMinX = Infinity, bMaxX = -Infinity, bMinZ = Infinity, bMaxZ = -Infinity;
@@ -245,9 +343,15 @@ for (let i = 0; i < linePts.length - 1; i++) {
 }
 const flag = linePts[linePts.length - 1];
 
-// Sparse OSM data fallback: no mapped green → synthesize a circle at the flag
-// (without a GREEN surface the hole cannot be holed out)
-if (byType.green.length === 0) {
+// Sparse OSM data fallback: no mapped green NEAR THE FLAG → synthesize a
+// circle there (without a GREEN surface the hole cannot be holed out).
+// Checking for "any green" is not enough: neighboring holes' greens near
+// the tee end associate via the corridor and mask the missing one.
+const greensNearFlag = byType.green.filter(g => {
+    const c = centroid(g);
+    return Math.hypot(c.x - flag.x, c.z - flag.z) <= 60;
+});
+if (greensNearFlag.length === 0) {
     const g = [];
     for (let i = 0; i < 16; i++) {
         const a = (i / 16) * Math.PI * 2;
@@ -257,9 +361,43 @@ if (byType.green.length === 0) {
     console.error('  (synthesized green at flag — none mapped)');
 }
 
+// Flag must sit ON a green: OSM hole lines often end a few metres short,
+// leaving the cup on the fringe. Snap to the nearest green's centroid.
+if (!byType.green.some(g => pointInPoly(flag, g))) {
+    let best = null, bestD = Infinity;
+    for (const g of byType.green) {
+        const c = centroid(g);
+        const d = Math.hypot(c.x - flag.x, c.z - flag.z);
+        if (d < bestD) { bestD = d; best = c; }
+    }
+    if (best && bestD < 80) {
+        flag.x = best.x;
+        flag.z = best.z;
+        console.error('  (snapped flag onto nearest green)');
+    }
+}
+
+// Par from OSM, or inferred from length when untagged
+const inferredPar = length < 230 ? 3 : length < 430 ? 4 : 5;
+const par = parseInt(holeLine.tags.par || String(inferredPar), 10);
+
+// Sparse OSM data fallback: par 4/5 with no mapped fairway (common on
+// aerial-only mappings like Augusta) → synthesize a ribbon along the hole
+// line, from past the tee shot's start to the front of the green.
+if (byType.fairway.length === 0 && par >= 4 && length > 230) {
+    const ribbon = lineSamples.filter(p => {
+        const fromTee = Math.hypot(p.x - linePts[0].x, p.z - linePts[0].z);
+        const toFlag = Math.hypot(p.x - flag.x, p.z - flag.z);
+        return fromTee > 40 && toFlag > 18;
+    });
+    if (ribbon.length >= 2) {
+        byType.fairway.push(corridorPolygon(ribbon, 20, 6).map(p => ({ x: +p.x.toFixed(1), z: +p.z.toFixed(1) })));
+        console.error('  (synthesized fairway ribbon — none mapped)');
+    }
+}
 const layout = {
-    name: holeLine.tags.name || 'Imported Hole',
-    par: parseInt(holeLine.tags.par || '4', 10),
+    name: holeLine.tags.name || ('Hole ' + (holeLine.tags.ref || '')),
+    par,
     lengthMeters: Math.round(length),
     attribution: 'Course data © OpenStreetMap contributors (ODbL)',
     background,
@@ -277,6 +415,33 @@ const layout = {
     tees: teeCandidates,
     obstacles,
 };
+
+// Real elevation: sample a DEM grid over the hole corridor and store it as a
+// 'grid' terrain feature (heights relative to the tee)
+if (ELEV.dataset) {
+    const cell = 20, x0 = -80, z0 = -40, cols = 9;
+    const rows = Math.min(42, Math.ceil((length + 130) / cell) + 1);
+    const inv = (x, z) => {
+        const zr = z - 5;
+        const e = x * cosT + zr * sinT;
+        const n = -x * sinT + zr * cosT;
+        return { lat: lat0 + n / M_PER_DEG_LAT, lon: lon0 + e / mPerDegLon };
+    };
+    const locs = [inv(tee.center.x, tee.center.z)];
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) locs.push(inv(x0 + c * cell, z0 + r * cell));
+    }
+    try {
+        const elevs = await fetchElevations(locs, ELEV.dataset);
+        const teeE = elevs[0] ?? 0;
+        const heights = elevs.slice(1).map(e =>
+            e == null ? 0 : Math.max(-45, Math.min(45, +(e - teeE).toFixed(1))));
+        layout.terrainFeatures = [{ type: 'grid', x0, z0, cell, cols, rows, heights }];
+        console.log(`  elevation ${cols}x${rows}: ${Math.min(...heights).toFixed(0)}..${Math.max(...heights).toFixed(0)}m vs tee`);
+    } catch (e) {
+        console.error('  elevation failed:', e.message);
+    }
+}
 
 console.log(`  "${layout.name}": par ${layout.par}, ${layout.lengthMeters}m, ` +
     `${layout.fairways.length} fw, ${layout.greens.length} gr, ` +
@@ -335,7 +500,7 @@ if (courseMode) {
             continue;
         }
         prevEnd = line.geometry[line.geometry.length - 1];
-        const hole = convertHole(line);
+        const hole = await convertHole(line);
         if (hole.greens.length === 0) { console.error(`Hole ${n}: NO GREEN`); warnings++; }
         if (hole.fairways.length === 0 && hole.par > 3) { console.error(`Hole ${n}: no fairway (par ${hole.par})`); warnings++; }
         holes.push(hole);
@@ -357,7 +522,7 @@ if (courseMode) {
         console.error(`No golf=hole way matching /${holePattern}/`);
         process.exit(1);
     }
-    const layout = convertHole(line);
+    const layout = await convertHole(line);
     writeFileSync(outPath, JSON.stringify(layout, null, 1));
 }
 

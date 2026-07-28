@@ -113,6 +113,8 @@ export async function initializeHoleFromRawLayout(rawLayout, { holeNumber = 1, p
 
     const initialDistToFlag = calculateDistanceToFlag(currentBallPosition, currentHoleLayout.flagPosition);
     ui.updateVisualOverlayInfo('play-hole', {
+        courseName: roundCourse?.name || currentHoleLayout?.courseName || '',
+        holeName: currentHoleLayout?.name || '',
         holeNum: holeNumber,
         par: currentHoleLayout.par || 4,
         distToFlag: initialDistToFlag,
@@ -402,6 +404,8 @@ export function handleShotResult(shotData) {
 
     // Hide distance/lie during animation to avoid spoilers
     ui.updateVisualOverlayInfo('play-hole', {
+        courseName: roundCourse?.name || currentHoleLayout?.courseName || '',
+        holeName: currentHoleLayout?.name || '',
         holeNum: currentHoleIndex + 1,
         par: currentHoleLayout.par,
         distToFlag: '...', // Hide during animation
@@ -429,7 +433,9 @@ export function handleShotResult(shotData) {
         const distToFlag = calculateDistanceToFlag(displayBallPos, currentHoleLayout.flagPosition);
 
         ui.updateVisualOverlayInfo('play-hole', {
-            holeNum: currentHoleIndex + 1,
+            courseName: roundCourse?.name || currentHoleLayout?.courseName || '',
+        holeName: currentHoleLayout?.name || '',
+        holeNum: currentHoleIndex + 1,
             par: currentHoleLayout.par,
             distToFlag: distToFlag,
             elevDelta: elevationDeltaToFlag(displayBallPos, currentHoleLayout.flagPosition),

@@ -39,7 +39,7 @@ const OOB_SCRUB_STYLE = {
     surfaceKey: 'OUT_OF_BOUNDS', density: 0.12, minH: 0.25, maxH: 0.55,
     colors: ['#6b7a45', '#7d8a4f', '#5a683c'],
     patchNoise: { scale: 0.06, threshold: 0.05 },
-    rootY: -0.9, // Earth plane height (see core.js)
+    rootY: -0.9, // Offset below local terrain — matches the draped earth plane (see core.js)
 };
 
 const MAX_TUFTS_PER_TYPE = 14000;
@@ -147,7 +147,9 @@ export function buildGrass(holeLayout, scene, objectsArray) {
         for (let i = 0; i < placements.length; i++) {
             const p = placements[i];
             const h = (style.minH + Math.random() * (style.maxH - style.minH)) * p.heightBoost;
-            const rootY = style.rootY !== undefined ? style.rootY : contourHeightAt(p.x, p.z) + layerHeight;
+            // style.rootY is an offset below the local terrain (earth plane
+            // drapes over the DEM, so absolute heights don't exist anymore)
+            const rootY = contourHeightAt(p.x, p.z) + (style.rootY !== undefined ? style.rootY : layerHeight);
             dummy.position.set(p.x, rootY, p.z);
             dummy.rotation.y = Math.random() * Math.PI * 2;
             dummy.scale.set(0.8 + Math.random() * 0.5, h, 0.8 + Math.random() * 0.5);

@@ -183,6 +183,40 @@ function makeRidgeFeature(f) {
 }
 
 /**
+ * DEM elevation grid ({type:'grid', x0, z0, cell, cols, rows, heights[]}):
+ * bicubic Catmull-Rom over a coarse grid of real-world heights (relative to
+ * the tee), feathered to zero over the outer cells so the hole meets the
+ * flat world seamlessly. C1-smooth; row-major flat heights array.
+ */
+function makeGridFeature(f) {
+    const { x0, z0, cell, cols, rows } = f;
+    const heights = f.heights;
+    const H = (c, r) => heights[
+        Math.min(rows - 1, Math.max(0, r)) * cols + Math.min(cols - 1, Math.max(0, c))];
+    const cr = (p0, p1, p2, p3, t) =>
+        p1 + 0.5 * t * (p2 - p0 + t * (2 * p0 - 5 * p1 + 4 * p2 - p3 + t * (3 * (p1 - p2) + p3 - p0)));
+    return {
+        isGrid: true,
+        bbox: { minX: x0, maxX: x0 + (cols - 1) * cell, minZ: z0, maxZ: z0 + (rows - 1) * cell },
+        evalAt(x, z) {
+            const u = (x - x0) / cell;
+            const v = (z - z0) / cell;
+            if (u < 0 || v < 0 || u > cols - 1 || v > rows - 1) return 0;
+            const ci = Math.floor(u), ri = Math.floor(v);
+            const fu = u - ci, fv = v - ri;
+            const r0 = cr(H(ci - 1, ri - 1), H(ci, ri - 1), H(ci + 1, ri - 1), H(ci + 2, ri - 1), fu);
+            const r1 = cr(H(ci - 1, ri), H(ci, ri), H(ci + 1, ri), H(ci + 2, ri), fu);
+            const r2 = cr(H(ci - 1, ri + 1), H(ci, ri + 1), H(ci + 1, ri + 1), H(ci + 2, ri + 1), fu);
+            const r3 = cr(H(ci - 1, ri + 2), H(ci, ri + 2), H(ci + 1, ri + 2), H(ci + 2, ri + 2), fu);
+            let val = cr(r0, r1, r2, r3, fv);
+            // Feather to 0 over the outer 2.5 cells
+            const m = Math.min(u, v, cols - 1 - u, rows - 1 - v);
+            return val * smootherstep(Math.min(1, m / 2.5));
+        },
+    };
+}
+
+/**
  * Builds the terrain field for a hole layout: authored green contour and
  * hole-wide terrain features, plus automatic bunker bowls and water
  * depressions. Pass null to clear (flat).
@@ -198,7 +232,12 @@ export function setTerrainFromLayout(layout) {
     // Authored hole-wide features (elevated tees/greens, mounds, valleys...)
     if (Array.isArray(layout.terrainFeatures)) {
         for (const f of layout.terrainFeatures) {
-            if (!f || typeof f.height !== 'number') continue;
+            if (!f) continue;
+            if (f.type === 'grid' && Array.isArray(f.heights)) {
+                features.push(makeGridFeature(f));
+                continue;
+            }
+            if (typeof f.height !== 'number') continue;
             if (f.type === 'bump') features.push(makeBumpFeature(f));
             else if (f.type === 'plateau') features.push(makePlateauFeature(f));
             else if (f.type === 'ridge' || f.type === 'valley') features.push(makeRidgeFeature(f));
@@ -218,15 +257,34 @@ export function setTerrainFromLayout(layout) {
         }
     }
 
-    // Water: terrain dips well below the flat sheet at WATER_SURFACE_Y, so
-    // banks slope down and meet the water inside the polygon
+    // Water: terrain dips well below the water surface, so banks slope down
+    // and meet the water inside the polygon. Tagged so bankLevelAt() can
+    // reconstruct the undisturbed bank height under a water sheet.
     if (Array.isArray(layout.waterHazards)) {
         for (const w of layout.waterHazards) {
             const verts = w?.vertices;
             if (!verts || verts.length < 3) continue;
-            features.push(makeDepressionFeature(verts, WATER_DEPTH, WATER_RIM));
+            const f = makeDepressionFeature(verts, WATER_DEPTH, WATER_RIM);
+            f.isWater = true;
+            features.push(f);
         }
     }
+}
+
+/**
+ * Terrain height EXCLUDING water depressions: the bank line the water
+ * surface should follow. On sloping DEM holes creeks descend with the
+ * landscape — a single flat sheet would sit underground at the upper end.
+ */
+export function bankLevelAt(x, z) {
+    let h = 0;
+    for (const f of features) {
+        if (f.isWater) continue;
+        const b = f.bbox;
+        if (x < b.minX || x > b.maxX || z < b.minZ || z > b.maxZ) continue;
+        h += f.evalAt(x, z);
+    }
+    return h;
 }
 
 /** Back-compat: activate just a green contour (no auto features). */
@@ -269,6 +327,23 @@ export function gradientAt(x, z) {
  */
 export function isNearContour(x, z, margin = 0) {
     for (const f of features) {
+        const b = f.bbox;
+        if (x >= b.minX - margin && x <= b.maxX + margin &&
+            z >= b.minZ - margin && z <= b.maxZ + margin) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * True only near FINE features (contours, bunker/water bowls) that need
+ * sub-meter mesh detail. Broad DEM grids (20m cells) render smoothly at a
+ * much coarser tessellation — the renderer picks its edge budget with this.
+ */
+export function isNearFineFeature(x, z, margin = 0) {
+    for (const f of features) {
+        if (f.isGrid) continue;
         const b = f.bbox;
         if (x >= b.minX - margin && x <= b.maxX + margin &&
             z >= b.minZ - margin && z <= b.maxZ + margin) {

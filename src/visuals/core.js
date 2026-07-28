@@ -9,6 +9,7 @@ import { getFlagPosition as getHoleFlagPosition, getCurrentHoleObjects } from '.
 import { getTargetObjects, getFlagPosition as getTargetFlagPosition } from './targetView.js'; // Import target view objects and flag position for CTF mode
 import { createTeeMesh } from './objects.js'; // Import the tee creator
 import { getSurfaceProperties } from '../surfaces.js'; // Import surface properties getter
+import { heightAt as terrainHeightAt } from '../greenContours.js';
 
 import { YARDS_TO_METERS } from '../utils/unitConversions.js';
 import { gradientAt as contourGradientAt } from '../greenContours.js';
@@ -33,6 +34,7 @@ export const CameraMode = {
     FOLLOW_BALL: 'follow_ball',
     REVERSE_ANGLE: 'reverse_angle',
     GREEN_FOCUS: 'green_focus',
+    FREE: 'free',
 };
 let activeCameraMode = CameraMode.STATIC;
 let currentStaticView = 'range'; // 'range', 'target', 'chip', 'putt', 'tee', 'hole' - Tracks the *current* static view setting
@@ -225,13 +227,34 @@ function createSkyAndHorizon(targetScene) {
 
     // Earth plane: extends the ground to the treeline so layouts never float
     // in a void. Sits below every surface layer; fog blends it out.
-    const earthGeom = new THREE.PlaneGeometry(1600, 1600);
+    // Subdivided so updateEarthTerrain() can drape it over DEM elevation —
+    // otherwise a hole dropping 40m (Augusta 10) would sink below it.
+    const earthGeom = new THREE.PlaneGeometry(1600, 1600, 96, 96);
     const earthMat = new THREE.MeshLambertMaterial({ color: 0x315c34 });
     const earth = new THREE.Mesh(earthGeom, earthMat);
     earth.rotation.x = -Math.PI / 2;
     earth.position.y = -0.9; // Below every depression floor (bunker bowls, water beds)
     earth.receiveShadow = true;
     targetScene.add(earth);
+    earthMesh = earth;
+}
+
+let earthMesh = null;
+
+/**
+ * Drapes the earth backdrop over the active terrain field (call after
+ * setTerrainFromLayout). Flat holes stay flat at -0.9; DEM holes carry the
+ * backdrop down/up with the landscape so terrain never clips through it.
+ */
+export function updateEarthTerrain() {
+    if (!earthMesh) return;
+    const pos = earthMesh.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+        // Plane is rotated -90° about X: local (x, y) → world (x, -y)
+        pos.setZ(i, terrainHeightAt(pos.getX(i), -pos.getY(i)));
+    }
+    pos.needsUpdate = true;
+    earthMesh.geometry.computeVertexNormals();
 }
 
 export function initCoreVisuals(canvasElement) {
@@ -469,8 +492,82 @@ function animate(timestamp) {
 // --- Camera Update Function (called in animate loop) ---
 let cameraLookAtTarget = new THREE.Vector3(); // For smooth lookAt lerping
 
+// --- Free camera (fly-around, key 5) ---
+let freeCamActive = false;
+const freeCamKeys = new Set();
+let freeCamYaw = 0, freeCamPitch = -0.15, freeCamLastTs = 0;
+const FREECAM_KEYS = new Set(['w', 'a', 's', 'd', 'q', 'e', 'shift', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright']);
+
+export function isFreeCameraActive() { return freeCamActive; }
+
+export function toggleFreeCamera() {
+    freeCamActive = !freeCamActive;
+    freeCamKeys.clear();
+    if (freeCamActive) {
+        activeCameraMode = CameraMode.FREE;
+        // Seed orientation from wherever the camera currently looks
+        const dir = new THREE.Vector3();
+        camera.getWorldDirection(dir);
+        freeCamYaw = Math.atan2(dir.x, dir.z);
+        freeCamPitch = Math.asin(Math.max(-1, Math.min(1, dir.y)));
+        freeCamLastTs = 0;
+    } else {
+        activeCameraMode = CameraMode.STATIC;
+        applyStaticCameraView();
+    }
+    return freeCamActive;
+}
+
+/** Consumes movement keys while the free camera is active. */
+export function freeCamHandleKey(event, isDown) {
+    if (!freeCamActive) return false;
+    const k = event.key.toLowerCase();
+    if (!FREECAM_KEYS.has(k)) return false;
+    if (isDown) freeCamKeys.add(k); else freeCamKeys.delete(k);
+    return true;
+}
+
+function updateFreeCamera(timestamp) {
+    const dt = freeCamLastTs ? Math.min(0.05, (timestamp - freeCamLastTs) / 1000) : 0;
+    freeCamLastTs = timestamp;
+    if (!dt) return;
+
+    const ROT = 1.6; // rad/s
+    if (freeCamKeys.has('arrowleft')) freeCamYaw += ROT * dt;
+    if (freeCamKeys.has('arrowright')) freeCamYaw -= ROT * dt;
+    if (freeCamKeys.has('arrowup')) freeCamPitch += ROT * 0.7 * dt;
+    if (freeCamKeys.has('arrowdown')) freeCamPitch -= ROT * 0.7 * dt;
+    freeCamPitch = Math.max(-1.4, Math.min(1.4, freeCamPitch));
+
+    const speed = (freeCamKeys.has('shift') ? 60 : 18) * dt;
+    const fwd = new THREE.Vector3(Math.sin(freeCamYaw), 0, Math.cos(freeCamYaw));
+    const right = new THREE.Vector3(fwd.z, 0, -fwd.x);
+    if (freeCamKeys.has('w')) camera.position.addScaledVector(fwd, speed);
+    if (freeCamKeys.has('s')) camera.position.addScaledVector(fwd, -speed);
+    if (freeCamKeys.has('a')) camera.position.addScaledVector(right, -speed);
+    if (freeCamKeys.has('d')) camera.position.addScaledVector(right, speed);
+    if (freeCamKeys.has('e')) camera.position.y += speed;
+    if (freeCamKeys.has('q')) camera.position.y -= speed;
+
+    // Never sink below the terrain
+    const minY = terrainHeightAt(camera.position.x, camera.position.z) + 0.5;
+    if (camera.position.y < minY) camera.position.y = minY;
+
+    const look = new THREE.Vector3(
+        Math.sin(freeCamYaw) * Math.cos(freeCamPitch),
+        Math.sin(freeCamPitch),
+        Math.cos(freeCamYaw) * Math.cos(freeCamPitch)
+    );
+    camera.lookAt(camera.position.clone().add(look));
+}
+
 function updateCamera(timestamp) {
     if (!camera || !ball) return;
+
+    if (freeCamActive) {
+        updateFreeCamera(timestamp);
+        return;
+    }
 
     // Calculate the total absolute aim angle for camera rotation during animation
     const totalAimAngle = getCurrentTargetLineAngle() + getShotDirectionAngle();
@@ -888,6 +985,7 @@ export function setActiveCameraMode(mode) {
         return;
     }
 
+    if (mode !== CameraMode.FREE) freeCamActive = false;
     activeCameraMode = mode;
 
     // If switching TO follow ball, set the camera position relative to the current ball position,

@@ -118,6 +118,8 @@ const ctfBestDistanceText = document.getElementById('ctf-best-distance');
 
 // NEW Visual Overlay Elements
 const overlayHoleNumSpan = document.getElementById('overlay-hole-num');
+const overlayCourseLine = document.getElementById('overlay-course-line');
+const overlayCourseNameSpan = document.getElementById('overlay-course-name');
 const overlayParSpan = document.getElementById('overlay-par');
 const overlayShotNumSpan = document.getElementById('overlay-shot-num');
 const overlayForScoreTextSpan = document.getElementById('overlay-for-score-text'); // Added
@@ -984,7 +986,7 @@ export function displayDownswingFeedbackWindows(rotationStartMs, rotationWidthMs
  * @param {number | string} [backSpin='N/A'] - Backspin of the last shot (Range).
  * @param {number | string} [sideSpin='N/A'] - Sidespin of the last shot (Range).
  */
-export function updateVisualOverlayInfo(mode, { holeNum = 'N/A', par = 'N/A', distToFlag = 'N/A', shotNum = 'N/A', score = 'N/A', lie = 'N/A', wind = 'N/A', playerName = 'Player 1', totalScore = 'N/A', position = 'N/A', lastShotDist = 'N/A', backSpin = 'N/A', sideSpin = 'N/A', elevDelta = null } = {}) {
+export function updateVisualOverlayInfo(mode, { holeNum = 'N/A', par = 'N/A', distToFlag = 'N/A', shotNum = 'N/A', score = 'N/A', lie = 'N/A', wind = 'N/A', playerName = 'Player 1', totalScore = 'N/A', position = 'N/A', lastShotDist = 'N/A', backSpin = 'N/A', sideSpin = 'N/A', elevDelta = null, courseName = '', holeName = '' } = {}) {
     const formatNum = (num, digits = 0) => (num !== undefined && num !== null && !isNaN(num)) ? num.toFixed(digits) : 'N/A';
     const formatScore = (s) => {
         if (s === null || s === undefined || isNaN(s)) return 'N/A';
@@ -1016,6 +1018,11 @@ export function updateVisualOverlayInfo(mode, { holeNum = 'N/A', par = 'N/A', di
         }
 
         // Update Top Left (Play Hole / CTF)
+        if (overlayCourseLine) {
+            const label = [courseName, holeName].filter(Boolean).join(' — ');
+            overlayCourseNameSpan.textContent = label;
+            overlayCourseLine.style.display = label ? '' : 'none';
+        }
         if (overlayHoleNumSpan) overlayHoleNumSpan.textContent = holeNum ?? 'N/A';
         if (overlayParSpan) overlayParSpan.textContent = par ?? 'N/A';
         if (overlayShotNumSpan) overlayShotNumSpan.textContent = shotNum ?? 'N/A';

@@ -178,6 +178,7 @@ export function drawHole(holeLayout) {
     // displaced surface meshes all read it during rendering. Bunker bowls and
     // water depressions derive automatically from the layout polygons.
     GreenContours.setTerrainFromLayout(holeLayout || null);
+    CoreVisuals.updateEarthTerrain();
 
     switchToHoleView(holeLayout);
 
@@ -359,6 +360,14 @@ export function animateBallFlightWithLanding(shotData, trajectoryColor = 0xffff0
 // --- New Camera Control Functions ---
 
 // Switch to the appropriate static camera view based on current mode AND shot type
+// --- Free camera (fly-around) passthroughs ---
+export function toggleFreeCamera() {
+    MeasurementView.deactivate();
+    return CoreVisuals.toggleFreeCamera();
+}
+export const isFreeCameraActive = () => CoreVisuals.isFreeCameraActive();
+export const freeCamHandleKey = (e, down) => CoreVisuals.freeCamHandleKey(e, down);
+
 export function switchToStaticCamera() {
     MeasurementView.deactivate(); // Ensure measurement view is off
     const shotType = getCurrentShotType(); // Get current shot type from gameLogic

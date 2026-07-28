@@ -4,7 +4,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.m
 import { TextureLoader } from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
 import { createNoise2D } from 'https://esm.sh/simplex-noise';
 import earcut from 'https://cdn.skypack.dev/earcut@2.2.4';
-import { heightAt as contourHeightAt, gradientAt as contourGradientAt, hasContour, isNearContour, WATER_SURFACE_Y } from '../greenContours.js';
+import { heightAt as contourHeightAt, gradientAt as contourGradientAt, hasContour, isNearContour, isNearFineFeature, bankLevelAt, WATER_SURFACE_Y } from '../greenContours.js';
 
 // Baked hillshade for contoured ground: the scene's high ambient light washes
 // out real shading, so slope readability is painted into vertex colors —
@@ -57,7 +57,8 @@ function adaptiveSubdivideForContour(positions, indices) {
         return idx;
     };
 
-    const MAX_EDGE_SQ = 0.65 * 0.65; // Fine enough for bunker rims
+    const FINE_EDGE_SQ = 0.65 * 0.65;   // Bunker rims, green contours
+    const COARSE_EDGE_SQ = 4.0 * 4.0;    // Broad DEM elevation (20m cells)
     const MAX_DEPTH = 9;
     const out = [];
     const edgeLenSq = (a, b) => {
@@ -70,7 +71,9 @@ function adaptiveSubdivideForContour(positions, indices) {
         const maxESq = Math.max(edgeLenSq(a, b), edgeLenSq(b, c), edgeLenSq(c, a));
         const cx = (verts[a][0] + verts[b][0] + verts[c][0]) / 3;
         const cz = (verts[a][2] + verts[b][2] + verts[c][2]) / 3;
-        if (depth >= MAX_DEPTH || maxESq < MAX_EDGE_SQ || !isNearContour(cx, cz, Math.sqrt(maxESq))) {
+        const margin = Math.sqrt(maxESq);
+        const budget = isNearFineFeature(cx, cz, margin) ? FINE_EDGE_SQ : COARSE_EDGE_SQ;
+        if (depth >= MAX_DEPTH || maxESq < budget || !isNearContour(cx, cz, margin)) {
             out.push(a, b, c);
             return;
         }
@@ -187,13 +190,20 @@ export function renderPolygonWithHeights(polygonData, scene, textureLoader, obje
         return;
     }
 
-    const { name = 'Polygon', addNoise = false, noiseScale = 0.001, variationStrength = 0.4, heightOffset = 0, colorOverride = null, flatY = undefined } = options;
+    const { name = 'Polygon', addNoise = false, noiseScale = 0.001, variationStrength = 0.4, heightOffset = 0, colorOverride = null, flatY = undefined, drapeY = undefined } = options;
 
     try {
         // Triangulate with heights
         let { positions, indices } = triangulatePolygonWithHeights(polygonData.vertices, heightOffset);
 
-        if (flatY !== undefined) {
+        if (drapeY !== undefined) {
+            // Draped sheet (creeks on sloping terrain): per-vertex level from
+            // a callback, subdivided so it can follow the landscape downhill.
+            ({ positions, indices } = adaptiveSubdivideForContour(positions, indices));
+            for (let i = 0; i < positions.length; i += 3) {
+                positions[i + 1] = drapeY(positions[i], positions[i + 2]);
+            }
+        } else if (flatY !== undefined) {
             // Fixed-level sheet (water surface): no terrain displacement —
             // the depressed ground slopes down underneath it instead.
             for (let i = 1; i < positions.length; i += 3) positions[i] = flatY;
@@ -390,12 +400,14 @@ export function renderWaterHazards(holeLayout, scene, textureLoader, objectsArra
             scene.add(mesh);
             objectsArray.push(mesh);
         } else if (water.type === 'polygon' || water.vertices) {
-            // Flat sheet at the water level; the terrain field depresses the
-            // ground below it so banks slope down to a natural shoreline
+            // Sheet draped 0.18m below the local BANK line (terrain without
+            // the water's own depression): creeks descend with the DEM
+            // instead of sitting underground at their upper end, and flat
+            // ponds get the classic level sheet automatically.
             const mesh = renderPolygonWithHeights(water, scene, textureLoader, objectsArray, {
                 name: `Water Hazard #${idx + 1}`,
                 textureRepetitions: 5,
-                flatY: WATER_SURFACE_Y
+                drapeY: (x, z) => bankLevelAt(x, z) + WATER_SURFACE_Y
             });
 
             // Water sheet: unlit sky-blue so it reads as water, not a dark

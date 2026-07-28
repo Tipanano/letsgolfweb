@@ -92,11 +92,12 @@ export function drawHoleLayout(holeLayout) {
         const flagHeight = 2.5; // Meters
         const flagRadius = 0.05; // Meters
 
-        // Terrain height at the flag: always query (includes the green
-        // contour field); an explicitly non-zero authored y wins if larger.
+        // Terrain height at the flag: the terrain field is authoritative
+        // (DEM holes go well below 0 — max() would leave the flag airborne);
+        // an explicitly authored non-zero y overrides.
         const authoredY = holeLayout.flagPosition.y || 0;
-        const terrainHeight = Math.max(authoredY,
-            queryTerrainHeight(holeLayout.flagPosition.x, holeLayout.flagPosition.z));
+        const terrainHeight = authoredY !== 0 ? authoredY :
+            queryTerrainHeight(holeLayout.flagPosition.x, holeLayout.flagPosition.z);
 
         const flagGeometry = new THREE.CylinderGeometry(flagRadius, flagRadius, flagHeight, 8);
         const flagMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff }); // White pole

@@ -7,11 +7,13 @@
 export const BUNDLED_COURSES = [
     { file: 'courses/augusta-national.json' },
     { file: 'courses/bethpage.json' },
+    { file: 'courses/byneset.json' },
     { file: 'courses/carnoustie-championship.json' },
     { file: 'courses/muirfield.json' },
     { file: 'courses/oakmont.json' },
     { file: 'courses/pebble-beach.json' },
     { file: 'courses/st-andrews.json' },
+    { file: 'courses/stjordal.json' },
     { file: 'courses/tpc-sawgrass.json' },
     { file: 'courses/valderrama.json' },
     { file: 'courses/winged-foot.json' },

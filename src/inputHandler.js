@@ -39,6 +39,16 @@ export function handleKeyDown(event) {
     // const swingSpeed = GameLogic.getSwingSpeed(); // Moved swingSpeed retrieval into handleFullSwingKeyDown
 
 
+    // --- Free camera: movement keys are consumed while it's active ---
+    if (Visuals.freeCamHandleKey(event, true)) return;
+    if (event.key === '5') {
+        const on = Visuals.toggleFreeCamera();
+        updateStatus(on
+            ? 'Free camera: WASD move · Q/E down/up · arrows look · Shift fast · 5 to exit'
+            : 'Free camera off');
+        return; // Consume event
+    }
+
     // --- Camera Controls (Mode-dependent for '1') ---
     if (event.key === '1') {
         const currentMode = getCurrentGameMode();
@@ -183,6 +193,8 @@ export function handleKeyDown(event) {
 }
 
 export function handleKeyUp(event) {
+    if (Visuals.freeCamHandleKey(event, false)) return;
+
     // Get current state from GameLogic
     const gameState = GameLogic.getGameState();
     const currentShotType = GameLogic.getCurrentShotType();

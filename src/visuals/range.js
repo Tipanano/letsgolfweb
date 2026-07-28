@@ -10,6 +10,7 @@ import { SURFACES } from '../surfaces.js';
 import { renderRoughAreas, renderFairways, renderGreen, renderBunkers } from './holeRenderer.js';
 import { buildGrass } from './grass.js';
 import { setTerrainFromLayout } from '../greenContours.js';
+import { updateEarthTerrain } from './core.js';
 
 let rangeObjects = []; // Everything added to the scene for the range
 
@@ -128,6 +129,7 @@ export function initRangeVisuals(scene) {
 
     const layout = buildRangeLayout();
     setTerrainFromLayout(layout); // Bunker bowls on the range too
+    updateEarthTerrain();
     const textureLoader = new TextureLoader();
 
     renderRoughAreas(layout, scene, textureLoader, rangeObjects);

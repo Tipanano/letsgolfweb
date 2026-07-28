@@ -134,9 +134,10 @@ function createCourseCard(course) {
         btn.addEventListener('mouseenter', () => { btn.style.background = '#e8f5e9'; });
         btn.addEventListener('mouseleave', () => { btn.style.background = 'white'; });
         btn.addEventListener('click', () => {
-            localStorage.setItem('previewHoleData', JSON.stringify(hole));
+            const withCourse = { ...hole, courseName: course.name };
+            localStorage.setItem('previewHoleData', JSON.stringify(withCourse));
             hideModal();
-            if (onHoleSelectedCallback) onHoleSelectedCallback(hole);
+            if (onHoleSelectedCallback) onHoleSelectedCallback(withCourse);
         });
         grid.appendChild(btn);
     });
