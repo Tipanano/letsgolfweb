@@ -635,6 +635,7 @@ function ensureBallHalo() {
         depthTest: false, // Locator ring must never be swallowed by sloped terrain
     });
     ballHaloMesh = new THREE.Mesh(geom, mat);
+    ballHaloMesh.name = 'BallHalo';
     ballHaloMesh.renderOrder = 20;
     ballHaloMesh.visible = false;
     scene.add(ballHaloMesh);

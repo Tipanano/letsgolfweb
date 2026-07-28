@@ -80,7 +80,7 @@ export const SURFACES = {
     },
     height: 0.01, // Layer height: above base ground, below all playing surfaces
     texturePath: 'assets/textures/rough.png', // Added texture path
-    ballLieOffset: 0.04 // Sits down a bit (tuned for 3.5x ball on 0.01 layer)
+    ballLieOffset: 0.02 // Sits down in the grass (~70% of ball visible)
   },
   MEDIUM_ROUGH: {
     name: 'Medium Rough',
@@ -100,7 +100,7 @@ export const SURFACES = {
     },
     height: 0.02, // Layer height: above light rough
     texturePath: 'assets/textures/rough.png', // Added texture path
-    ballLieOffset: 0.02 // Half hidden (tuned for 3.5x ball on 0.02 layer)
+    ballLieOffset: 0.0 // Half hidden - center sits at the grass top
   },
   THICK_ROUGH: {
     name: 'Thick Rough',
@@ -120,7 +120,7 @@ export const SURFACES = {
     },
     height: 0.03, // Layer height: above medium rough
     texturePath: 'assets/textures/rough.png', // Added texture path
-    ballLieOffset: 0.015 // Almost hidden (tuned for 3.5x ball on 0.03 layer)
+    ballLieOffset: -0.02 // Almost hidden - only the crown pokes out
   },
   NATIVE_AREA: {
     name: 'Native Area',
@@ -158,7 +158,7 @@ export const SURFACES = {
     },
     height: 0.09, // Layer height: highest (bunkers overlap rough/fairway)
     texturePath: 'assets/textures/bunker.png', // Added texture path
-    ballLieOffset: 0.11 // Settled into the sand (tuned for 3.5x ball on 0.09 layer)
+    ballLieOffset: 0.08 // Settled into the sand (~60% visible)
   },
   WATER: {
     name: 'Water',

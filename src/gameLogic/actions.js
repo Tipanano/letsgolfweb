@@ -35,7 +35,8 @@ import {
     isPracticeMode
 } from '../modes/playHole.js';
 import { getFlagPosition, setFlagstickVisibility } from '../visuals/holeView.js'; // Import flag position getter AND visibility setter
-import { getActiveCameraMode, setCameraBehindBall, snapFollowCameraToBall, CameraMode, removeTrajectoryLine, applyAimAngleToCamera, setCameraBehindBallLookingAtTarget, setInitialFollowCameraLookingAtTarget, setBallScale, resetStaticCameraZoom } from '../visuals/core.js'; // Import camera functions, line removal, aim application, setBallScale, AND resetStaticCameraZoom
+import { getActiveCameraMode, setCameraBehindBall, snapFollowCameraToBall, CameraMode, removeTrajectoryLine, applyAimAngleToCamera, setCameraBehindBallLookingAtTarget, setInitialFollowCameraLookingAtTarget, setBallScale, resetStaticCameraZoom, setBallHalo, BALL_RADIUS } from '../visuals/core.js'; // Import camera functions, line removal, aim application, setBallScale, AND resetStaticCameraZoom
+import { getSurfaceProperties } from '../surfaces.js';
 import { resetVisuals } from '../visuals.js'; // Import resetVisuals to update ball position
 import { getSurfaceTypeAtPoint } from '../utils/gameUtils.js'; // Import surface checker
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js'; // Need THREE for Vector3
@@ -624,6 +625,15 @@ function _prepareNextShotAtCurrentPosition() {
         }
         // Set ball scale based on whether it's on the green (and not a bunker for this specific scaling logic)
         setBallScale(!isOnGreen); // Use enlarged scale if NOT on green (or if in a bunker on the green)
+
+        // Re-show the locator halo at the resting ball. The shot animation
+        // hides it, and this path doesn't re-place the ball (it already
+        // rests where it landed), so nothing else would bring it back.
+        if (ballPos) {
+            const surfaceHere = layout ? getSurfaceTypeAtPoint({ x: ballPos.x, z: ballPos.z }, layout) : null;
+            const layerHeight = getSurfaceProperties(surfaceHere || 'FAIRWAY')?.height ?? 0;
+            setBallHalo(true, ballPos.x, ballPos.z, (ballPos.y - BALL_RADIUS) + layerHeight);
+        }
 
         // --- Auto-select Putter on Green, Clear Club Otherwise ---
         if (isOnGreen) {
