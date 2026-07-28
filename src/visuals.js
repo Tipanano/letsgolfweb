@@ -108,7 +108,7 @@ export function switchToRangeView(initialScene = null) {
 
     unloadCurrentView(); // Unload previous view first (removes target elements etc.)
     currentVisualMode = VISUAL_MODES.RANGE;
-    GreenContours.setActiveContour(null); // Range is flat
+    GreenContours.setTerrainFromLayout(null); // Range sets its own terrain in initRangeVisuals
     SlopeOverlay.disposeSlopeOverlay();
     TargetVisuals.hideTargetElements(); // Ensure target elements are hidden
     RangeVisuals.initRangeVisuals(sceneToUse); // Add/show range elements
@@ -174,9 +174,10 @@ export function switchToHoleView(holeLayout, initialScene = null) {
 
 // Wrapper function called by playHole.js
 export function drawHole(holeLayout) {
-    // Activate the contour field BEFORE drawing: flag/cup heights and the
-    // displaced surface meshes all read it during rendering.
-    GreenContours.setActiveContour(holeLayout?.greenContour || null);
+    // Activate the terrain field BEFORE drawing: flag/cup heights and the
+    // displaced surface meshes all read it during rendering. Bunker bowls and
+    // water depressions derive automatically from the layout polygons.
+    GreenContours.setTerrainFromLayout(holeLayout || null);
 
     switchToHoleView(holeLayout);
 

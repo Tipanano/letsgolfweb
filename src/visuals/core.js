@@ -229,7 +229,7 @@ function createSkyAndHorizon(targetScene) {
     const earthMat = new THREE.MeshLambertMaterial({ color: 0x315c34 });
     const earth = new THREE.Mesh(earthGeom, earthMat);
     earth.rotation.x = -Math.PI / 2;
-    earth.position.y = -0.08;
+    earth.position.y = -0.9; // Below every depression floor (bunker bowls, water beds)
     earth.receiveShadow = true;
     targetScene.add(earth);
 }

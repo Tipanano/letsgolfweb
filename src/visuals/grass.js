@@ -39,7 +39,7 @@ const OOB_SCRUB_STYLE = {
     surfaceKey: 'OUT_OF_BOUNDS', density: 0.12, minH: 0.25, maxH: 0.55,
     colors: ['#6b7a45', '#7d8a4f', '#5a683c'],
     patchNoise: { scale: 0.06, threshold: 0.05 },
-    rootY: -0.08, // Earth plane height (see core.js)
+    rootY: -0.9, // Earth plane height (see core.js)
 };
 
 const MAX_TUFTS_PER_TYPE = 14000;

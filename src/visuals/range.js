@@ -9,6 +9,7 @@ import { TextureLoader } from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/
 import { SURFACES } from '../surfaces.js';
 import { renderRoughAreas, renderFairways, renderGreen, renderBunkers } from './holeRenderer.js';
 import { buildGrass } from './grass.js';
+import { setTerrainFromLayout } from '../greenContours.js';
 
 let rangeObjects = []; // Everything added to the scene for the range
 
@@ -119,6 +120,7 @@ export function initRangeVisuals(scene) {
     removeRangeVisuals(scene); // Safety: never double-build
 
     const layout = buildRangeLayout();
+    setTerrainFromLayout(layout); // Bunker bowls on the range too
     const textureLoader = new TextureLoader();
 
     renderRoughAreas(layout, scene, textureLoader, rangeObjects);
