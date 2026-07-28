@@ -71,10 +71,12 @@ export function initVisuals(canvasElement) {
 
 
 
-    // Explicitly initialize Range visuals and set camera for initial load
-    RangeVisuals.initRangeVisuals(coreScene); // Create range-specific elements
-    CoreVisuals.applyStaticCameraView('range'); // Ensure camera is set to static range view
-    currentVisualMode = VISUAL_MODES.RANGE; // Set initial mode tracker
+    // Default camera only — the mode being entered builds its own scene
+    // (switchToRangeView / switchToHoleView / switchToTargetView). Building
+    // the range here wasted seconds of grass generation when launching
+    // straight into a hole or the practice green.
+    CoreVisuals.applyStaticCameraView('range');
+    currentVisualMode = VISUAL_MODES.NONE;
 
     return true; // Indicate success
 }

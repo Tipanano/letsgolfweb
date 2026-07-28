@@ -1024,7 +1024,7 @@ export function updateVisualOverlayInfo(mode, { holeNum = 'N/A', par = 'N/A', di
         // Update Top Right (Distance to Flag), with elevation delta when the
         // hole sits meaningfully above/below the ball (contoured greens)
         const distToFlagYards = (typeof distToFlag === 'number' && distToFlag > 0) ? metersToYards(distToFlag) : distToFlag;
-        let distText = formatNum(distToFlagYards, 0);
+        let distText = `${formatNum(distToFlagYards, 0)} yd`;
         if (typeof elevDelta === 'number' && Math.abs(elevDelta) >= 0.05) {
             distText += ` ${elevDelta > 0 ? '▲' : '▼'}${Math.abs(elevDelta).toFixed(1)}m`;
         }

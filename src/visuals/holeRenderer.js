@@ -187,7 +187,7 @@ export function renderPolygonWithHeights(polygonData, scene, textureLoader, obje
         return;
     }
 
-    const { name = 'Polygon', addNoise = false, noiseScale = 0.001, variationStrength = 0.4, heightOffset = 0 } = options;
+    const { name = 'Polygon', addNoise = false, noiseScale = 0.001, variationStrength = 0.4, heightOffset = 0, colorOverride = null } = options;
 
     try {
         // Triangulate with heights
@@ -206,7 +206,7 @@ export function renderPolygonWithHeights(polygonData, scene, textureLoader, obje
         const colors = new Float32Array(positions.length);
         const noise2D = addNoise ? createNoise2D() : null;
         const baseColor = addNoise
-            ? new THREE.Color(polygonData.surface?.color || '#228b22')
+            ? new THREE.Color(colorOverride || polygonData.surface?.color || '#228b22')
             : new THREE.Color(1, 1, 1); // White multiplies textures unchanged
         const contourActive = hasContour();
 
@@ -280,7 +280,7 @@ export function renderPolygonWithHeights(polygonData, scene, textureLoader, obje
         } else {
             mesh.material = new THREE.MeshStandardMaterial({
                 ...materialOptions,
-                color: surface?.color || '#228b22'
+                color: colorOverride || surface?.color || '#228b22'
             });
         }
 
@@ -310,9 +310,15 @@ export function renderBackground(holeLayout, scene, textureLoader, objectsArray)
         surface: holeLayout.background.surface
     };
 
+    // Out of bounds is a RULE, not a ground type: don't render it at all —
+    // the earth plane and scrub grass ARE the land beyond the course, and
+    // white stakes mark the boundary (see oobStakes.js). The logical OOB
+    // region (surface detection, penalties) is unaffected.
+    if (holeLayout.background.surface?.name === 'Out of Bounds') return;
+
     renderPolygonWithHeights(bgData, scene, textureLoader, objectsArray, {
         name: 'Background',
-        textureRepetitions: 5
+        textureRepetitions: 5,
     });
 }
 

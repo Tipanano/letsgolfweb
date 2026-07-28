@@ -33,6 +33,15 @@ const GRASS_STYLES = {
     },
 };
 
+// Sparse scrubby clumps on the land beyond the course (OOB region is not
+// rendered as a surface — tufts root on the earth plane at y = -0.08)
+const OOB_SCRUB_STYLE = {
+    surfaceKey: 'OUT_OF_BOUNDS', density: 0.12, minH: 0.25, maxH: 0.55,
+    colors: ['#6b7a45', '#7d8a4f', '#5a683c'],
+    patchNoise: { scale: 0.06, threshold: 0.05 },
+    rootY: -0.08, // Earth plane height (see core.js)
+};
+
 const MAX_TUFTS_PER_TYPE = 14000;
 const BLADES_PER_TUFT = 5;
 
@@ -82,8 +91,13 @@ export function buildGrass(holeLayout, scene, objectsArray) {
     const tuftGeom = createTuftGeometry();
     const dummy = new THREE.Object3D();
 
-    for (const [layoutKey, style] of Object.entries(GRASS_STYLES)) {
-        const polys = holeLayout[layoutKey];
+    const jobs = Object.entries(GRASS_STYLES)
+        .map(([layoutKey, style]) => ({ layoutKey, style, polys: holeLayout[layoutKey] }));
+    if (holeLayout.background?.vertices && holeLayout.background.surface?.name === 'Out of Bounds') {
+        jobs.push({ layoutKey: 'background', style: OOB_SCRUB_STYLE, polys: [holeLayout.background] });
+    }
+
+    for (const { layoutKey, style, polys } of jobs) {
         if (!Array.isArray(polys) || polys.length === 0) continue;
 
         const layerHeight = SURFACES[style.surfaceKey]?.height ?? 0;
@@ -133,7 +147,8 @@ export function buildGrass(holeLayout, scene, objectsArray) {
         for (let i = 0; i < placements.length; i++) {
             const p = placements[i];
             const h = (style.minH + Math.random() * (style.maxH - style.minH)) * p.heightBoost;
-            dummy.position.set(p.x, contourHeightAt(p.x, p.z) + layerHeight, p.z);
+            const rootY = style.rootY !== undefined ? style.rootY : contourHeightAt(p.x, p.z) + layerHeight;
+            dummy.position.set(p.x, rootY, p.z);
             dummy.rotation.y = Math.random() * Math.PI * 2;
             dummy.scale.set(0.8 + Math.random() * 0.5, h, 0.8 + Math.random() * 0.5);
             dummy.updateMatrix();

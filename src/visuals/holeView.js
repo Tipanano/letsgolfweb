@@ -15,6 +15,7 @@ import {
 } from './holeRenderer.js';
 import { queryTerrainHeight } from '../visuals.js'; // For getting terrain height at flag position
 import { buildGrass } from './grass.js'; // Instanced grass for rough/native areas
+import { buildOOBStakes } from './oobStakes.js'; // White boundary stakes
 
 let currentHoleObjects = []; // To keep track of objects added for the hole
 let currentFlagPosition = null; // Store the flag position in meters (Vector3)
@@ -73,6 +74,9 @@ export function drawHoleLayout(holeLayout) {
 
     // Instanced grass tufts over rough and native areas
     buildGrass(holeLayout, scene, currentHoleObjects);
+
+    // White stakes along in-bounds edges that border out of bounds
+    buildOOBStakes(holeLayout, scene, currentHoleObjects);
 
     // Render green and store center/radius for camera positioning
     const greenData = renderGreen(holeLayout, scene, textureLoader, currentHoleObjects);
