@@ -8,6 +8,7 @@ import { playerManager } from '../playerManager.js'; // Import playerManager
 import {
     generatePracticeGreenLayout, showPracticePanel, hidePracticePanel, getDefaultPreset, getActiveChipStyle
 } from './practiceGreen.js'; // Short-game practice area
+import { hasContour } from '../greenContours.js'; // For the slope-arrows hint
 
 // --- State ---
 let currentHoleLayout = null;
@@ -277,7 +278,9 @@ export async function applyPracticePlacement(preset, force = false) {
         totalScore: 0,
         position: '–'
     });
-    ui.updateStatus(`${preset.label} — Ready`);
+    ui.updateStatus(hasContour()
+        ? `${preset.label} — Ready · press g to read the slopes`
+        : `${preset.label} — Ready`);
 }
 
 export function handleShotResult(shotData) {

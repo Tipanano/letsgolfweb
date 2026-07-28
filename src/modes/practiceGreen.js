@@ -243,6 +243,17 @@ function injectStyles() {
             opacity: 0.6;
             margin: 6px 0 2px 0;
         }
+        .practice-keys {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+            padding-top: 7px;
+            border-top: 1px solid rgba(255,255,255,0.12);
+            font-size: 10.5px;
+            opacity: 0.65;
+        }
+        .practice-keys b { color: #7dffa0; font-weight: 700; }
     `;
     document.head.appendChild(style);
 }
@@ -310,6 +321,11 @@ function ensureCreated() {
             <button class="practice-tab" data-type="putt">Putting</button>
         </div>
         <div id="practice-preset-list"></div>
+        <div class="practice-keys">
+            <span><b>g</b> slope arrows</span>
+            <span><b>t</b> flip tempo</span>
+            <span><b>Esc</b> cancel</span>
+        </div>
     `;
     // Must live inside #game-view: in fullscreen mode it's a fixed overlay at
     // z-index 9999, so body-level siblings render behind the game.
