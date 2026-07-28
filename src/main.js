@@ -352,11 +352,16 @@ initMultiplayerUI();
 // Initialize Nano authentication
 nanoAuth.init();
 
-// Check for preview mode from hole maker
-const previewData = localStorage.getItem('previewHoleData');
-if (previewData) {
-    ui.showGameView();
-    await setGameMode(GAME_MODES.PLAY_HOLE);
+// Check for preview mode from hole maker.
+// Deferred out of module evaluation: main.js uses top-level await and sits in
+// an import cycle (visuals.js imports main.js), so dynamic import() calls made
+// while main.js is still evaluating deadlock. setTimeout lets the module graph
+// settle first.
+if (localStorage.getItem('previewHoleData')) {
+    setTimeout(async () => {
+        ui.showGameView();
+        await setGameMode(GAME_MODES.PLAY_HOLE);
+    }, 0);
 }
 
 // Hook up "Sign in with Nano" button
