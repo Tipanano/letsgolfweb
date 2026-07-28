@@ -88,15 +88,24 @@ function polygonOf(el) {
 
 // --- Associate polygons with this hole via the corridor ---
 const byType = { green: [], tee: [], fairway: [], bunker: [], water_hazard: [], rough: [] };
+// Wide/dogleg fairways can have centroids far off the hole line, so big
+// ground surfaces associate if ANY vertex reaches the corridor; point
+// features (greens/tees/bunkers) stay centroid-based to avoid grabbing
+// every neighbor.
+const LOOSE_TYPES = new Set(['fairway', 'rough', 'water_hazard']);
 for (const el of elements) {
     if (el.type !== 'way') continue;
     const kind = el.tags?.golf;
     if (!(kind in byType)) continue;
     const pts = polygonOf(el);
     if (!pts) continue;
-    if (distToPolyline(centroid(pts), linePts) <= CORRIDOR_HALF_WIDTH) {
-        byType[kind].push(pts);
+    let near = distToPolyline(centroid(pts), linePts) <= CORRIDOR_HALF_WIDTH;
+    if (!near && LOOSE_TYPES.has(kind)) {
+        for (let i = 0; i < pts.length && !near; i += 2) {
+            near = distToPolyline(pts[i], linePts) <= CORRIDOR_HALF_WIDTH;
+        }
     }
+    if (near) byType[kind].push(pts);
 }
 console.log('Associated:', Object.fromEntries(Object.entries(byType).map(([k, v]) => [k, v.length])));
 
@@ -175,12 +184,78 @@ const background = {
     surface: 'OUT_OF_BOUNDS',
 };
 
+// --- Trees: OSM woods + individual trees near the hole become obstacles ---
+function pointInPoly(p, verts) {
+    let inside = false;
+    for (let i = 0, j = verts.length - 1; i < verts.length; j = i++) {
+        const vi = verts[i], vj = verts[j];
+        if ((vi.z > p.z) !== (vj.z > p.z) &&
+            p.x < ((vj.x - vi.x) * (p.z - vi.z)) / (vj.z - vi.z) + vi.x) inside = !inside;
+    }
+    return inside;
+}
+const playSurfaces = [...byType.fairway, ...byType.green, ...byType.bunker];
+const onPlaySurface = (p) => playSurfaces.some(poly => pointInPoly(p, poly)) ||
+    Math.hypot(p.x - tee.center.x, p.z - tee.center.z) < 8;
+const TREE_CAP = 140;
+const treeSize = () => { const r = Math.random(); return r < 0.3 ? 'small' : r < 0.8 ? 'medium' : 'large'; };
+const obstacles = [];
+const addTree = (p) => {
+    if (obstacles.length >= TREE_CAP) return;
+    if (distToPolyline(p, linePts) > CORRIDOR_HALF_WIDTH) return;
+    if (onPlaySurface(p)) return;
+    obstacles.push({ type: 'tree', size: treeSize(), x: +p.x.toFixed(1), z: +p.z.toFixed(1) });
+};
+
+for (const el of elements) {
+    if (el.type === 'node' && el.tags?.natural === 'tree') {
+        addTree(project(el));
+    }
+}
+for (const el of elements) {
+    if (obstacles.length >= TREE_CAP) break;
+    if (el.type !== 'way') continue;
+    const isWood = el.tags?.natural === 'wood' || el.tags?.landuse === 'forest';
+    if (!isWood) continue;
+    const pts = polygonOf(el);
+    if (!pts) continue;
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, area = 0;
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+        area += pts[j].x * pts[i].z - pts[i].x * pts[j].z;
+        minX = Math.min(minX, pts[i].x); maxX = Math.max(maxX, pts[i].x);
+        minZ = Math.min(minZ, pts[i].z); maxZ = Math.max(maxZ, pts[i].z);
+    }
+    area = Math.abs(area / 2);
+    const target = Math.min(90, Math.floor(area / 140)); // ~1 tree per 140 m²
+    let placed = 0;
+    for (let i = 0; i < target * 6 && placed < target; i++) {
+        const p = { x: minX + Math.random() * (maxX - minX), z: minZ + Math.random() * (maxZ - minZ) };
+        if (!pointInPoly(p, pts)) continue;
+        const before = obstacles.length;
+        addTree(p);
+        if (obstacles.length > before) placed++;
+    }
+}
+if (obstacles.length) console.log(`  trees: ${obstacles.length}`);
+
 // --- Length (card style: from the active tee along the play line) + flag ---
 let length = Math.hypot(tee.center.x - start.x, tee.center.z - start.z);
 for (let i = 0; i < linePts.length - 1; i++) {
     length += Math.hypot(linePts[i + 1].x - linePts[i].x, linePts[i + 1].z - linePts[i].z);
 }
 const flag = linePts[linePts.length - 1];
+
+// Sparse OSM data fallback: no mapped green → synthesize a circle at the flag
+// (without a GREEN surface the hole cannot be holed out)
+if (byType.green.length === 0) {
+    const g = [];
+    for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * Math.PI * 2;
+        g.push({ x: +(flag.x + Math.cos(a) * 10).toFixed(2), z: +(flag.z + Math.sin(a) * 10).toFixed(2) });
+    }
+    byType.green.push(g);
+    console.error('  (synthesized green at flag — none mapped)');
+}
 
 const layout = {
     name: holeLine.tags.name || 'Imported Hole',
@@ -200,6 +275,7 @@ const layout = {
     flagPositions: [{ number: 1, x: flag.x, y: 0, z: flag.z }],
     // All mapped tee boxes, back tee first (future tee selector)
     tees: teeCandidates,
+    obstacles,
 };
 
 console.log(`  "${layout.name}": par ${layout.par}, ${layout.lengthMeters}m, ` +
@@ -208,11 +284,36 @@ console.log(`  "${layout.name}": par ${layout.par}, ${layout.lengthMeters}m, ` +
 return layout;
 }
 
-function findHoleLine(pattern) {
-    const re = new RegExp(pattern);
-    return elements.find(e =>
-        e.type === 'way' && e.tags?.golf === 'hole' &&
-        re.test(e.tags.name || '') && (e.geometry?.length ?? 0) >= 2) || null;
+/**
+ * Finds candidate golf=hole ways for hole n. pattern 'ref' matches the OSM
+ * ref tag (the common convention); anything else is a name regex with {n}
+ * already substituted. When several courses share the bbox, the candidate
+ * whose start lies closest to the previous hole's green wins (routing
+ * continuity).
+ */
+function findHoleLine(pattern, n, prevEnd) {
+    let candidates;
+    if (pattern === 'ref') {
+        candidates = elements.filter(e =>
+            e.type === 'way' && e.tags?.golf === 'hole' &&
+            String(e.tags.ref) === String(n) && (e.geometry?.length ?? 0) >= 2);
+    } else {
+        const re = new RegExp(pattern);
+        candidates = elements.filter(e =>
+            e.type === 'way' && e.tags?.golf === 'hole' &&
+            re.test(e.tags.name || '') && (e.geometry?.length ?? 0) >= 2);
+    }
+    if (candidates.length === 0) return null;
+    if (candidates.length === 1 || !prevEnd) return candidates[0];
+
+    let best = candidates[0], bestD = Infinity;
+    for (const c of candidates) {
+        const s0 = c.geometry[0];
+        const d = Math.hypot((s0.lat - prevEnd.lat) * M_PER_DEG_LAT,
+                             (s0.lon - prevEnd.lon) * M_PER_DEG_LON_EQ * Math.cos(prevEnd.lat * Math.PI / 180));
+        if (d < bestD) { bestD = d; best = c; }
+    }
+    return best;
 }
 
 if (courseMode) {
@@ -223,14 +324,23 @@ if (courseMode) {
         process.exit(1);
     }
     const holes = [];
+    let prevEnd = null;
+    let warnings = 0;
     for (let n = 1; n <= holeCount; n++) {
-        const line = findHoleLine(patternTemplate.replace('{n}', String(n)));
+        const pattern = patternTemplate === 'ref' ? 'ref' : patternTemplate.replace('{n}', String(n));
+        const line = findHoleLine(pattern, n, prevEnd);
         if (!line) {
             console.error(`Hole ${n}: no golf=hole match — skipping`);
+            warnings++;
             continue;
         }
-        holes.push(convertHole(line));
+        prevEnd = line.geometry[line.geometry.length - 1];
+        const hole = convertHole(line);
+        if (hole.greens.length === 0) { console.error(`Hole ${n}: NO GREEN`); warnings++; }
+        if (hole.fairways.length === 0 && hole.par > 3) { console.error(`Hole ${n}: no fairway (par ${hole.par})`); warnings++; }
+        holes.push(hole);
     }
+    if (warnings) console.error(`⚠ ${warnings} warnings`);
     const course = {
         formatVersion: 1,
         name: courseName,
@@ -242,7 +352,7 @@ if (courseMode) {
     console.log(`Wrote ${outPath}: ${holes.length}/${holeCount} holes, course par ${course.par}`);
 } else {
     const [, holePattern, outPath] = argv;
-    const line = findHoleLine(holePattern);
+    const line = findHoleLine(holePattern, 1, null);
     if (!line) {
         console.error(`No golf=hole way matching /${holePattern}/`);
         process.exit(1);
@@ -250,3 +360,5 @@ if (courseMode) {
     const layout = convertHole(line);
     writeFileSync(outPath, JSON.stringify(layout, null, 1));
 }
+
+function findHoleLineSingle(pattern) { return findHoleLine(pattern, 1, null); }

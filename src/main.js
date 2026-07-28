@@ -14,6 +14,7 @@ import * as nanoAuth from './nanoAuth.js'; // Import Nano authentication
 import * as multiplayerManager from './multiplayerManager.js'; // Import multiplayer manager
 import { initSwingArcVisualizer } from './swingArcVisualizer.js'; // Import swing arc visualizer
 import * as playHoleModal from './playHoleModal.js'; // Import play hole modal
+import { showCourseSelect } from './courseSelectModal.js'; // Course round picker
 
 // --- Game Modes ---
 export const GAME_MODES = {
@@ -331,7 +332,12 @@ document.getElementById('mode-btn-hole')?.addEventListener('click', async () => 
 
 document.getElementById('mode-btn-course')?.addEventListener('click', async () => {
     const canProceed = await checkMultiplayerBeforeSinglePlayer();
-    if (canProceed) openHoleModal();
+    if (canProceed) {
+        showCourseSelect(async (course) => {
+            ui.showGameView();
+            await setGameMode(GAME_MODES.PLAY_HOLE, null, null, null, course);
+        });
+    }
 });
 
 // --- Connect "Back to Menu" Button ---

@@ -4,6 +4,7 @@
  */
 
 import { courseManager } from './courseManager.js';
+import { BUNDLED_COURSES, loadCourse, courseStats } from './courseLibrary.js';
 
 // DOM elements
 const modal = document.getElementById('play-hole-modal');
@@ -85,11 +86,7 @@ function switchTab(tabName) {
     }
 }
 
-// --- Bundled courses (static JSON, imported from OpenStreetMap) ---
-const BUNDLED_COURSES = [
-    { file: 'courses/carnoustie-championship.json' },
-];
-const courseCache = new Map();
+// Bundled courses come from the shared courseLibrary (this tab picks single holes)
 
 async function loadCourses() {
     const list = document.getElementById('courses-list');
@@ -99,13 +96,7 @@ async function loadCourses() {
     const cards = [];
     for (const entry of BUNDLED_COURSES) {
         try {
-            let course = courseCache.get(entry.file);
-            if (!course) {
-                const res = await fetch(entry.file);
-                course = await res.json();
-                courseCache.set(entry.file, course);
-            }
-            cards.push(createCourseCard(course));
+            cards.push(createCourseCard(await loadCourse(entry.file)));
         } catch (e) {
             console.error('Failed to load course', entry.file, e);
         }
@@ -123,11 +114,7 @@ function createCourseCard(course) {
     const card = document.createElement('div');
     card.style.cssText = 'border:1px solid #e0e0e0; border-radius:8px; padding:14px 16px; margin-bottom:12px; background:#fafafa;';
 
-    const totalLen = course.holes.reduce((s, h) => s + (h.lengthMeters || 0), 0);
-    const bunkers = course.holes.reduce((s, h) => s + (h.bunkers?.length || 0), 0);
-    // Difficulty proxy: mostly length, salted with bunker density
-    const diffScore = totalLen + bunkers * 8;
-    const stars = diffScore < 5200 ? 2 : diffScore < 5900 ? 3 : diffScore < 6600 ? 4 : 5;
+    const { totalLen, stars } = courseStats(course);
 
     const head = document.createElement('div');
     head.style.cssText = 'display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;';
@@ -136,14 +123,7 @@ function createCourseCard(course) {
         `<span title="Difficulty (length + bunkering)" style="color:#e6a817;">${'★'.repeat(stars)}${'☆'.repeat(5 - stars)}</span></span>`;
     card.appendChild(head);
 
-    const roundBtn = document.createElement('button');
-    roundBtn.textContent = '⛳ Play full round';
-    roundBtn.style.cssText = 'width:100%; margin-bottom:10px; padding:9px; border:none; border-radius:6px; background:#2e7d32; color:white; font-weight:bold; cursor:pointer;';
-    roundBtn.addEventListener('click', () => {
-        hideModal();
-        if (onRoundSelectedCallback) onRoundSelectedCallback(course);
-    });
-    card.appendChild(roundBtn);
+    // (Full rounds start from the dedicated Play Course modal)
 
     const grid = document.createElement('div');
     grid.style.cssText = 'display:grid; grid-template-columns:repeat(6, 1fr); gap:6px;';
