@@ -15,6 +15,7 @@ import * as multiplayerManager from './multiplayerManager.js'; // Import multipl
 import { initSwingArcVisualizer } from './swingArcVisualizer.js'; // Import swing arc visualizer
 import * as playHoleModal from './playHoleModal.js'; // Import play hole modal
 import { showCourseSelect } from './courseSelectModal.js'; // Course round picker
+import { showCareer } from './careerModal.js'; // Career overview (handicap, rounds, stats)
 
 // --- Game Modes ---
 export const GAME_MODES = {
@@ -328,6 +329,10 @@ function openHoleModal() {
 document.getElementById('mode-btn-hole')?.addEventListener('click', async () => {
     const canProceed = await checkMultiplayerBeforeSinglePlayer();
     if (canProceed) openHoleModal();
+});
+
+document.getElementById('mode-btn-career')?.addEventListener('click', () => {
+    showCareer(); // Read-only overview — no mode change, no multiplayer check needed
 });
 
 document.getElementById('mode-btn-course')?.addEventListener('click', async () => {

@@ -96,6 +96,15 @@ export function differentialsFromRounds(rounds) {
 }
 
 /**
+ * Index after each posted round, for trend displays. Entries are null while
+ * no differential exists yet (e.g. a lone unpaired 9 at the start).
+ * @param {Array<{differential: number, holeCount: number}>} rounds - chronological
+ */
+export function indexSeriesFromRounds(rounds) {
+    return rounds.map((_, i) => handicapIndex(differentialsFromRounds(rounds.slice(0, i + 1))));
+}
+
+/**
  * Handicap index from chronological differentials. WHS best-8-of-20 table
  * over the most recent 20, extended downward so a single round yields a
  * provisional index. Returns null with no differentials.

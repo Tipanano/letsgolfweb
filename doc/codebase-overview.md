@@ -42,3 +42,6 @@ Heuristic course rating and slope derived from imported geometry (length, bunker
 
 ### src/career/careerStore.js
 Local-first career record in localStorage: completed course rounds with their immutably-stored differentials, and the derived handicap index. `playHole.js` posts rounds here from `endRound()`. Server sync for registered users layers on later.
+
+### src/careerModal.js
+Career overview modal opened from the main-menu Career card: handicap index with provisional tag and trend sparkline, scoring stats, per-course bests, and round history with expandable colored scorecards. Reads the local career record via `career/careerStore.js`; verified by `tests/browser-smoke-career.mjs`.

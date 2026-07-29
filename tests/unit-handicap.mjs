@@ -11,6 +11,7 @@ import {
     computeRoundDifferential,
     differentialsFromRounds,
     handicapIndex,
+    indexSeriesFromRounds,
 } from '../src/career/handicap.js';
 import { courseRating } from '../src/career/courseRating.js';
 
@@ -78,6 +79,16 @@ assert.equal(handicapIndex(new Array(20).fill(10.0)), 10.0);     // n=20: avg be
     assert.equal(handicapIndex([...new Array(30).fill(2.0), ...new Array(20).fill(12.0)]), 12.0); // only latest 20 count
 }
 assert.equal(handicapIndex([70.0]), MAX_INDEX); // clamped at 54.0
+
+// --- indexSeriesFromRounds ---
+{
+    const rounds = [
+        { differential: 8.0, holeCount: 9 },   // lone 9: no index yet
+        { differential: 7.0, holeCount: 9 },   // pairs -> 15.0 -> provisional 13.0
+        { differential: 20.0, holeCount: 18 }, // n=2: lowest - 2 = 13.0
+    ];
+    assert.deepEqual(indexSeriesFromRounds(rounds), [null, 13.0, 13.0]);
+}
 
 // --- courseRating heuristic on real course data ---
 {
