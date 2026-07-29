@@ -67,13 +67,16 @@ actually scores once real rounds accumulate.
 
 ## Green Card ("grønt kort")
 
-In Norway you needed a green card before you were allowed on a course. Here
-it is the career on-ramp **and** the tutorial: a series of skill drills that
-teach every part of the game. Completing it grants the starting handicap
+In Norway you needed a green card before you were allowed on a course — in
+reality mostly initial instruction (rules, etiquette, the basics). We borrow
+the name and the gatekeeping idea, but the content is invented for the game:
+a series of skill drills that teach every mechanic, serving as the career
+on-ramp **and** the tutorial. Completing it grants the starting handicap
 (54.0 provisional... or simply enables posting) and unlocks the starter
 courses.
 
-Drill set (thresholds tunable; each drill teaches one mechanic):
+Drill set (made up for the game; thresholds tunable; each drill teaches one
+mechanic):
 
 | Drill | Task | Teaches |
 | --- | --- | --- |
