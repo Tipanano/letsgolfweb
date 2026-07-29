@@ -54,3 +54,6 @@ Generated layouts for the full-swing drills: a wide, friendly par 4 (driving) an
 
 ### src/greenCardModal.js
 Green Card modal from the main menu: drill checklist with progress bars, launches drills into play-hole practice mode (custom layout/placement, placement panel hidden). Verified by `tests/browser-smoke-greencard.mjs`.
+
+### src/touchControls.js
+On-screen touch zones for mobile play: dispatches synthetic KeyboardEvents through the existing inputHandler paths, so timing windows and shot variety are identical to keyboard. Full swing = hold SWING ('w') / release at top, then HIPS/ARMS/WRISTS ('j'/'d'/'i') taps + ROTATE ('a'); rhythm putt/chip = TAP tempo ('w') + STROKE ('i'). Zones relabel per shot type, hide over the menu, and touch mode relocates the practice panel and fullscreen controls out of the thumb zones. Activated on touch-capable devices or ?touch=1. Verified by `tests/browser-smoke-touch.mjs` (emulated phone: full rhythm putt and full-swing sequence to result).

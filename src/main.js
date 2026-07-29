@@ -18,6 +18,7 @@ import { showCourseSelect } from './courseSelectModal.js'; // Course round picke
 import { showCareer } from './careerModal.js'; // Career overview (handicap, rounds, stats)
 import { showGreenCard } from './greenCardModal.js'; // Green Card drill checklist
 import { startDrill, drillLaunchConfig } from './career/greenCard.js';
+import { initTouchControls } from './touchControls.js'; // On-screen swing zones for touch devices
 
 // --- Game Modes ---
 export const GAME_MODES = {
@@ -461,6 +462,10 @@ if (closeManualBtn && manualModal) {
     });
 }
 
+
+// On-screen touch zones (touch devices only) — they dispatch synthetic
+// KeyboardEvents, so they ride the same listeners registered below.
+initTouchControls();
 
 // Add global key listeners that call the input handler
 document.addEventListener('keydown', (event) => {
