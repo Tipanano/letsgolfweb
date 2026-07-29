@@ -29,6 +29,10 @@
 export const WATER_SURFACE_Y = -0.18;
 const WATER_DEPTH = 0.8;
 const WATER_RIM = 3.0;
+// Ponds: the OSM polygon edge is the traced shoreline, so banks must dive
+// below the waterline almost immediately — a wide feather leaves a dry
+// carved ring between the water and the rim
+const POND_RIM = 1.2;
 
 let features = []; // { bbox: {minX,maxX,minZ,maxZ}, evalAt(x,z) }
 
@@ -277,7 +281,7 @@ export function setTerrainFromLayout(layout) {
                 if (b > maxBank) maxBank = b;
             }
             if (maxBank - minBank <= 2.5) {
-                features.push(makeLevelWaterFeature(verts, minBank - WATER_DEPTH, WATER_RIM));
+                features.push(makeLevelWaterFeature(verts, minBank - WATER_DEPTH, POND_RIM));
                 waterSheets.push({ mode: 'flat', y: minBank + WATER_SURFACE_Y });
             } else {
                 const f = makeDepressionFeature(verts, WATER_DEPTH, WATER_RIM);
