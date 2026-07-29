@@ -103,18 +103,65 @@ function injectStyles() {
         #tc-aim-right { left: 64px; }
         #tc-cam { left: 118px; }
         #tc-next { left: 172px; }
-        /* Touch mode squeezes HUD panels out of the thumb zones */
-        body.touch-active #practice-panel {
-            top: 58px;
-            left: auto;
-            right: 160px;
-            max-height: 45vh;
-            overflow-y: auto;
+        /* --- Setup ⇄ Address phases --- */
+        /* Panels keep their native spots: setup has no zones to collide
+           with, and address hides the panels entirely. */
+        body.touch-active #practice-panel { max-height: 60vh; overflow-y: auto; }
+        /* Setup: info & selection panels only — no swing surfaces */
+        #touch-controls.setup .tc-zone,
+        #touch-controls.setup #tc-aim-left,
+        #touch-controls.setup #tc-aim-right,
+        #touch-controls.setup #tc-exit { display: none; }
+        #touch-controls:not(.setup) #tc-address { display: none; }
+        .tc-action {
+            position: absolute;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: auto;
+            border-radius: 14px;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            color: #0e1e14;
+            background: rgba(125, 255, 160, 0.9);
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+            -webkit-tap-highlight-color: transparent;
         }
-        body.touch-active #fullscreen-controls {
-            top: 58px;
-            right: 200px;
+        .tc-action.pressed { background: #fff; }
+        #tc-address {
+            bottom: 22px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: min(70vw, 320px);
+            height: 58px;
+            font-size: 1.1em;
         }
+        #tc-exit {
+            top: 8px;
+            left: 50%;
+            transform: translateX(-50%);
+            height: 38px;
+            padding: 0 18px;
+            font-size: 0.8em;
+            background: rgba(14, 30, 20, 0.6);
+            color: #eaf6ec;
+            border: 1.5px solid rgba(255, 255, 255, 0.35);
+        }
+        /* Address: strip everything that isn't the shot */
+        body.tc-address #fullscreen-controls,
+        body.tc-address #practice-panel,
+        body.tc-address #fullscreen-top-bar,
+        body.tc-address #back-to-menu-button,
+        body.tc-address #switch-hole-button,
+        body.tc-address #reset-game-data-button,
+        body.tc-address #fullscreen-toggle-btn,
+        body.tc-address .overlay-top-left,
+        body.tc-address .overlay-bottom { display: none !important; }
+        /* Lift the rhythm hint off the SWING zone */
+        body.tc-address #rhythm-putt-hud { bottom: 175px; }
     `;
     document.head.appendChild(style);
 }
@@ -160,6 +207,15 @@ function makeMini(id, label, onDown) {
     return el;
 }
 
+let addressMode = false;
+
+/** Setup shows info/selection panels; address shows only the shot surfaces. */
+function setAddressMode(on) {
+    addressMode = on;
+    document.body.classList.toggle('tc-address', on);
+    overlayEl.classList.toggle('setup', !on);
+}
+
 /** Relabels/reshapes zones for the active shot type; hides over the menu. */
 function updateZones(zones) {
     const menu = document.getElementById('main-menu');
@@ -167,8 +223,16 @@ function updateZones(zones) {
         ? menu.checkVisibility()
         : menu.getClientRects().length > 0);
     const inGame = !menuVisible;
+    const wasInGame = overlayEl.classList.contains('visible');
     overlayEl.classList.toggle('visible', inGame);
-    if (!inGame) return;
+    if (!inGame) {
+        if (addressMode) setAddressMode(false); // never leave HUD stripped behind the menu
+        return;
+    }
+    if (!wasInGame) setAddressMode(false); // every mode entry starts in setup
+
+    // The shot is over — bring the info panels back for the next decision
+    if (addressMode && getGameState() === 'result') setAddressMode(false);
 
     const shotType = getCurrentShotType();
     const full = shotType === 'full';
@@ -207,6 +271,23 @@ export function initTouchControls() {
         sendKey('keydown', String(cameraIdx + 1));
     });
     makeMini('tc-next', 'ᴺ', () => sendKey('keydown', 'n'));
+
+    // Setup ⇄ address toggles
+    const addressBtn = document.createElement('div');
+    addressBtn.id = 'tc-address';
+    addressBtn.className = 'tc-action';
+    addressBtn.textContent = '⛳ ADDRESS BALL';
+    bindZone(addressBtn, () => setAddressMode(true), null);
+    overlayEl.appendChild(addressBtn);
+
+    const exitBtn = document.createElement('div');
+    exitBtn.id = 'tc-exit';
+    exitBtn.className = 'tc-action';
+    exitBtn.textContent = '⚙ Setup';
+    bindZone(exitBtn, () => setAddressMode(false), null);
+    overlayEl.appendChild(exitBtn);
+
+    overlayEl.classList.add('setup');
 
     // Keep the page pinned while thumbs mash zones near the edges
     document.documentElement.style.overscrollBehavior = 'none';

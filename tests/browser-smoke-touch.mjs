@@ -66,8 +66,14 @@ const state = () => page.evaluate(async () => {
     const s = await import('./src/gameLogic/state.js');
     return s.getGameState();
 });
+// getBoundingClientRect via evaluate: playwright's boundingBox() visibility
+// heuristic misreads elements inside the pointer-events:none overlay.
+const zoneRect = (id) => page.evaluate((zid) => {
+    const r = document.getElementById(zid).getBoundingClientRect();
+    return { x: r.x, y: r.y, width: r.width, height: r.height };
+}, id);
 const tapZone = async (id) => {
-    const box = await page.locator('#' + id).boundingBox();
+    const box = await zoneRect(id);
     await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
 };
 const fail = (msg) => { console.error('FAIL:', msg); process.exit(1); };
@@ -86,11 +92,24 @@ await page.tap('#mode-btn-putting');
 await sleep(5000); // layout + placement
 
 await page.waitForSelector('#touch-controls.visible', { timeout: 5000 });
-const puttZones = await page.evaluate(() => ({
+// Starts in setup: zones hidden, ADDRESS BALL offered, info panels visible
+const setupPhase = await page.evaluate(() => ({
+    setup: document.getElementById('touch-controls').classList.contains('setup'),
+    zoneHidden: getComputedStyle(document.getElementById('tc-swing')).display === 'none',
+}));
+if (!setupPhase.setup || !setupPhase.zoneHidden) fail(`setup phase wrong: ${JSON.stringify(setupPhase)}`);
+await page.screenshot({ path: OUT + 'shot-touch-setup.png' });
+
+await tapZone('tc-address');
+await sleep(200);
+const addressPhase = await page.evaluate(() => ({
+    stripped: document.body.classList.contains('tc-address'),
+    fsHidden: getComputedStyle(document.getElementById('fullscreen-controls')).display === 'none',
     stroke: !document.getElementById('tc-stroke').classList.contains('tc-hidden'),
     hips: document.getElementById('tc-hips').classList.contains('tc-hidden'),
 }));
-if (!puttZones.stroke || !puttZones.hips) fail(`putt zones wrong: ${JSON.stringify(puttZones)}`);
+if (!addressPhase.stripped || !addressPhase.fsHidden) fail(`address strip failed: ${JSON.stringify(addressPhase)}`);
+if (!addressPhase.stroke || !addressPhase.hips) fail(`putt zones wrong: ${JSON.stringify(addressPhase)}`);
 await page.screenshot({ path: OUT + 'shot-touch-putt.png' });
 
 // Tap a tempo, then strike immediately. Every playwright roundtrip between
@@ -98,7 +117,7 @@ await page.screenshot({ path: OUT + 'shot-touch-putt.png' });
 // coordinates are pre-resolved and the whole sequence retries like a human
 // re-settling their tempo.
 const center = async (id) => {
-    const b = await page.locator('#' + id).boundingBox();
+    const b = await zoneRect(id);
     return [b.x + b.width / 2, b.y + b.height / 2];
 };
 const [swingX, swingY] = await center('tc-swing');
@@ -123,7 +142,12 @@ for (let i = 0; i < 40; i++) {
     await sleep(300);
 }
 if (settled !== 'result' && settled !== 'ready') fail(`putt never settled, state ${settled}`);
-console.log(`touch putt: tempo armed, stroke fired (${struck}), settled in state ${settled}`);
+// Result auto-returns to setup so the info panels come back
+await sleep(700);
+const backToSetup = await page.evaluate(() =>
+    document.getElementById('touch-controls').classList.contains('setup'));
+if (settled === 'result' && !backToSetup) fail('did not auto-return to setup after result');
+console.log(`touch putt: tempo armed, stroke fired (${struck}), settled in ${settled}, auto-setup ${backToSetup}`);
 
 // --- Full swing via touch (driving range) ---
 // The menu button is styled out of tap reach on this small viewport — menu
@@ -141,11 +165,13 @@ await page.waitForFunction(() =>
     !document.getElementById('tc-hips').classList.contains('tc-hidden') &&
     document.getElementById('tc-stroke').classList.contains('tc-hidden'),
     { timeout: 10000 });
+await tapZone('tc-address');
+await sleep(200);
 await page.screenshot({ path: OUT + 'shot-touch-full.png' });
 
 // Hold SWING via CDP touch events (touchscreen.tap can't hold)
 const cdp = await context.newCDPSession(page);
-const swingBox = await page.locator('#tc-swing').boundingBox();
+const swingBox = await zoneRect('tc-swing');
 const sx = swingBox.x + swingBox.width / 2, sy = swingBox.y + swingBox.height / 2;
 await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: sx, y: sy }] });
 await sleep(300);
