@@ -45,3 +45,12 @@ Local-first career record in localStorage: completed course rounds with their im
 
 ### src/careerModal.js
 Career overview modal opened from the main-menu Career card: handicap index with provisional tag and trend sparkline, scoring stats, per-course bests, and round history with expandable colored scorecards. Reads the local career record via `career/careerStore.js`; verified by `tests/browser-smoke-career.mjs`.
+
+### src/career/greenCard.js
+Green Card drill engine: the six-drill certification (driving, approach, chipping, bunker, lag putting, holing out) that doubles as the tutorial and career on-ramp. Pure attempt evaluation, randomized drill spot generation on the practice green, per-drill progress in localStorage, and the active-drill state that `playHole.handleShotResult` scores against. Unit-tested by `tests/unit-greencard.mjs`.
+
+### src/career/drillHoles.js
+Generated layouts for the full-swing drills: a wide, friendly par 4 (driving) and a short par 3 with a big green (approach), in the hole-maker export format.
+
+### src/greenCardModal.js
+Green Card modal from the main menu: drill checklist with progress bars, launches drills into play-hole practice mode (custom layout/placement, placement panel hidden). Verified by `tests/browser-smoke-greencard.mjs`.

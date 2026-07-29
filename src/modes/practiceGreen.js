@@ -12,9 +12,15 @@
 // Green: circle r=14 centered at (0, 55). Flag at (2, 58).
 // Bunkers guard left, right, and back. A fairway apron approaches from the front.
 
-const GREEN_CENTER = { x: 0, z: 55 };
-const GREEN_RADIUS = 14;
+export const GREEN_CENTER = { x: 0, z: 55 };
+export const GREEN_RADIUS = 14;
 export const PRACTICE_FLAG = { x: 2, z: 58 };
+// Greenside bunker centers/radii — Green Card bunker drill places balls here.
+export const PRACTICE_BUNKERS = [
+    { x: -19, z: 58, r: 4.5 },
+    { x: 18, z: 49, r: 4.0 },
+    { x: -5, z: 74.5, r: 3.8 },
+];
 
 function circleVertices(cx, cz, radius, segments = 24, wobble = 0) {
     const verts = [];

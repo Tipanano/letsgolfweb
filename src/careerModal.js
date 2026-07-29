@@ -6,6 +6,7 @@
 // and registered users alike.
 
 import { getCareer } from './career/careerStore.js';
+import { isCardEarned } from './career/greenCard.js';
 import { differentialsFromRounds, handicapIndex, indexSeriesFromRounds } from './career/handicap.js';
 
 let modalEl = null;
@@ -203,8 +204,9 @@ function render() {
         content.innerHTML = `
             <div class="career-empty">
                 No rounds posted yet.<br><br>
-                Finish a full round in <strong>Play Course</strong> and it lands here —
-                your first round earns a provisional handicap.
+                ${isCardEarned()
+                    ? 'Finish a full round in <strong>Play Course</strong> and it lands here — your first round earns a provisional handicap.'
+                    : 'New here? Start with the <strong>🎓 Green Card</strong> drills to learn every shot, then play a full round in <strong>Play Course</strong> to earn your first handicap.'}
             </div>
         `;
         return;
@@ -242,7 +244,7 @@ function render() {
         <div class="career-hero">
             <div>
                 <div class="career-hcp-num">${index === null ? '—' : index.toFixed(1)}</div>
-                <div class="career-hcp-label">Handicap index${provisional ? ' · provisional' : ''}</div>
+                <div class="career-hcp-label">Handicap index${provisional ? ' · provisional' : ''}${isCardEarned() ? ' · 🎓' : ''}</div>
             </div>
             <div class="career-spark">${sparklineSVG(indexSeriesFromRounds(rounds))}</div>
         </div>

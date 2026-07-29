@@ -16,6 +16,8 @@ import { initSwingArcVisualizer } from './swingArcVisualizer.js'; // Import swin
 import * as playHoleModal from './playHoleModal.js'; // Import play hole modal
 import { showCourseSelect } from './courseSelectModal.js'; // Course round picker
 import { showCareer } from './careerModal.js'; // Career overview (handicap, rounds, stats)
+import { showGreenCard } from './greenCardModal.js'; // Green Card drill checklist
+import { startDrill, drillLaunchConfig } from './career/greenCard.js';
 
 // --- Game Modes ---
 export const GAME_MODES = {
@@ -104,8 +106,13 @@ export async function setGameMode(newMode, initialHoleName = null, targetDistanc
             // Full round on a bundled course (sequential holes + scorecard)
             await playHole.startCourseRound(courseRound);
         } else if (practiceType) {
-            // Short-game practice green (chipping/putting practice)
-            await playHole.initializePracticeMode(practiceType);
+            // Short-game practice green (chipping/putting practice).
+            // Green Card drills pass an object: { type, layout, placement, hidePanel }.
+            if (typeof practiceType === 'object') {
+                await playHole.initializePracticeMode(practiceType.type, practiceType);
+            } else {
+                await playHole.initializePracticeMode(practiceType);
+            }
         } else {
             // If initialHoleName is provided (e.g. from switchGameToHole calling setGameMode), use it.
             // Otherwise, playHole.initializeMode will use its default or load saved state.
@@ -333,6 +340,17 @@ document.getElementById('mode-btn-hole')?.addEventListener('click', async () => 
 
 document.getElementById('mode-btn-career')?.addEventListener('click', () => {
     showCareer(); // Read-only overview — no mode change, no multiplayer check needed
+});
+
+document.getElementById('mode-btn-greencard')?.addEventListener('click', async () => {
+    const canProceed = await checkMultiplayerBeforeSinglePlayer();
+    if (!canProceed) return;
+    showGreenCard(async (drillId) => {
+        const cfg = drillLaunchConfig(drillId);
+        startDrill(drillId);
+        ui.showGameView();
+        await setGameMode(GAME_MODES.PLAY_HOLE, null, null, cfg);
+    });
 });
 
 document.getElementById('mode-btn-course')?.addEventListener('click', async () => {

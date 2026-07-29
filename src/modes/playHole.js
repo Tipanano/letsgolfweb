@@ -12,6 +12,7 @@ import {
 import { hasContour } from '../greenContours.js'; // For the slope-arrows hint
 import { recordCompletedRound } from '../career/careerStore.js';
 import { courseRating } from '../career/courseRating.js';
+import * as GreenCard from '../career/greenCard.js';
 
 // --- State ---
 let currentHoleLayout = null;
@@ -223,6 +224,7 @@ export function terminateMode() {
     practicePlacement = null;
     roundCourse = null;
     roundScores = [];
+    GreenCard.stopDrill();
     hidePracticePanel();
 }
 
@@ -237,8 +239,11 @@ export function isPracticeMode() {
  * play-hole mode. All lie/camera/shot flow logic is shared with normal
  * hole play; scoring and persistence are disabled.
  * @param {string} type - 'chip' or 'putt': which placement tab opens first
+ * @param {object} [options] - Green Card drills override the defaults:
+ *   layout (raw layout instead of the practice green), placement (initial
+ *   ball spot preset), hidePanel (suppress the placement panel).
  */
-export async function initializePracticeMode(type = 'putt') {
+export async function initializePracticeMode(type = 'putt', options = {}) {
     console.log(`Initializing practice green (${type})...`);
     currentModeActive = true;
     practiceMode = true;
@@ -246,7 +251,7 @@ export async function initializePracticeMode(type = 'putt') {
     holeJustCompleted = false;
 
     const { processHoleLayout } = await import('../holeLoader.js');
-    currentHoleLayout = processHoleLayout(generatePracticeGreenLayout());
+    currentHoleLayout = processHoleLayout(options.layout || generatePracticeGreenLayout());
     if (!currentHoleLayout) {
         console.error('Practice green layout failed to process.');
         currentModeActive = false;
@@ -264,14 +269,19 @@ export async function initializePracticeMode(type = 'putt') {
     visuals.drawHole(currentHoleLayout);
 
     // Drop the ball at the default spot for this practice type
-    await applyPracticePlacement(getDefaultPreset(practiceType), true);
+    await applyPracticePlacement(options.placement || getDefaultPreset(practiceType), true);
 
-    // Placement panel stays available so the player can move the ball anytime
-    showPracticePanel(
-        practiceType,
-        (preset) => { applyPracticePlacement(preset); },
-        (style) => { applyPracticeChipStyle(style); }
-    );
+    if (options.hidePanel) {
+        // Drills control placement themselves
+        hidePracticePanel();
+    } else {
+        // Placement panel stays available so the player can move the ball anytime
+        showPracticePanel(
+            practiceType,
+            (preset) => { applyPracticePlacement(preset); },
+            (style) => { applyPracticeChipStyle(style); }
+        );
+    }
 }
 
 /**
@@ -407,6 +417,23 @@ export function handleShotResult(shotData) {
         // shotsTaken for this completed hole is now fixed.
     } else {
         console.log("Ball is not holed out. Ready for next shot.");
+    }
+
+    // Green Card drill: every shot is one attempt, scored by where it
+    // finishes. The drill sets the next placement, so pressing (n) drops
+    // the next ball automatically.
+    if (practiceMode && GreenCard.getActiveDrill()) {
+        const endDist = calculateDistanceToFlag(currentBallPosition, currentHoleLayout.flagPosition);
+        const attempt = GreenCard.recordShot({
+            lie: finalLie,
+            holed: !!shotData.isHoledOut,
+            distToFlag: endDist,
+        });
+        if (attempt) {
+            holeJustCompleted = true; // attempt over — (n) places the next ball
+            if (attempt.nextSpot) practicePlacement = { ...attempt.nextSpot };
+            ui.updateStatus(attempt.statusText);
+        }
     }
 
     // Save the updated state (ball at its current location, or at hole if just holed out)
