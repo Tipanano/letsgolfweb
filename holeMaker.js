@@ -226,12 +226,26 @@ function render() {
         for (const n of g.children) { n.dataset.kind = 'flag'; n.dataset.idx = i; }
     });
 
-    // Vertex handles for selected polygon
+    // Vertex + edge-midpoint handles for the selected polygon. Dragging a
+    // hollow midpoint inserts a vertex there — no double-click timing needed.
     if (S.sel?.kind === 'poly') {
         const shape = S.hole[S.sel.skey]?.[S.sel.idx];
         if (shape) {
+            const pts = ptsOf(S.sel.skey, shape);
             const r = Math.max(1.2, 4 * pxScale());
-            ptsOf(S.sel.skey, shape).forEach((p, vi) => {
+            const minEdge = 14 * pxScale(); // skip cramped edges — dots would overlap
+            pts.forEach((p, vi) => {
+                const q = pts[(vi + 1) % pts.length];
+                if (Math.hypot(q.x - p.x, q.z - p.z) < minEdge) return;
+                const m = el('circle', {
+                    cx: (p.x + q.x) / 2, cy: -(p.z + q.z) / 2, r: r * 0.68,
+                    fill: '#1d3a24', stroke: '#fff',
+                    'stroke-width': 1.2, 'vector-effect': 'non-scaling-stroke',
+                    style: 'cursor: copy',
+                }, gHandles);
+                m.dataset.kind = 'midpoint'; m.dataset.vidx = vi;
+            });
+            pts.forEach((p, vi) => {
                 const c = el('circle', {
                     cx: p.x, cy: -p.z, r,
                     fill: vi === S.selVertex ? '#7dffa0' : '#fff',
@@ -387,6 +401,14 @@ svg.addEventListener('mousedown', (e) => {
         S.selVertex = +t.dataset.vidx;
         snapshot();
         drag = { type: 'vertex', start: p, moved: false };
+    } else if (kind === 'midpoint' && S.sel?.kind === 'poly') {
+        // Grab an edge midpoint → insert a vertex there and drag it
+        const pts = ptsOf(S.sel.skey, S.hole[S.sel.skey][S.sel.idx]);
+        const i = +t.dataset.vidx, a = pts[i], b = pts[(i + 1) % pts.length];
+        snapshot();
+        pts.splice(i + 1, 0, { x: round2((a.x + b.x) / 2), z: round2((a.z + b.z) / 2) });
+        S.selVertex = i + 1;
+        drag = { type: 'vertex', start: p, moved: false, inserted: true };
     } else if (kind === 'poly') {
         const same = S.sel?.kind === 'poly' && S.sel.skey === t.dataset.skey && S.sel.idx === +t.dataset.idx;
         S.sel = { kind: 'poly', skey: t.dataset.skey, idx: +t.dataset.idx };
@@ -430,7 +452,9 @@ window.addEventListener('mousemove', (e) => {
     }
     const p = svgPointFromEvent(e);
     const dx = p.x - drag.start.x, dz = p.z - drag.start.z;
-    if (Math.abs(dx) + Math.abs(dz) > 0.05) drag.moved = true;
+    // Ignore click jitter (~2.5 screen px) so selecting never nudges geometry
+    if (!drag.moved && Math.hypot(dx, dz) > Math.max(0.05, 2.5 * pxScale())) drag.moved = true;
+    if (!drag.moved) return;
 
     if (drag.type === 'vertex' && S.sel?.kind === 'poly') {
         const pts = ptsOf(S.sel.skey, S.hole[S.sel.skey][S.sel.idx]);
@@ -455,8 +479,9 @@ window.addEventListener('mouseup', () => {
     if (!drag) return;
     svg.classList.remove('panning');
     const wasClickOnEmpty = drag.type === 'pan' && !drag.moved;
-    // A drag that never moved shouldn't burn an undo slot
-    if (drag.type !== 'pan' && !drag.moved && S.undo.length) S.undo.pop();
+    // A drag that never moved shouldn't burn an undo slot — unless it
+    // inserted a vertex (midpoint grab), which is an edit on its own
+    if (drag.type !== 'pan' && !drag.moved && !drag.inserted && S.undo.length) S.undo.pop();
     drag = null;
     if (wasClickOnEmpty) { S.sel = null; S.selVertex = -1; render(); }
 });
