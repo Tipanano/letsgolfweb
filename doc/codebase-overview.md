@@ -33,3 +33,12 @@ Defines all surface types and their properties (bounce, rollout, friction, etc.)
 - `getSurfaceProperties(key)` - Get surface properties by key
 - `getSurfaceDisplayName(key)` - Convert surface key to display name
 - **Important**: Always use uppercase keys with underscores for comparisons (e.g., `lie === 'OUT_OF_BOUNDS'`), not display names.
+
+### src/career/handicap.js
+Pure WHS-lite handicap math (no storage/DOM): score differentials, net-double-bogey adjustment, course handicap, stroke allocation by hole length, 9-hole pairing, and the best-8-of-20 index table extended to issue a provisional index after one round. Unit-tested by `tests/unit-handicap.mjs`. Design rationale in `doc/CAREER_MODE_DESIGN.md`.
+
+### src/career/courseRating.js
+Heuristic course rating and slope derived from imported geometry (length, bunkers, water). Tunable stand-in for official ratings; feeds the handicap engine and (later) the course-ladder tiers.
+
+### src/career/careerStore.js
+Local-first career record in localStorage: completed course rounds with their immutably-stored differentials, and the derived handicap index. `playHole.js` posts rounds here from `endRound()`. Server sync for registered users layers on later.

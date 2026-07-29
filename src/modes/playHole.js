@@ -10,6 +10,8 @@ import {
     generatePracticeGreenLayout, showPracticePanel, hidePracticePanel, getDefaultPreset, getActiveChipStyle
 } from './practiceGreen.js'; // Short-game practice area
 import { hasContour } from '../greenContours.js'; // For the slope-arrows hint
+import { recordCompletedRound } from '../career/careerStore.js';
+import { courseRating } from '../career/courseRating.js';
 
 // --- State ---
 let currentHoleLayout = null;
@@ -173,6 +175,7 @@ function recordRoundHole() {
         hole: roundHoleIndex + 1,
         par: currentHoleLayout?.par || 4,
         strokes: shotsTaken,
+        lengthMeters: currentHoleLayout?.lengthMeters || 0,
     });
 }
 
@@ -183,10 +186,28 @@ export function endRound() {
     const par = roundCourse?.par || roundScores.reduce((s, h) => s + h.par, 0);
     const name = roundCourse?.name || 'Course';
     const line = (from, to) => roundScores.slice(from, to).map(h => h.strokes).join(' ');
-    const text = `${name}\n\n` +
+    let text = `${name}\n\n` +
         `Out:  ${line(0, 9)}\n` +
         (roundScores.length > 9 ? `In:   ${line(9, 18)}\n` : '') +
         `\nTotal: ${total} (${relative === 0 ? 'E' : relative > 0 ? '+' + relative : relative}) — par ${par}`;
+    // Post the round to the career record. endRound only fires after the
+    // final hole-out, so every round that reaches here is complete —
+    // abandoned rounds never post (see doc/CAREER_MODE_DESIGN.md).
+    if (roundCourse && roundScores.length === roundCourse.holes.length) {
+        try {
+            const posted = recordCompletedRound({
+                courseName: name,
+                ratingInfo: courseRating(roundCourse),
+                holes: roundScores,
+            });
+            text += posted.prevIndex === null
+                ? `\n\nFirst round posted — provisional handicap ${posted.index.toFixed(1)}`
+                : `\n\nHandicap: ${posted.prevIndex.toFixed(1)} → ${posted.index.toFixed(1)}` +
+                  ` (differential ${posted.differential.toFixed(1)})`;
+        } catch (e) {
+            console.error('Career: failed to post round.', e);
+        }
+    }
     roundCourse = null;
     roundHoleIndex = 0;
     return { text, total, relative };
