@@ -13,11 +13,13 @@ import { BUNDLED_COURSES, loadCourse } from './src/courseLibrary.js';
 import { setTerrainFromLayout, heightAt, hasContour } from './src/greenContours.js';
 
 const SURFACE_DEFS = [
-    { key: 'lightRough',   pts: 'vertices',      color: '#2c5e2e', label: 'Rough',   surface: 'LIGHT_ROUGH' },
-    { key: 'fairways',     pts: 'controlPoints', color: '#4c9a4f', label: 'Fairway', surface: 'FAIRWAY' },
-    { key: 'greens',       pts: 'controlPoints', color: '#7ed07e', label: 'Green',   surface: 'GREEN' },
-    { key: 'bunkers',      pts: 'controlPoints', color: '#e3d6a4', label: 'Bunker',  surface: 'BUNKER' },
-    { key: 'waterHazards', pts: 'controlPoints', color: '#5d97c9', label: 'Water',   surface: 'WATER' },
+    { key: 'lightRough',   pts: 'vertices',      color: '#2c5e2e', label: 'Rough',       surface: 'LIGHT_ROUGH' },
+    { key: 'mediumRough',  pts: 'vertices',      color: '#22491f', label: 'Med rough',   surface: 'MEDIUM_ROUGH' },
+    { key: 'thickRough',   pts: 'vertices',      color: '#183a17', label: 'Thick rough', surface: 'THICK_ROUGH' },
+    { key: 'fairways',     pts: 'controlPoints', color: '#4c9a4f', label: 'Fairway',     surface: 'FAIRWAY' },
+    { key: 'greens',       pts: 'controlPoints', color: '#7ed07e', label: 'Green',       surface: 'GREEN' },
+    { key: 'bunkers',      pts: 'controlPoints', color: '#e3d6a4', label: 'Bunker',      surface: 'BUNKER' },
+    { key: 'waterHazards', pts: 'controlPoints', color: '#5d97c9', label: 'Water',       surface: 'WATER' },
 ];
 const defFor = (key) => SURFACE_DEFS.find(d => d.key === key);
 const ptsOf = (skey, shape) => shape[defFor(skey).pts] || shape.controlPoints || shape.vertices || [];
@@ -279,6 +281,28 @@ function updateSelInfo() {
     else if (s?.kind === 'flag') t = `Flag #${s.idx + 1}`;
     else if (s?.kind === 'tee') t = 'Tee box';
     $('selInfo').textContent = t;
+    $('typeRow').style.display = s?.kind === 'poly' ? '' : 'none';
+    if (s?.kind === 'poly') $('shapeType').value = s.skey;
+}
+
+/** Moves the selected polygon to a different surface array (e.g. rough tiers). */
+function changeShapeType(newKey) {
+    const s = S.sel;
+    if (s?.kind !== 'poly' || s.skey === newKey) return;
+    const from = defFor(s.skey), to = defFor(newKey);
+    snapshot();
+    const shape = S.hole[s.skey][s.idx];
+    const pts = ptsOf(s.skey, shape);
+    S.hole[s.skey].splice(s.idx, 1);
+    if (S.hole[s.skey].length === 0) delete S.hole[s.skey];
+    const moved = { surface: to.surface };
+    moved[to.pts] = pts;
+    if (!Array.isArray(S.hole[newKey])) S.hole[newKey] = [];
+    S.hole[newKey].push(moved);
+    S.sel = { kind: 'poly', skey: newKey, idx: S.hole[newKey].length - 1 };
+    S.selVertex = -1;
+    setStatus(`${from.label} → ${to.label}.`);
+    render();
 }
 
 function fitView() {
@@ -617,6 +641,14 @@ function buildDrawTools() {
     });
     wrap.appendChild(tree);
 }
+
+for (const d of SURFACE_DEFS) {
+    const opt = document.createElement('option');
+    opt.value = d.key;
+    opt.textContent = d.label;
+    $('shapeType').appendChild(opt);
+}
+$('shapeType').addEventListener('change', (e) => changeShapeType(e.target.value));
 
 $('courseSelect').addEventListener('change', (e) => {
     if (confirmLoseEdits()) loadHole(e.target.value, 0);
