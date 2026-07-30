@@ -517,11 +517,11 @@ function initCameraGestures() {
             if (!isFreeCameraActive()) toggleFreeCamera();
             const { cx, cy, dist } = measure(e);
             // Pan speed grows with altitude so the map-drag feel stays constant
-            const perPx = Math.min(0.6, Math.max(0.03, (camera?.position.y || 10) * 0.004));
+            const perPx = Math.min(1.5, Math.max(0.08, (camera?.position.y || 10) * 0.01));
             freeCamNudge(
                 -(cx - lastCx) * perPx,          // content follows the fingers
-                -(cy - lastCy) * perPx,          // drag up = fly toward the green
-                -(dist - lastDist) * 0.06);      // pinch out = descend for a closer look
+                (cy - lastCy) * perPx,           // drag down = fly toward the green
+                -(dist - lastDist) * 0.12);      // pinch out = descend for a closer look
             lastCx = cx; lastCy = cy; lastDist = dist;
             return;
         }
