@@ -237,15 +237,19 @@ function injectStyles() {
             bottom: calc(132px + env(safe-area-inset-bottom, 0px));
         }
         body.touch-active .overlay-bottom .overlay-text-item { font-size: 11px; }
-        /* Rhythm hint: compact, kept clear of chips/pill (setup) and zones (address) */
+        /* Rhythm hint: compact. In setup it docks under the status line
+           (a subtitle, not a floating box over the scene); at address it
+           sits by the zones where the guidance is acted on. */
         body.touch-active #rhythm-putt-hud {
             max-width: min(380px, 94vw);
-            padding: 8px 12px;
+            padding: 6px 12px;
             gap: 10px;
             font-size: 12px;
-            bottom: calc(184px + env(safe-area-inset-bottom, 0px));
+            top: calc(164px + env(safe-area-inset-top, 0px));
+            bottom: auto;
         }
         body.tc-address #rhythm-putt-hud {
+            top: auto;
             bottom: calc(238px + env(safe-area-inset-bottom, 0px));
         }
         body.touch-active #rhythm-putt-hint {

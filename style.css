@@ -1484,3 +1484,18 @@ body:not(.debug-mode) #fs-debug-buttons {
     outline: none;
     border-color: #4caf50;
 }
+
+/* --- Narrow screens (any platform): keep fixed-width panels on-screen --- */
+@media (max-width: 480px) {
+    #multiplayer-lobby {
+        min-width: 0 !important;
+        width: 92vw !important;
+        padding: 20px !important;
+        max-height: 85vh;
+        overflow-y: auto;
+    }
+    #multiplayer-scoreboard {
+        min-width: 0 !important;
+        max-width: 70vw;
+    }
+}

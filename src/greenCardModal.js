@@ -104,8 +104,7 @@ function ensureCreated() {
     modalEl.innerHTML = `
         <div class="gc-modal-box">
             <h2>🎓 Green Card</h2>
-            <p class="gc-sub">Prove every part of your game, drill by drill — your ticket onto the course.
-                Pick a drill; each shot is one attempt, press (n) between balls.</p>
+            <p class="gc-sub" id="gc-sub-text"></p>
             <div id="gc-list"></div>
             <button class="gc-modal-close">Close</button>
         </div>
@@ -116,6 +115,10 @@ function ensureCreated() {
 }
 
 function render() {
+    const touch = document.body.classList.contains('touch-active');
+    modalEl.querySelector('#gc-sub-text').textContent =
+        'Prove every part of your game, drill by drill — your ticket onto the course. ' +
+        `Pick a drill; each shot is one attempt, ${touch ? 'tap NEXT' : 'press (n)'} between balls.`;
     const list = modalEl.querySelector('#gc-list');
     const progress = getProgress();
     list.innerHTML = progress.complete
