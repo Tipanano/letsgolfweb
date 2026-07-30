@@ -34,7 +34,7 @@ import {
     getRotationStartTime, getArmsStartTime, getWristsStartTime,
 } from './gameLogic/state.js';
 import { isSlopeOverlayVisible } from './visuals/slopeOverlay.js';
-import { isFreeCameraActive, toggleFreeCamera, freeCamNudge, freeCamLook, camera, ball, applyAimAngleToCamera } from './visuals/core.js';
+import { isFreeCameraActive, toggleFreeCamera, freeCamNudge, freeCamLook, camera, ball, scene, applyAimAngleToCamera } from './visuals/core.js';
 import { setShotDirectionAngle } from './gameLogic/state.js';
 import { updateStatus } from './ui.js';
 import { setDownswingTimingStretch } from './swingPhysics.js';
@@ -483,6 +483,29 @@ function setAddressMode(on) {
     overlayEl.classList.toggle('setup', !on);
 }
 
+// Confirmation ring at the world point a double-tap selected — instant
+// feedback that the commit landed where the finger pointed.
+let tapMarker = null;
+let tapMarkerTimer = null;
+function showTapMarker(x, z) {
+    if (!scene) return;
+    if (!tapMarker) {
+        const geom = new THREE.RingGeometry(1.1, 1.6, 40);
+        geom.rotateX(-Math.PI / 2);
+        tapMarker = new THREE.Mesh(geom, new THREE.MeshBasicMaterial({
+            color: 0x7dffa0, transparent: true, opacity: 0.85,
+            depthTest: false, depthWrite: false, side: THREE.DoubleSide,
+        }));
+        tapMarker.name = 'AimTapMarker';
+        tapMarker.renderOrder = 999;
+        scene.add(tapMarker);
+    }
+    tapMarker.position.set(x, queryTerrainHeight(x, z) + 0.06, z);
+    tapMarker.visible = true;
+    clearTimeout(tapMarkerTimer);
+    tapMarkerTimer = setTimeout(() => { tapMarker.visible = false; }, 2200);
+}
+
 /**
  * Sets the aim toward the world point under a screen tap: raycast through
  * the camera onto the ball's ground plane, then the same math as the
@@ -526,12 +549,15 @@ function aimAtScreenPoint(sx, sy) {
         hit = tPlane;
     }
 
-    const dx = origin.x + direction.x * hit - ball.position.x;
-    const dz = origin.z + direction.z * hit - ball.position.z;
+    const px = origin.x + direction.x * hit;
+    const pz = origin.z + direction.z * hit;
+    const dx = px - ball.position.x;
+    const dz = pz - ball.position.z;
     const dist = Math.hypot(dx, dz);
     if (dist < 2) return; // tapped the ball itself
     setShotDirectionAngle(Math.atan2(dx, dz) * (180 / Math.PI));
     applyAimAngleToCamera();
+    showTapMarker(px, pz);
     updateStatus(`🎯 Aiming at that spot — ${dist.toFixed(0)} m out`);
 }
 
