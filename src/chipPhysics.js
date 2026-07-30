@@ -114,7 +114,8 @@ export function calculateRhythmChipImpact(strike, club, ballPositionFactor, curr
 
     // --- Contact quality: steadiness is the skill ---
     const offbeatRisk = Math.max(0, Math.abs(devFrac) - RCHIP_OFFBEAT_RISK_START) * RCHIP_OFFBEAT_RISK_FACTOR;
-    const contactRisk = cv * RCHIP_CV_RISK_FACTOR * profile.cvRiskMult + offbeatRisk;
+    const cvRisk = cv * RCHIP_CV_RISK_FACTOR * profile.cvRiskMult;
+    const contactRisk = cvRisk + offbeatRisk;
     const contactError = Math.abs(gaussianRandom()) * contactRisk;
 
     const fatForgiveness = surfaceProps?.strikeFactors?.fatForgiveness || 1.0;
@@ -243,6 +244,12 @@ export function calculateRhythmChipImpact(strike, club, ballPositionFactor, curr
         backSpin,
         sideSpin,
         rhythm: { tempoMs, cv, beatDeviationMs, shapeDevFrac },
+        // Contact-quality diagnostics for the practice swing report: what fed
+        // the mishit risk, and how tight the lie made the window.
+        contact: {
+            cvRisk, offbeatRisk, error: contactError,
+            threshold: sideThreshold, baseThreshold: profile.contactThreshold,
+        },
         message,
     };
 }

@@ -55,6 +55,41 @@ function buildSwingReport(r) {
     const line2 = beats.length ? beats.join(' · ') : 'timing pure — great swing';
     return `${line1}\n${line2}`;
 }
+
+/**
+ * Chip/pitch feedback for practice contexts. Rhythm chips have two skills —
+ * strike tap vs the beat (direction) and tap-tempo steadiness (contact) — so
+ * the report names both, and on a mishit says which one caused it.
+ */
+function buildChipReport(r, label) {
+    const rhythm = r.rhythm;
+    if (!rhythm) return null; // legacy timing path — no rhythm data to explain
+
+    const face = r.absoluteFaceAngle;
+    const dir = Math.abs(face) < 1.5 ? 'straight'
+        : face > 0 ? 'push right' : 'pull left';
+    const line1 = `${r.strikeQuality} ${label.toLowerCase()} · ${dir}`;
+
+    const devPct = Math.round((rhythm.beatDeviationMs / rhythm.tempoMs) * 100);
+    const cvPct = rhythm.cv * 100;
+    const parts = [];
+    parts.push(Math.abs(devPct) <= 6 ? 'strike on the beat'
+        : `strike ${Math.abs(devPct)}% ${devPct > 0 ? 'late' : 'early'}`);
+    parts.push(cvPct < 5 ? `tempo steady (±${Math.max(1, Math.round(cvPct))}%)`
+        : cvPct < 9 ? `tempo uneven (±${Math.round(cvPct)}%)`
+        : `tempo wobbly (±${Math.round(cvPct)}%)`);
+
+    // On a mishit, name the cause — contact rolls dice against a window, and
+    // what widened the dice matters more than the unlucky roll itself.
+    if (r.strikeQuality !== 'Center' && r.contact) {
+        const c = r.contact;
+        if (c.offbeatRisk > c.cvRisk) parts.push('mishit: strike far off the beat');
+        else if (cvPct >= 6) parts.push('mishit: uneven taps');
+        else if (c.threshold < c.baseThreshold * 0.85) parts.push('mishit: tough lie');
+        else parts.push('mishit: unlucky — rhythm was fine');
+    }
+    return `${line1}\n${parts.join(' · ')}`;
+}
 import { getCurrentBallPosition as getPlayHoleBallPosition } from '../modes/playHole.js'; // Import position getter
 import { BALL_RADIUS } from '../visuals/core.js'; // Import BALL_RADIUS
 import { getFlagPosition, getGreenCenter, getGreenRadius, getObstacles as getHoleObstacles } from '../visuals/holeView.js'; // For hole/green checks
@@ -371,7 +406,7 @@ export function calculateFullSwingShot() {
 
 
 export function calculateChipShot() {
-    setSwingReport(null); // full-swing feedback only
+    setSwingReport(null); // replaced below once the impact is known
     const state = getGameState();
     const shotType = getCurrentShotType();
     if (state !== 'calculatingChip' || shotType !== 'chip') return;
@@ -423,10 +458,16 @@ export function calculateChipShot() {
     // --- Call chip physics ---
     // Rhythm chipping: strike scored against the player's tap tempo.
     const rhythmStrike = consumeRhythmStrike();
+    const chipProfile = CHIP_PROFILES[getChipProfile()] || CHIP_PROFILES.chip;
     const impactResult = rhythmStrike
-        ? calculateRhythmChipImpact(rhythmStrike, selectedClub, ballPositionFactor, currentSurface,
-            CHIP_PROFILES[getChipProfile()] || CHIP_PROFILES.chip)
+        ? calculateRhythmChipImpact(rhythmStrike, selectedClub, ballPositionFactor, currentSurface, chipProfile)
         : calculateChipImpact(backswingDuration, rotationOffset, hitOffset, selectedClub, ballPositionFactor, currentSurface); // Legacy fallback
+
+    // Practice contexts get the same post-shot explanation full swings do
+    try {
+        const practice = getCurrentGameMode() === 'range' || isPracticeMode();
+        setSwingReport(practice ? buildChipReport(impactResult, chipProfile.label) : null);
+    } catch (e) { /* feedback must never break the shot */ }
 
     // --- Use results ---
     const ballSpeed = impactResult.ballSpeed;

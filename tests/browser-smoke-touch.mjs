@@ -276,6 +276,55 @@ console.log(`early transition: hips mid-hold ✓, release → ${afterRelease}, r
 const shotInfo = await page.evaluate(() =>
     document.getElementById('status-text-display')?.textContent || '');
 await page.screenshot({ path: OUT + 'shot-touch-result.png' });
+
+// --- Rhythm chip: practice contexts get a chip report (strike/tempo/why) ---
+await page.evaluate(() => document.getElementById('back-to-menu-button').click());
+await page.waitForSelector('#mode-btn-practice', { timeout: 5000 });
+if (!await page.locator('#mode-btn-chipping').isVisible()) await page.tap('#mode-btn-practice');
+await page.waitForSelector('#mode-btn-chipping', { state: 'visible' });
+await page.tap('#mode-btn-chipping');
+await sleep(5000);
+await page.waitForFunction(() =>
+    document.getElementById('touch-controls')?.classList.contains('visible') &&
+    /TAP/.test(document.getElementById('tc-swing').textContent),
+    { timeout: 10000 });
+await tapZone('tc-address');
+await sleep(300);
+const [cSwingX, cSwingY] = await (async () => {
+    const b = await zoneRect('tc-swing');
+    return [b.x + b.width / 2, b.y + b.height / 2];
+})();
+const [cStrokeX, cStrokeY] = await (async () => {
+    const b = await zoneRect('tc-stroke');
+    return [b.x + b.width / 2, b.y + b.height / 2];
+})();
+let chipStruck = null;
+for (let round = 0; round < 3 && !chipStruck; round++) {
+    for (let i = 0; i < 5; i++) {
+        await page.touchscreen.tap(cSwingX, cSwingY);
+        await sleep(330);
+    }
+    await page.touchscreen.tap(cStrokeX, cStrokeY);
+    await sleep(400);
+    const s = await state();
+    if (s !== 'puttRhythm' && s !== 'ready') chipStruck = s;
+}
+if (!chipStruck) fail('chip stroke never fired after 3 tempo rounds');
+let chipSettled = null;
+for (let i = 0; i < 40; i++) {
+    chipSettled = await state();
+    if (chipSettled === 'result' || chipSettled === 'ready') break;
+    await sleep(300);
+}
+if (chipSettled !== 'result' && chipSettled !== 'ready') fail(`chip never settled, state ${chipSettled}`);
+await sleep(700);
+const chipReport = await page.evaluate(() =>
+    document.getElementById('rhythm-putt-hint')?.textContent || '');
+if (!/chip|pitch/i.test(chipReport) || !/tempo/.test(chipReport)) {
+    fail(`no chip report in hint: "${chipReport}"`);
+}
+console.log(`chip report: "${chipReport.split('\n')[0].trim()}..."`);
+
 await browser.close();
 
 if (errors.length) fail('page errors:\n' + errors.join('\n'));
