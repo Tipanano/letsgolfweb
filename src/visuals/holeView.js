@@ -19,13 +19,12 @@ import { disposeSceneObject } from './textures.js';
 import { queryTerrainHeight } from '../visuals.js'; // For getting terrain height at flag position
 import { buildGrass } from './grass.js'; // Instanced grass for rough/native areas
 import { buildOOBStakes } from './oobStakes.js'; // White boundary stakes
+import { buildFlagstick, setFlagstickVisible, resetFlagstick } from './flagstick.js';
 
 let currentHoleObjects = []; // To keep track of objects added for the hole
 let currentFlagPosition = null; // Store the flag position in meters (Vector3)
 let currentGreenCenter = null; // Store the green center position in meters (Vector3)
 let currentGreenRadius = null; // Store the green radius in meters (Number)
-let flagstickPoleMesh = null; // Reference to the flagstick pole mesh
-let flagClothMesh = null; // Reference to the flag cloth mesh
 let currentObstacles = []; // Store obstacles for physics calculations
 
 /**
@@ -42,9 +41,7 @@ export function clearHoleLayout() {
         disposeSceneObject(obj);
     });
     currentHoleObjects = [];
-    // Reset flagstick references when clearing
-    flagstickPoleMesh = null;
-    flagClothMesh = null;
+    resetFlagstick(); // Objects themselves were disposed above
     // Reset stored positions/dimensions
     currentFlagPosition = null;
     currentGreenCenter = null;
@@ -101,28 +98,12 @@ export function drawHoleLayout(holeLayout) {
 
     // --- Draw Flagstick ---
     if (holeLayout.flagPosition) {
-        const flagHeight = 2.5; // Meters
-        const flagRadius = 0.05; // Meters
-
         // Terrain height at the flag: the terrain field is authoritative
         // (DEM holes go well below 0 — max() would leave the flag airborne);
         // an explicitly authored non-zero y overrides.
         const authoredY = holeLayout.flagPosition.y || 0;
         const terrainHeight = authoredY !== 0 ? authoredY :
             queryTerrainHeight(holeLayout.flagPosition.x, holeLayout.flagPosition.z);
-
-        const flagGeometry = new THREE.CylinderGeometry(flagRadius, flagRadius, flagHeight, 8);
-        const flagMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff }); // White pole
-        flagstickPoleMesh = new THREE.Mesh(flagGeometry, flagMaterial);
-        flagstickPoleMesh.name = "FlagstickPole";
-        flagstickPoleMesh.position.set(
-            holeLayout.flagPosition.x,
-            terrainHeight + flagHeight / 2,
-            holeLayout.flagPosition.z
-        );
-        flagstickPoleMesh.castShadow = true;
-        scene.add(flagstickPoleMesh);
-        currentHoleObjects.push(flagstickPoleMesh);
 
         // Store the flag position (base of the stick)
         currentFlagPosition = new THREE.Vector3(
@@ -131,43 +112,15 @@ export function drawHoleLayout(holeLayout) {
             holeLayout.flagPosition.z
         );
 
-
-        // Optional: Add a little flag cloth
-        const flagClothGeometry = new THREE.PlaneGeometry(0.5, 0.3);
-        const flagClothMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000, side: THREE.DoubleSide }); // Red flag
-        flagClothMesh = new THREE.Mesh(flagClothGeometry, flagClothMaterial); // Assign to module variable
-        flagClothMesh.name = "FlagCloth"; // Optional: Add name for debugging
-        // Position relative to flagstick top
-        flagClothMesh.position.set(
-            flagstickPoleMesh.position.x + 0.25, // Offset slightly from pole
-            flagstickPoleMesh.position.y + flagHeight / 2 - 0.15, // Near the top
-            flagstickPoleMesh.position.z
-        );
-        scene.add(flagClothMesh);
-        currentHoleObjects.push(flagClothMesh);
-
-        // --- Draw the Hole Cup ---
-        const HOLE_RADIUS_METERS = 0.108 / 2; // Regulation hole diameter is 4.25 inches (0.108m)
-        const holeDepth = 0.1; // Depth for the visual cup (meters)
-        const holeGeometry = new THREE.CylinderGeometry(HOLE_RADIUS_METERS, HOLE_RADIUS_METERS, holeDepth, 16);
-        const holeMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 }); // Black
-        const holeMesh = new THREE.Mesh(holeGeometry, holeMaterial);
-        holeMesh.renderOrder = 1; // Draw hole *after* the green
-
-        // Position the hole centered at the flag position, using actual terrain height at that XZ position
-        const terrainHeightAtFlag = queryTerrainHeight(currentFlagPosition.x, currentFlagPosition.z);
-        const holeTopEdgeY = terrainHeightAtFlag + 0.065; // Just above the green's layer height (0.06)
-        const holeCenterY = holeTopEdgeY - (holeDepth / 2); // Calculate center Y
-
-        holeMesh.position.set(
+        // Striped pole, camera-facing waving cloth, and a cup with real depth
+        // — see visuals/flagstick.js for what each of those replaces.
+        const { objects } = buildFlagstick(
+            scene,
             currentFlagPosition.x,
-            holeCenterY, // Position cylinder center
+            queryTerrainHeight(currentFlagPosition.x, currentFlagPosition.z),
             currentFlagPosition.z
         );
-        // No rotation needed as cylinder is upright
-
-        scene.add(holeMesh);
-        currentHoleObjects.push(holeMesh);
+        currentHoleObjects.push(...objects);
     }
 
     // --- Draw Obstacles (Trees/Bushes) ---
@@ -231,12 +184,7 @@ export function getGreenRadius() {
  * @param {boolean} visible - True to show, false to hide.
  */
 export function setFlagstickVisibility(visible) {
-    if (flagstickPoleMesh) {
-        flagstickPoleMesh.visible = visible;
-    }
-    if (flagClothMesh) {
-        flagClothMesh.visible = visible;
-    }
+    setFlagstickVisible(visible);
 }
 
 /**

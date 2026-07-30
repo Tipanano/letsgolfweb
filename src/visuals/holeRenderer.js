@@ -505,6 +505,42 @@ export function renderRoughAreas(holeLayout, scene, textureLoader, objectsArray)
     });
 }
 
+// --- Water motion ------------------------------------------------------
+// A static blue sheet doesn't read as water no matter how good the specular
+// is; motion is what sells it. Crossed sine waves perturb the surface normal
+// in the fragment shader, so the specular highlight breaks up and travels.
+// A few ALU ops on a surface that covers a small fraction of the screen —
+// far cheaper than the real alternatives (planar reflection or a CubeCamera
+// both mean rendering the scene a second time every frame).
+const waterUniforms = { uTime: { value: 0 } };
+const waterMaterials = [];
+
+/** Advances the water animation. Called once per frame from the render loop. */
+export function updateWater(timeSeconds) {
+    waterUniforms.uTime.value = timeSeconds;
+}
+
+function applyWaterRipple(material) {
+    material.onBeforeCompile = (shader) => {
+        shader.uniforms.uTime = waterUniforms.uTime;
+        shader.fragmentShader = shader.fragmentShader
+            .replace('#include <common>', `
+                #include <common>
+                uniform float uTime;
+            `)
+            .replace('#include <normal_fragment_begin>', `
+                #include <normal_fragment_begin>
+                // Two wave trains at different speeds and headings
+                float w1 = sin(vViewPosition.x * 1.7 + uTime * 1.1)
+                         + sin(vViewPosition.z * 2.1 - uTime * 0.8);
+                float w2 = sin(vViewPosition.x * 3.3 - uTime * 1.7)
+                         + sin(vViewPosition.z * 2.9 + uTime * 1.3);
+                normal = normalize(normal + vec3(w1 * 0.045, 0.0, w2 * 0.045));
+            `);
+    };
+    material.customProgramCacheKey = () => 'water_ripple';
+}
+
 /**
  * Renders water hazards with transparency
  */
@@ -545,7 +581,7 @@ export function renderWaterHazards(holeLayout, scene, textureLoader, objectsArra
             // Note: no dispose of the outgoing material — it belongs to the
             // shared surface registry and is still in use by other polygons.
             if (mesh) {
-                mesh.material = new THREE.MeshPhongMaterial({
+                const waterMat = new THREE.MeshPhongMaterial({
                     color: 0x3f81b8,
                     specular: 0xcfe6ff,
                     shininess: 130,
@@ -556,7 +592,10 @@ export function renderWaterHazards(holeLayout, scene, textureLoader, objectsArra
                     // backface-cull into invisibility when seen from above
                     side: THREE.DoubleSide,
                 });
+                applyWaterRipple(waterMat);
+                mesh.material = waterMat;
                 mesh.geometry.computeVertexNormals();
+                waterMaterials.push(waterMat);
             }
         }
     });

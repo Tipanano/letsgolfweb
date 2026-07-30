@@ -11,6 +11,9 @@ import { createTeeMesh } from './objects.js'; // Import the tee creator
 import { getSurfaceProperties } from '../surfaces.js'; // Import surface properties getter
 import { heightAt as terrainHeightAt } from '../greenContours.js';
 import { initTextureCaps } from './textures.js';
+import { updateFlagstick } from './flagstick.js';
+import { updateWind } from './grass.js';
+import { updateWater } from './holeRenderer.js';
 
 import { YARDS_TO_METERS } from '../utils/unitConversions.js';
 import { gradientAt as contourGradientAt } from '../greenContours.js';
@@ -217,8 +220,10 @@ function createSkyAndHorizon(targetScene) {
         }
     }
     treeGeom.computeVertexNormals();
+    // Lightened from near-black: the far treeline should sit close to the fog
+    // colour so it recedes, rather than ringing the hole in a dark band.
     const treeMat = new THREE.MeshBasicMaterial({
-        color: 0x2a4a30,
+        color: 0x4d6b4a,
         side: THREE.BackSide,
         fog: true, // Haze softens it into the distance
     });
@@ -231,7 +236,27 @@ function createSkyAndHorizon(targetScene) {
     // Subdivided so updateEarthTerrain() can drape it over DEM elevation —
     // otherwise a hole dropping 40m (Augusta 10) would sink below it.
     const earthGeom = new THREE.PlaneGeometry(1600, 1600, 96, 96);
-    const earthMat = new THREE.MeshLambertMaterial({ color: 0x315c34 });
+    // Vertex-coloured so the backdrop varies instead of reading as one flat
+    // slab. It also needs to sit close to the course's own greens in value —
+    // too dark and the surrounds become a wall behind the hole rather than
+    // land receding into haze.
+    const earthColors = new Float32Array(earthGeom.attributes.position.count * 3);
+    const nearGrass = new THREE.Color(0x54793f);
+    const farGrass = new THREE.Color(0x6b8a4e);
+    const ec = new THREE.Color();
+    const ePos = earthGeom.attributes.position;
+    for (let i = 0; i < ePos.count; i++) {
+        const gx = ePos.getX(i), gy = ePos.getY(i);
+        // Broad, low-frequency variation — this is scenery, not playable ground
+        const n = Math.sin(gx * 0.012) * Math.cos(gy * 0.009)
+                + 0.5 * Math.sin(gx * 0.031 + gy * 0.017);
+        ec.copy(nearGrass).lerp(farGrass, 0.5 + 0.5 * Math.max(-1, Math.min(1, n)));
+        earthColors[i * 3] = ec.r;
+        earthColors[i * 3 + 1] = ec.g;
+        earthColors[i * 3 + 2] = ec.b;
+    }
+    earthGeom.setAttribute('color', new THREE.BufferAttribute(earthColors, 3));
+    const earthMat = new THREE.MeshLambertMaterial({ vertexColors: true });
     const earth = new THREE.Mesh(earthGeom, earthMat);
     earth.rotation.x = -Math.PI / 2;
     earth.position.y = -0.9; // Below every depression floor (bunker bowls, water beds)
@@ -433,6 +458,15 @@ function animate(timestamp) {
     // --- Camera Update Logic ---
     updateCamera(timestamp); // Call camera update logic each frame
 
+    // --- Ambient motion ---
+    // Wind drives the grass (one shared shader uniform) and the flag cloth
+    // (21 vertices). Both are effectively free and both are what stop the
+    // course reading as a still life.
+    const timeSeconds = (timestamp || 0) / 1000;
+    updateWind(timeSeconds);
+    updateWater(timeSeconds);
+    updateFlagstick(camera, timeSeconds);
+
     // --- Ball Flight Animation Logic (Time-Based) ---
     if (isBallAnimating) {
         const elapsedTime = timestamp - ballAnimationStartTime;
@@ -485,12 +519,11 @@ function animate(timestamp) {
                 isBallAnimating = false; // Stop animation on error
             }
 
-            // Update trajectory line draw range based on current point index
+            // Reveal the ribbon up to the ball: 6 indices (2 triangles) per
+            // trajectory segment, versus 1 vertex per point for the old line
             if (trajectoryLine) {
-                const drawCount = Math.min(pointIndex + 2, currentTrajectoryPoints.length);
-                if (drawCount >= 0 && drawCount <= currentTrajectoryPoints.length) {
-                    trajectoryLine.geometry.setDrawRange(0, drawCount);
-                }
+                const segments = Math.min(pointIndex + 1, currentTrajectoryPoints.length - 1);
+                trajectoryLine.geometry.setDrawRange(0, Math.max(0, segments) * 6);
             }
         }
 
@@ -769,6 +802,44 @@ export function removeTrajectoryLine() {
 let ballHaloMesh = null;
 const BALL_HALO_LIFT = 0.008; // Above the surface's render layer, below the ball
 
+// Soft contact shadow under the ball. At 7cm per shadow-map texel the ball's
+// real shadow is smaller than a single texel, so it never appears — and the
+// halo ring reads as UI, not as lighting. This blob is what actually plants
+// the ball on the surface. One small quad with a generated radial-gradient
+// texture; no external asset, one draw call.
+let ballShadowMesh = null;
+
+function createBlobShadowTexture() {
+    const size = 64;
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    g.addColorStop(0, 'rgba(0,0,0,0.55)');
+    g.addColorStop(0.55, 'rgba(0,0,0,0.28)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+}
+
+function ensureBallShadow() {
+    if (ballShadowMesh || !scene) return;
+    const geom = new THREE.PlaneGeometry(1, 1);
+    geom.rotateX(-Math.PI / 2);
+    ballShadowMesh = new THREE.Mesh(geom, new THREE.MeshBasicMaterial({
+        map: createBlobShadowTexture(),
+        transparent: true,
+        depthWrite: false,
+    }));
+    ballShadowMesh.name = 'BallContactShadow';
+    ballShadowMesh.renderOrder = 19; // Under the halo ring (20) and chevron (21)
+    ballShadowMesh.visible = false;
+    scene.add(ballShadowMesh);
+}
+
 function ensureBallHalo() {
     if (ballHaloMesh || !scene) return;
     const geom = new THREE.RingGeometry(0.22, 0.34, 40);
@@ -791,6 +862,17 @@ const HALO_UP = new THREE.Vector3(0, 1, 0);
 
 export function setBallHalo(visible, x = 0, z = 0, surfaceLayerHeight = 0.06) {
     ensureBallHalo();
+    ensureBallShadow();
+    if (ballShadowMesh) {
+        ballShadowMesh.visible = visible;
+        if (visible) {
+            // Sized to the drawn ball (which is scaled up off the green), and
+            // offset slightly down-sun so it reads as cast rather than painted
+            const scale = BALL_RADIUS * (ball?.scale?.x ?? 1) * 5.5;
+            ballShadowMesh.scale.set(scale, 1, scale);
+            ballShadowMesh.position.set(x - 0.012, surfaceLayerHeight + 0.004, z - 0.005);
+        }
+    }
     if (!ballHaloMesh) return;
     ballHaloMesh.visible = visible;
     if (visible) {
@@ -987,10 +1069,12 @@ export function startBallAnimation(points, duration, onCompleteCallback = null, 
         const firstTime = points[0].time;
         const lastTime = points[points.length - 1].time;
 
-        const geometry = new THREE.BufferGeometry().setFromPoints(points);
-        const material = new THREE.LineBasicMaterial({ color: trajectoryColor, linewidth: 3 });
-        trajectoryLine = new THREE.Line(geometry, material);
-        trajectoryLine.geometry.setDrawRange(0, 0);
+        // A ribbon, not a line. LineBasicMaterial.linewidth is ignored by the
+        // WebGL renderer on every platform, so the old `linewidth: 3` drew a
+        // 1px hairline — nearly invisible against the sky on a phone. Two
+        // camera-facing triangles per segment give a real, readable arc for
+        // about the same cost, in one draw call.
+        trajectoryLine = createTrajectoryRibbon(points, trajectoryColor);
         scene.add(trajectoryLine);
 
         ballAnimationDuration = duration;
@@ -1004,6 +1088,67 @@ export function startBallAnimation(points, duration, onCompleteCallback = null, 
     }
 }
 
+
+/**
+ * Builds the shot-trace ribbon: a flat strip that always presents its face to
+ * the camera, widened in the plane perpendicular to both the flight direction
+ * and the view. Width is in metres and grows a little with height so the apex
+ * of a long carry stays as readable as the start of it.
+ */
+function createTrajectoryRibbon(points, color) {
+    const n = points.length;
+    const positions = new Float32Array(n * 2 * 3);
+    const indices = new Uint32Array((n - 1) * 6);
+    const dir = new THREE.Vector3();
+    const side = new THREE.Vector3();
+    const toCam = new THREE.Vector3();
+
+    for (let i = 0; i < n; i++) {
+        const p = points[i];
+        const q = points[Math.min(i + 1, n - 1)];
+        const r = points[Math.max(i - 1, 0)];
+        dir.set(q.x - r.x, q.y - r.y, q.z - r.z);
+        if (dir.lengthSq() === 0) dir.set(0, 0, 1);
+        dir.normalize();
+
+        toCam.set(camera.position.x - p.x, camera.position.y - p.y, camera.position.z - p.z).normalize();
+        side.crossVectors(dir, toCam);
+        if (side.lengthSq() < 1e-8) side.set(1, 0, 0); // Looking straight down the flight line
+        side.normalize();
+
+        // 6cm base, opening out with altitude so the apex doesn't thin away
+        const halfWidth = 0.03 + Math.min(0.09, p.y * 0.004);
+        positions[i * 6] = p.x - side.x * halfWidth;
+        positions[i * 6 + 1] = p.y - side.y * halfWidth;
+        positions[i * 6 + 2] = p.z - side.z * halfWidth;
+        positions[i * 6 + 3] = p.x + side.x * halfWidth;
+        positions[i * 6 + 4] = p.y + side.y * halfWidth;
+        positions[i * 6 + 5] = p.z + side.z * halfWidth;
+    }
+
+    for (let i = 0; i < n - 1; i++) {
+        const a = i * 2, b = a + 1, c = a + 2, d = a + 3;
+        indices.set([a, b, c, b, d, c], i * 6);
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+    geometry.setDrawRange(0, 0);
+    geometry.computeBoundingSphere();
+
+    const material = new THREE.MeshBasicMaterial({
+        color,
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.85,
+        depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = 'TrajectoryRibbon';
+    mesh.frustumCulled = false;
+    return mesh;
+}
 
 export function resetCoreVisuals() {
      if (!scene) return; // Guard against uninitialized scene
