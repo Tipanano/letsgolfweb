@@ -90,9 +90,9 @@ export function nextSpot(drillId, attemptNo = 1) {
     const label = (base) => `${base} · ball ${attemptNo}`;
     switch (drillId) {
         case 'driving':
-            return { id: 'drill', label: label('Driving drill'), x: 0, z: 0.5, lie: 'TEE' };
+            return { id: 'drill', label: label('Driving drill'), x: 0, z: 0.5, lie: 'TEE', club: 'DR', shotType: 'full' };
         case 'approach':
-            return { id: 'drill', label: label('Approach drill'), x: 0, z: 0.5, lie: 'TEE' };
+            return { id: 'drill', label: label('Approach drill'), x: 0, z: 0.5, lie: 'TEE', club: 'I7', shotType: 'full' };
         case 'chipping': {
             // 5–10 m outside the green edge, clear of the bunkers
             for (let i = 0; i < 40; i++) {

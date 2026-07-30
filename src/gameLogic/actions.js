@@ -48,6 +48,7 @@ import * as multiplayerManager from '../multiplayerManager.js'; // Import multip
 // Rhythm putting
 import * as RhythmPutt from '../rhythmPutt.js';
 import { updatePuttPreview, hidePuttPreview } from '../visuals/puttPreview.js';
+import { getActiveDrill } from '../career/greenCard.js';
 import { updateRhythmHud, hideRhythmHud, flashBeat, showRhythmHud, showAddressHint, strikeName } from '../ui/rhythmPuttHud.js';
 import { ball } from '../visuals/core.js';
 import { getCurrentTargetLineAngle, getShotDirectionAngle } from './state.js';
@@ -578,6 +579,16 @@ export function resetSwing() {
         }
 
         // Case 2: Ball in play - check lie and handle accordingly
+        // Green Card drills: every shot is one attempt, so 'next' ALWAYS
+        // places the next drill ball — never "play on from where it lies",
+        // regardless of how the hole-completed flag fared.
+        if (isPracticeMode() && getActiveDrill()) {
+            returnToTee(); // practice: returns to the drill placement spot
+            resetSwingState();
+            showAddressHint(getCurrentShotType(), { hasClub: !!getSelectedClub() });
+            return;
+        }
+
         const currentLie = getPlayHoleLie();
         console.log('resetSwing: Play Hole mode - Current lie:', currentLie);
 

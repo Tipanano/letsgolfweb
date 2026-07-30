@@ -336,6 +336,11 @@ export async function applyPracticePlacement(preset, force = false) {
         ui.setSelectedClubButton(style.club);
         ui.setBallPosition(style.ballPositionIndex);
         setShotType('chip');
+    } else if (preset.club) {
+        // Drill presets pin the club (driver off the tee, iron on the par 3)
+        setSelectedClub(preset.club);
+        ui.setSelectedClubButton(preset.club);
+        if (preset.shotType) setShotType(preset.shotType);
     }
     // Putt presets: green placement auto-selects the putter already.
 
