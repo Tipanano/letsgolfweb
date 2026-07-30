@@ -21,6 +21,7 @@ import { getFlagPosition as getTargetFlagPosition } from './visuals/targetView.j
 import { isLocalPlayerTurn } from './multiplayerManager.js'; // Import turn check for multiplayer
 // Import swing arc visualizer
 import * as SwingArc from './swingArcVisualizer.js';
+import { getDownswingTimingStretch } from './swingPhysics.js';
 // Rhythm putting (mapping toggle)
 import * as RhythmPutt from './rhythmPutt.js';
 // Green-reading overlay
@@ -305,7 +306,7 @@ function handleFullSwingKeyDown(event, gameState) {
             if (offset !== null) {
                 showKeyPressMarker('d', offset, swingSpeed); // Update UI
                 // Mark on arc visualizer
-                const DOWNSWING_MAX_MS = 500; // Match the constant from animations.js
+                const DOWNSWING_MAX_MS = 500 * getDownswingTimingStretch(); // Match the stretched downswing clock
                 const effectiveDownswingDuration = DOWNSWING_MAX_MS / swingSpeed;
                 const downswingProgress = Math.min(1.0, offset / effectiveDownswingDuration);
                 SwingArc.markKeyPressOnArc('d', downswingProgress);
@@ -316,7 +317,7 @@ function handleFullSwingKeyDown(event, gameState) {
             if (offset !== null) {
                 showKeyPressMarker('i', offset, swingSpeed); // Update UI
                 // Mark on arc visualizer
-                const DOWNSWING_MAX_MS = 500;
+                const DOWNSWING_MAX_MS = 500 * getDownswingTimingStretch(); // Match the stretched downswing clock
                 const effectiveDownswingDuration = DOWNSWING_MAX_MS / swingSpeed;
                 const downswingProgress = Math.min(1.0, offset / effectiveDownswingDuration);
                 SwingArc.markKeyPressOnArc('i', downswingProgress);
@@ -327,7 +328,7 @@ function handleFullSwingKeyDown(event, gameState) {
             if (offset !== null) {
                 showKeyPressMarker('a', offset, swingSpeed); // Update UI
                 // Mark on arc visualizer
-                const DOWNSWING_MAX_MS = 500;
+                const DOWNSWING_MAX_MS = 500 * getDownswingTimingStretch(); // Match the stretched downswing clock
                 const effectiveDownswingDuration = DOWNSWING_MAX_MS / swingSpeed;
                 const downswingProgress = Math.min(1.0, offset / effectiveDownswingDuration);
                 SwingArc.markKeyPressOnArc('a', downswingProgress);

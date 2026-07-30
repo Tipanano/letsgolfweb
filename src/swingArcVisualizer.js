@@ -443,10 +443,10 @@ export function updateDownswingArc(progress) {
 
     progressElement.setAttribute('stroke-dasharray', `${currentLength} ${totalLength}`);
 
-    // Update color based on which zone we're in
-    if (progress < 0.33) {
+    // Color follows the beat the clock is nearest (ideals at 10%/20%/50%)
+    if (progress < 0.15) {
         progressElement.setAttribute('stroke', ARC_CONFIG.downswingRotationColor);
-    } else if (progress < 0.67) {
+    } else if (progress < 0.35) {
         progressElement.setAttribute('stroke', ARC_CONFIG.downswingArmsColor);
     } else {
         progressElement.setAttribute('stroke', ARC_CONFIG.downswingWristsColor);
@@ -485,11 +485,24 @@ function createDownswingZones() {
             { start: 0.8875, end: 0.9375, color: ARC_CONFIG.downswingWristsColor } // Hit zone centered on ideal
         ];
     } else {
-        // Full swing: three zones (rotation, arms, wrists)
+        // Full swing: zones AT the physics' ideal beat times, not decorative
+        // thirds. Ideal fractions of the downswing clock are stretch-
+        // independent (both offset and clock scale together): rotation at
+        // 50/500 = 10%, arms 20%, wrists 50% — ideal wrists is mid-
+        // downswing, NOT the bottom of the arc. Downswing = path 0.5-1.0.
+        const beatZone = (idealMs, color) => {
+            const frac = idealMs / 500; // of the downswing
+            const half = 0.06;          // visual band half-width (of downswing)
+            return {
+                start: 0.5 + Math.max(0, frac - half) * 0.5,
+                end: 0.5 + Math.min(1, frac + half) * 0.5,
+                color,
+            };
+        };
         zones = [
-            { start: 0.5, end: 0.667, color: ARC_CONFIG.downswingRotationColor },
-            { start: 0.667, end: 0.833, color: ARC_CONFIG.downswingArmsColor },
-            { start: 0.833, end: 1.0, color: ARC_CONFIG.downswingWristsColor }
+            beatZone(50, ARC_CONFIG.downswingRotationColor),
+            beatZone(100, ARC_CONFIG.downswingArmsColor),
+            beatZone(250, ARC_CONFIG.downswingWristsColor),
         ];
     }
 
