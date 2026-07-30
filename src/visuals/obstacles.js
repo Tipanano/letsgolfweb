@@ -17,6 +17,7 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
 import { OBSTACLE_TYPES } from '../obstacleConfig.js';
 import { queryTerrainHeight } from '../visuals.js'; // For terrain-aware placement
+import { WIND_GLSL_COMMON, bindWindUniforms } from './wind.js';
 
 // Canopy tiers as fractions of the foliage span: bottom is widest and
 // shortest, top is narrowest and tallest. Overlapping them slightly hides the
@@ -99,6 +100,53 @@ function hashRandom(seed) {
     return x - Math.floor(x);
 }
 
+/**
+ * Wind sway for one part of a tree, driven by the shared gust field.
+ *
+ * A tree is not a blade of grass: the trunk is stiff and the crown is not, so
+ * the lever is a CUBIC of height — barely any motion low down, most of it in
+ * the top third. A whole tree rocking rigidly from the roots reads as an
+ * earthquake, not weather.
+ *
+ * The lever is measured from the ground, not from the part's own origin, and
+ * both trunk and canopy pass the same treeHeight. That continuity is what
+ * keeps the crown attached: at the trunk's top and the canopy's base the two
+ * parts evaluate the identical lever, so they displace by the identical amount
+ * and the seam never opens. Using each part's local height instead would tear
+ * the canopy off the trunk the moment the wind blew.
+ *
+ * @param {number} amount     metres of crown travel at full wind
+ * @param {number} treeHeight full height of the tree — the lever's reference
+ * @param {number} yBase      this part's origin height above the tree's base
+ * @param {number} flutter    extra high-frequency tip motion (0 = none)
+ */
+function applyTreeWind(material, amount, treeHeight, yBase, flutter = 0) {
+    material.onBeforeCompile = (shader) => {
+        bindWindUniforms(shader);
+        shader.vertexShader = shader.vertexShader
+            .replace('#include <common>', `#include <common>\n${WIND_GLSL_COMMON}`)
+            .replace('#include <begin_vertex>', `
+                #include <begin_vertex>
+                vec4 rootWorld = modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+                // Height above the TREE's base, not this part's origin
+                float h = (${yBase.toFixed(3)} + position.y) / ${treeHeight.toFixed(3)};
+                float lever = clamp(h, 0.0, 1.0);
+                lever = lever * lever * lever;
+                transformed += windSway(rootWorld.xyz, lever, ${amount.toFixed(3)});
+                ${flutter > 0 ? `
+                // Individual boughs shivering out of phase with the trunk's lean
+                float fl = sin(uTime * 3.9 + rootWorld.x * 1.7 + position.y * 2.4)
+                         + sin(uTime * 5.3 + rootWorld.z * 2.1);
+                transformed += windToLocal(vec3(fl, 0.0, fl * 0.7))
+                             * ${flutter.toFixed(4)} * uWindStrength * lever;
+                ` : ''}
+            `);
+    };
+    // Without a distinct key three reuses one compiled program for every variant
+    material.customProgramCacheKey = () =>
+        `tree_${amount.toFixed(3)}_${treeHeight.toFixed(3)}_${yBase.toFixed(3)}_${flutter.toFixed(4)}`;
+}
+
 let obstacleGroup = null;
 
 /**
@@ -134,6 +182,13 @@ export function renderObstacles(scene, obstacles) {
 
         if (isTree) {
             const foliageHeight = Math.max(0.5, props.height - props.trunkHeight);
+            // Sway scales with the tree's size — a 20m pine's crown travels a
+            // long way further than a 9m one's, and both beat a bush.
+            const canopySway = 0.06 * props.height;
+            // Both parts share amount AND treeHeight; only yBase differs, which
+            // is what makes the trunk top and canopy base move together.
+            applyTreeWind(foliageMat, canopySway, props.height, props.trunkHeight,
+                          0.004 * props.height);
             parts.push({
                 geom: createCanopyGeometry(props.foliageRadius, foliageHeight),
                 mat: foliageMat,
@@ -141,14 +196,19 @@ export function renderObstacles(scene, obstacles) {
                 tints: FOLIAGE_TINTS,
                 name: `canopy_${key}`,
             });
+
+            const trunkMat = new THREE.MeshLambertMaterial();
+            applyTreeWind(trunkMat, canopySway, props.height, 0);
             parts.push({
                 geom: createTrunkGeometry(props.trunkRadius, props.trunkHeight),
-                mat: new THREE.MeshLambertMaterial(),
+                mat: trunkMat,
                 yOffset: 0,
                 tints: TRUNK_TINTS,
                 name: `trunk_${key}`,
             });
         } else {
+            // Bushes are low and dense — a gentle shiver, no real lean
+            applyTreeWind(foliageMat, 0.035 * props.height, props.height, 0, 0.01);
             parts.push({
                 geom: createBushGeometry(props.radius, props.height),
                 mat: foliageMat,

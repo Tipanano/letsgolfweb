@@ -1,7 +1,7 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
 import { TextureLoader } from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js'; // Import TextureLoader
 // Import both relative and target line angles
-import { getShotDirectionAngle, getCurrentTargetLineAngle, getSelectedClub, setRelativeShotDirectionAngle } from '../gameLogic/state.js';
+import { getShotDirectionAngle, getCurrentTargetLineAngle, getSelectedClub, setRelativeShotDirectionAngle, getWind } from '../gameLogic/state.js';
 import * as MeasurementView from './measurementView.js';
 // Import position getters needed for re-applying hole view camera
 import { getCurrentBallPosition as getPlayHoleBallPosition } from '../modes/playHole.js';
@@ -12,7 +12,7 @@ import { getSurfaceProperties } from '../surfaces.js'; // Import surface propert
 import { heightAt as terrainHeightAt } from '../greenContours.js';
 import { initTextureCaps } from './textures.js';
 import { updateFlagstick } from './flagstick.js';
-import { updateWind } from './grass.js';
+import { updateWind, getWindStrength } from './wind.js';
 import { updateWater } from './holeRenderer.js';
 
 import { YARDS_TO_METERS } from '../utils/unitConversions.js';
@@ -463,9 +463,9 @@ function animate(timestamp) {
     // (21 vertices). Both are effectively free and both are what stop the
     // course reading as a still life.
     const timeSeconds = (timestamp || 0) / 1000;
-    updateWind(timeSeconds);
+    updateWind(timeSeconds, getWind?.());
     updateWater(timeSeconds);
-    updateFlagstick(camera, timeSeconds);
+    updateFlagstick(camera, timeSeconds, getWindStrength());
 
     // --- Ball Flight Animation Logic (Time-Based) ---
     if (isBallAnimating) {

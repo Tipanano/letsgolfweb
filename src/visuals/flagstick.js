@@ -223,16 +223,26 @@ export function updateFlagstick(camera, timeSeconds, windStrength = 0.5) {
     const pos = clothMesh.geometry.attributes.position;
     const col = clothMesh.geometry.attributes.color;
     const base = clothBasePositions;
-    const amp = 0.035 + windStrength * 0.05;
+
+    // windStrength is the shared 0–1 wind scalar. The flag is the most-watched
+    // object on the course, so it doubles as a wind gauge: limp and drooping
+    // in light air, stretched flat and snapping in a gale. That reads at a
+    // glance and agrees with the HUD number and the ball flight, because all
+    // three come from the same wind state.
+    const amp = 0.02 + windStrength * 0.075;
+    const speed = 2.6 + windStrength * 4.5;
+    const droop = 0.11 * (1 - windStrength); // Hangs when there's nothing to hold it
+    const furl = 0.28 * (1 - windStrength);  // Fly end curls in toward the pole
+
     for (let i = 0; i < pos.count; i++) {
         const bx = base[i * 3], by = base[i * 3 + 1];
         // Amplitude ramps from 0 at the hoist to full at the fly end
         const t = bx / CLOTH_W;
-        const phase = bx * 6.5 - timeSeconds * 4.2;
-        const wave = Math.sin(phase) + 0.35 * Math.sin(by * 7 + timeSeconds * 2.6);
+        const phase = bx * 6.5 - timeSeconds * speed;
+        const wave = Math.sin(phase) + 0.35 * Math.sin(by * 7 + timeSeconds * speed * 0.62);
+        pos.setX(i, bx * (1 - furl * t));
         pos.setZ(i, wave * amp * t * t);
-        // Slight droop and shortening as it ripples, so it doesn't look rigid
-        pos.setY(i, by - 0.02 * t * t);
+        pos.setY(i, by - (0.02 + droop) * t * t);
 
         // Fold shading: the wave's slope stands in for how much each band of
         // cloth turns away from the viewer. Keeps the flag reading as fabric

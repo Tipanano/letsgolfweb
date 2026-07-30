@@ -11,6 +11,7 @@ import { createNoise2D } from 'https://esm.sh/simplex-noise';
 import { getSurfaceTypeAtPoint } from '../utils/gameUtils.js';
 import { heightAt as contourHeightAt } from '../greenContours.js';
 import { SURFACES } from '../surfaces.js';
+import { WIND_GLSL_COMMON, bindWindUniforms } from './wind.js';
 
 // Per-surface tuft styling. density = tufts per m².
 const GRASS_STYLES = {
@@ -49,43 +50,27 @@ const BLADES_PER_TUFT = 5;
 
 // --- Wind ---------------------------------------------------------------
 // The tuft field was completely static, which is the single thing that made
-// it read as scenery rather than grass. The sway is injected into the stock
-// Lambert vertex shader via onBeforeCompile: displacement scales with the
-// vertex's local Y, so roots stay planted and only tips move. One shared
-// uniform updated once per frame; the GPU cost is a handful of ALU ops on
-// geometry that is already being transformed.
-const windUniforms = {
-    uTime: { value: 0 },
-    uWindStrength: { value: 1.0 },
-    // Beyond this the tufts scale to nothing, so the field has no hard
-    // "carpet edge" — and distant tufts stop costing fragments. Still one
-    // draw call either way.
-    uFadeStart: { value: 55.0 },
-    uFadeEnd: { value: 95.0 },
-};
+// it read as scenery rather than grass. Sway is injected into the stock
+// Lambert vertex shader via onBeforeCompile, driven by the shared wind state
+// (visuals/wind.js) so grass, tree canopies and the flag all answer to the
+// real in-game wind — same direction, same gusts.
+//
+// Displacement scales with the vertex's local Y, so roots stay planted and
+// only tips move. One shared uniform updated once per frame; the GPU cost is
+// a handful of ALU ops on geometry already being transformed.
 
-/** Advances the wind animation. Called once per frame from the render loop. */
-export function updateWind(timeSeconds, strength = 1.0) {
-    windUniforms.uTime.value = timeSeconds;
-    windUniforms.uWindStrength.value = strength;
-}
+// Distance beyond which tufts scale to nothing, so the field has no hard
+// "carpet edge" — and distant tufts stop costing fragments. One draw call
+// either way.
+const FADE_START = 55.0;
+const FADE_END = 95.0;
 
 /** Patches a Lambert material with tip sway and distance fade. */
 function applyWindShader(material, swayAmount) {
     material.onBeforeCompile = (shader) => {
-        shader.uniforms.uTime = windUniforms.uTime;
-        shader.uniforms.uWindStrength = windUniforms.uWindStrength;
-        shader.uniforms.uFadeStart = windUniforms.uFadeStart;
-        shader.uniforms.uFadeEnd = windUniforms.uFadeEnd;
+        bindWindUniforms(shader);
         shader.vertexShader = shader.vertexShader
-            .replace('#include <common>', `
-                #include <common>
-                uniform float uTime;
-                uniform float uWindStrength;
-                uniform float uFadeStart;
-                uniform float uFadeEnd;
-                const float uSway = ${swayAmount.toFixed(3)};
-            `)
+            .replace('#include <common>', `#include <common>\n${WIND_GLSL_COMMON}`)
             .replace('#include <begin_vertex>', `
                 #include <begin_vertex>
                 // World position of this instance's root, for phase and range
@@ -93,19 +78,15 @@ function applyWindShader(material, swayAmount) {
 
                 // Fade out with distance: collapse the tuft toward its root
                 float dist = length(cameraPosition - rootWorld.xyz);
-                float fade = 1.0 - smoothstep(uFadeStart, uFadeEnd, dist);
+                float fade = 1.0 - smoothstep(${FADE_START.toFixed(1)}, ${FADE_END.toFixed(1)}, dist);
                 transformed *= fade;
 
-                // Two offset waves so neighbouring tufts don't move in lockstep
-                float phase = rootWorld.x * 0.28 + rootWorld.z * 0.21;
-                float gust = sin(uTime * 1.6 + phase) + 0.45 * sin(uTime * 3.7 + phase * 1.9);
                 // position.y is 0 at the root and 1 at the blade tip
                 float lever = position.y * position.y;
-                transformed.x += gust * uSway * uWindStrength * lever;
-                transformed.z += gust * uSway * 0.55 * uWindStrength * lever;
+                transformed += windSway(rootWorld.xyz, lever, ${swayAmount.toFixed(3)});
             `);
     };
-    // Distinct key or three reuses one compiled program for both sway values
+    // Distinct key or three reuses one compiled program for every sway value
     material.customProgramCacheKey = () => `grass_${swayAmount.toFixed(3)}`;
 }
 
