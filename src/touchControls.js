@@ -38,6 +38,7 @@ import { isFreeCameraActive, toggleFreeCamera, freeCamNudge, freeCamLook, camera
 import { setShotDirectionAngle } from './gameLogic/state.js';
 import { updateStatus } from './ui.js';
 import { setDownswingTimingStretch } from './swingPhysics.js';
+import { queryTerrainHeight } from './visuals.js';
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
 
 let overlayEl = null;
@@ -489,15 +490,44 @@ function setAddressMode(on) {
  */
 function aimAtScreenPoint(sx, sy) {
     if (!camera || !ball) return;
+    const canvas = document.getElementById('golf-canvas');
+    const rect = canvas ? canvas.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(new THREE.Vector2(
-        (sx / window.innerWidth) * 2 - 1,
-        -(sy / window.innerHeight) * 2 + 1), camera);
+        ((sx - rect.left) / rect.width) * 2 - 1,
+        -((sy - rect.top) / rect.height) * 2 + 1), camera);
     const { origin, direction } = raycaster.ray;
-    const t = (ball.position.y - origin.y) / direction.y;
-    if (!isFinite(t) || t <= 0) return; // tap didn't hit the ground
-    const dx = origin.x + direction.x * t - ball.position.x;
-    const dz = origin.z + direction.z * t - ball.position.z;
+
+    // March the ray against the real terrain — on uphill/downhill ground a
+    // flat-plane intersect selects a laterally displaced point, which reads
+    // as a mirrored/wrong aim. Fall back to the ball's plane on no hit.
+    let hit = null;
+    const above = (t) => {
+        const x = origin.x + direction.x * t;
+        const z = origin.z + direction.z * t;
+        return (origin.y + direction.y * t) - queryTerrainHeight(x, z);
+    };
+    let tPrev = 1;
+    for (let t = 3; t <= 900; t += 3) {
+        if (above(t) <= 0) {
+            let lo = tPrev, hi = t;
+            for (let i = 0; i < 12; i++) {
+                const mid = (lo + hi) / 2;
+                if (above(mid) <= 0) hi = mid; else lo = mid;
+            }
+            hit = (lo + hi) / 2;
+            break;
+        }
+        tPrev = t;
+    }
+    if (hit === null) {
+        const tPlane = (ball.position.y - origin.y) / direction.y;
+        if (!isFinite(tPlane) || tPlane <= 0) return; // tap didn't hit the ground
+        hit = tPlane;
+    }
+
+    const dx = origin.x + direction.x * hit - ball.position.x;
+    const dz = origin.z + direction.z * hit - ball.position.z;
     const dist = Math.hypot(dx, dz);
     if (dist < 2) return; // tapped the ball itself
     setShotDirectionAngle(Math.atan2(dx, dz) * (180 / Math.PI));
