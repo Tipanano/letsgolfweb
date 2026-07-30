@@ -105,11 +105,13 @@ await sleep(200);
 const addressPhase = await page.evaluate(() => ({
     stripped: document.body.classList.contains('tc-address'),
     fsHidden: getComputedStyle(document.getElementById('fullscreen-controls')).display === 'none',
-    stroke: !document.getElementById('tc-stroke').classList.contains('tc-hidden'),
-    hips: document.getElementById('tc-hips').classList.contains('tc-hidden'),
+    swingLabel: document.getElementById('tc-swing').textContent,
+    strokeLabel: document.getElementById('tc-stroke').textContent,
 }));
 if (!addressPhase.stripped || !addressPhase.fsHidden) fail(`address strip failed: ${JSON.stringify(addressPhase)}`);
-if (!addressPhase.stroke || !addressPhase.hips) fail(`putt zones wrong: ${JSON.stringify(addressPhase)}`);
+if (!/TAP/.test(addressPhase.swingLabel) || !/STROKE/.test(addressPhase.strokeLabel)) {
+    fail(`putt zone labels wrong: ${JSON.stringify(addressPhase)}`);
+}
 await page.screenshot({ path: OUT + 'shot-touch-putt.png' });
 
 // Tap a tempo, then strike immediately. Every playwright roundtrip between
@@ -159,11 +161,11 @@ if (!await page.locator('#mode-btn-range').isVisible()) await page.tap('#mode-bt
 await page.waitForSelector('#mode-btn-range', { state: 'visible' });
 await page.tap('#mode-btn-range');
 await sleep(3000);
-// Wait for the overlay to reshape into full-swing zones (hips shown, stroke hidden)
+// Wait for the overlay to relabel for the full swing (SWING + BEAT zones)
 await page.waitForFunction(() =>
     document.getElementById('touch-controls')?.classList.contains('visible') &&
-    !document.getElementById('tc-hips').classList.contains('tc-hidden') &&
-    document.getElementById('tc-stroke').classList.contains('tc-hidden'),
+    /SWING/.test(document.getElementById('tc-swing').textContent) &&
+    /BEAT/.test(document.getElementById('tc-stroke').textContent),
     { timeout: 10000 });
 await tapZone('tc-address');
 await sleep(200);
@@ -183,10 +185,12 @@ const atTop = await state();
 if (backswing !== 'backswing') fail(`hold did not start backswing (${backswing})`);
 if (atTop !== 'backswingPausedAtTop' && atTop !== 'downswingWaiting') fail(`release state ${atTop}`);
 
-// Downswing sequence: hips → arms → wrists
-await tapZone('tc-hips'); await sleep(120);
-await tapZone('tc-arms'); await sleep(110);
-await tapZone('tc-wrists');
+// Downswing: drum the beats on alternating thumbs — each tap fires the
+// next event of the chain (hips → rotation → arms → wrists)
+await tapZone('tc-stroke'); await sleep(90);  // hips
+await tapZone('tc-swing'); await sleep(90);   // rotation
+await tapZone('tc-stroke'); await sleep(90);  // arms
+await tapZone('tc-swing');                    // wrists
 let flew = null;
 for (let i = 0; i < 40; i++) {
     flew = await state();

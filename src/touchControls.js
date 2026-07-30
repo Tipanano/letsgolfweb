@@ -14,15 +14,25 @@
 // The bottom pill is context-aware: ADDRESS BALL when ready, NEXT after a
 // shot resolves (sends 'n'). A shot's result auto-returns to setup.
 //
-// Key mapping (mirrors the keyboard contract):
-//   Full swing: hold SWING = 'w' down (backswing), release = 'w' up (top),
-//     then HIPS/ARMS/WRISTS = 'j'/'d'/'i' taps; ROTATE = 'a'.
+// Input model: two thumb zones, alternated like drumming.
+//   Full swing: hold SWING = 'w' down (backswing), release = 'w' up (top).
+//     After that every tap — either zone — fires the NEXT beat of the
+//     kinematic chain: hips ('j') → rotation ('a') → arms ('d') → wrists
+//     ('i'), matching the physics' ideal order (j at −150 ms, a +50,
+//     d +100, i +250). Taps while still holding the backswing pre-load
+//     early rotation/hips, exactly like pressing 'a'/'j' mid-backswing on
+//     keyboard. WHICH zone you hit never matters — WHEN you hit is the
+//     entire skill, same as the keyboard timing windows.
 //   Chip/putt (rhythm): TAP = 'w' taps (tempo), STROKE = 'i' (strike; the
 //     chip's optional shaping tap lands on the same zone).
 //
 // Shown only on touch-capable devices (?touch=1 forces on, ?touch=0 off).
 
-import { getCurrentShotType, getGameState } from './gameLogic/state.js';
+import {
+    getCurrentShotType, getGameState,
+    getHipInitiationTime, getRotationInitiationTime,
+    getRotationStartTime, getArmsStartTime, getWristsStartTime,
+} from './gameLogic/state.js';
 
 let overlayEl = null;
 let updateTimer = null;
@@ -78,15 +88,9 @@ function injectStyles() {
         .tc-zone .tc-hint { font-size: 0.6em; font-weight: 600; opacity: 0.65; white-space: nowrap; }
         .tc-zone.pressed { background: rgba(125, 255, 160, 0.4); border-color: #7dffa0; }
         .tc-zone.tc-hidden { display: none; }
-        /* Left thumb */
-        #tc-swing { left: 10px; bottom: var(--tc-bottom); width: min(36vw, 210px); height: min(28vh, 150px); font-size: 1.15em; }
-        #tc-rotate { left: 10px; bottom: calc(var(--tc-bottom) + min(28vh, 150px) + 10px); width: min(36vw, 210px); height: 54px; }
-        /* Right thumb: full-swing sequence */
-        #tc-hips   { right: 10px; bottom: calc(var(--tc-bottom) + 2 * 64px); width: min(34vw, 180px); height: 54px; }
-        #tc-arms   { right: 10px; bottom: calc(var(--tc-bottom) + 1 * 64px); width: min(34vw, 180px); height: 54px; }
-        #tc-wrists { right: 10px; bottom: var(--tc-bottom); width: min(34vw, 180px); height: 54px; }
-        /* Right thumb: rhythm stroke */
-        #tc-stroke { right: 10px; bottom: var(--tc-bottom); width: min(34vw, 180px); height: min(28vh, 150px); font-size: 1.15em; }
+        /* Two thumb zones — that's all of it */
+        #tc-swing  { left: 10px; bottom: var(--tc-bottom); width: min(42vw, 240px); height: min(30vh, 170px); font-size: 1.15em; }
+        #tc-stroke { right: 10px; bottom: var(--tc-bottom); width: min(42vw, 240px); height: min(30vh, 170px); font-size: 1.15em; }
         /* Utility minis: address phase only, top-left (the bar is stripped there) */
         .tc-mini {
             position: absolute;
@@ -300,14 +304,68 @@ function bindZone(el, onDown, onUp) {
     el.addEventListener('contextmenu', (e) => e.preventDefault());
 }
 
-function makeZone(id, html, key) {
+function makeZone(id, html, onDown, onUp) {
     const el = document.createElement('div');
     el.id = id;
     el.className = 'tc-zone';
     el.innerHTML = html;
-    if (key) bindZone(el, () => sendKey('keydown', key), () => sendKey('keyup', key));
+    bindZone(el, onDown, onUp);
     overlayEl.appendChild(el);
     return el;
+}
+
+/**
+ * The next unfired beat of the full-swing kinematic chain. The event order
+ * is fixed (hips → rotation → arms → wrists, per the physics' ideal
+ * offsets), so a tap never needs to say WHICH body part — only WHEN.
+ * While the backswing is still held, taps pre-load early rotation/hips.
+ */
+function nextBeatKey() {
+    const state = getGameState();
+    if (state === 'backswing') {
+        if (!getRotationInitiationTime()) return 'a';
+        if (!getHipInitiationTime()) return 'j';
+        return null;
+    }
+    if (state === 'backswingPausedAtTop') {
+        return getHipInitiationTime() ? null : 'j';
+    }
+    if (state === 'downswingWaiting') {
+        if (!getRotationStartTime() && !getRotationInitiationTime()) return 'a';
+        if (!getArmsStartTime()) return 'd';
+        if (!getWristsStartTime()) return 'i';
+    }
+    return null;
+}
+
+/** Left zone: backswing hold + tempo taps; doubles as a beat surface. */
+function onLeftDown() {
+    if (getCurrentShotType() !== 'full') {
+        sendKey('keydown', 'w'); // rhythm tempo tap
+        return;
+    }
+    if (getGameState() === 'ready') {
+        sendKey('keydown', 'w'); // start backswing (held)
+        return;
+    }
+    const key = nextBeatKey();
+    if (key) sendKey('keydown', key);
+}
+
+function onLeftUp() {
+    // Only meaningful at the top of a held backswing; a no-op everywhere
+    // else (the keyup handlers guard on state).
+    sendKey('keyup', 'w');
+}
+
+/** Right zone: rhythm strike; for the full swing, a beat surface. */
+function onRightDown() {
+    if (getCurrentShotType() !== 'full') {
+        sendKey('keydown', 'i'); // strike / chip shape
+        return;
+    }
+    const key = nextBeatKey();
+    if (key) sendKey('keydown', key);
 }
 
 function makeMini(id, label, onDown) {
@@ -350,16 +408,16 @@ function updateZones() {
     // Bottom pill follows context: address the ball, or advance after a shot
     els.address.textContent = state === 'result' ? 'NEXT  ᐅ' : '⛳ ADDRESS BALL';
 
-    const shotType = getCurrentShotType();
-    const full = shotType === 'full';
-    els.rotate.classList.toggle('tc-hidden', !full);
-    els.hips.classList.toggle('tc-hidden', !full);
-    els.arms.classList.toggle('tc-hidden', !full);
-    els.wrists.classList.toggle('tc-hidden', !full);
-    els.stroke.classList.toggle('tc-hidden', full);
-    els.swing.innerHTML = full
-        ? 'SWING<span class="tc-hint">hold · release at top</span>'
-        : 'TAP<span class="tc-hint">tap a tempo</span>';
+    const full = getCurrentShotType() === 'full';
+    if (full !== els.lastFull) {
+        els.lastFull = full;
+        els.swing.innerHTML = full
+            ? 'SWING<span class="tc-hint">hold · release at top</span>'
+            : 'TAP<span class="tc-hint">tap a tempo</span>';
+        els.stroke.innerHTML = full
+            ? 'BEAT<span class="tc-hint">drum the beats</span>'
+            : 'STROKE<span class="tc-hint">on the beat</span>';
+    }
 }
 
 export function initTouchControls() {
@@ -373,12 +431,9 @@ export function initTouchControls() {
     document.body.appendChild(overlayEl);
 
     els = {
-        swing: makeZone('tc-swing', 'SWING<span class="tc-hint">hold · release at top</span>', 'w'),
-        rotate: makeZone('tc-rotate', 'ROTATE<span class="tc-hint">turn through</span>', 'a'),
-        hips: makeZone('tc-hips', 'HIPS<span class="tc-hint">start down</span>', 'j'),
-        arms: makeZone('tc-arms', 'ARMS<span class="tc-hint">swing down</span>', 'd'),
-        wrists: makeZone('tc-wrists', 'WRISTS<span class="tc-hint">release</span>', 'i'),
-        stroke: makeZone('tc-stroke', 'STROKE<span class="tc-hint">on the beat</span>', 'i'),
+        swing: makeZone('tc-swing', 'SWING<span class="tc-hint">hold · release at top</span>', onLeftDown, onLeftUp),
+        stroke: makeZone('tc-stroke', 'BEAT<span class="tc-hint">drum the beats</span>', onRightDown, null),
+        lastFull: null,
     };
 
     makeMini('tc-aim-left', '◀', () => sendKey('keydown', 'ArrowLeft'));

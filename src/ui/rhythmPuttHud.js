@@ -171,7 +171,7 @@ export function showAddressHint(type, { hasClub = true } = {}) {
             : 'Tap <kbd>W</kbd> to a rhythm — tempo sets carry';
     } else {
         html = touch
-            ? 'Hold <kbd>SWING</kbd> — release at the top'
+            ? 'Hold <kbd>SWING</kbd> — release at top, then drum: hips → rotate → arms → wrists'
             : 'Hold <kbd>W</kbd> for backswing — release at the top';
     }
 
