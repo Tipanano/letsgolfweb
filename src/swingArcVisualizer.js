@@ -560,8 +560,14 @@ export function resetSwingArc() {
     hipInitiationProgress = null;
     currentSwingSpeed = 1.0;
 
-    // Clear all visual elements
-    progressElement.setAttribute('stroke-dasharray', '0 10000');
+    // Clear all visual elements — including the base guide path, whose
+    // wide white stroke otherwise lingers over shots that never draw an
+    // arc of their own (rhythm chips/putts).
+    if (pathElement) pathElement.setAttribute('d', '');
+    if (progressElement) {
+        progressElement.setAttribute('d', '');
+        progressElement.setAttribute('stroke-dasharray', '0 10000');
+    }
     downswingZonesGroup.style.display = 'none';
     hipMarkerElement.style.display = 'none';
     idealZoneElement.style.display = 'none';
