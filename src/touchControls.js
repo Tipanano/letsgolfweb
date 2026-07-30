@@ -29,11 +29,12 @@
 // Shown only on touch-capable devices (?touch=1 forces on, ?touch=0 off).
 
 import {
-    getCurrentShotType, getGameState,
+    getCurrentShotType, getGameState, getSelectedClub,
     getHipInitiationTime, getRotationInitiationTime,
     getRotationStartTime, getArmsStartTime, getWristsStartTime,
 } from './gameLogic/state.js';
 import { isSlopeOverlayVisible } from './visuals/slopeOverlay.js';
+import { isFreeCameraActive, toggleFreeCamera, freeCamNudge, camera } from './visuals/core.js';
 
 let overlayEl = null;
 let updateTimer = null;
@@ -92,7 +93,9 @@ function injectStyles() {
         /* Two thumb zones — that's all of it */
         #tc-swing  { left: 10px; bottom: var(--tc-bottom); width: min(42vw, 240px); height: min(30vh, 170px); font-size: 1.15em; }
         #tc-stroke { right: 10px; bottom: var(--tc-bottom); width: min(42vw, 240px); height: min(30vh, 170px); font-size: 1.15em; }
-        /* Utility minis: address phase only, top-left (the bar is stripped there) */
+        /* Utility minis (camera, slopes): address phase, top-left (the bar
+           is stripped there). Setup's camera story is the two-finger
+           fly-over + pinch. */
         .tc-mini {
             position: absolute;
             top: calc(8px + env(safe-area-inset-top, 0px));
@@ -181,11 +184,16 @@ function injectStyles() {
             color: #eaf6ec;
             border: 1.5px solid rgba(255, 255, 255, 0.35);
         }
-        /* Phase gating inside the overlay */
+        /* Phase gating inside the overlay (aim pills stay in both) */
         #touch-controls.setup .tc-zone,
         #touch-controls.setup .tc-mini,
         #touch-controls.setup #tc-exit { display: none; }
         #touch-controls:not(.setup) #tc-address { display: none; }
+        .tc-action.tc-disabled {
+            background: rgba(180, 200, 185, 0.55);
+            color: rgba(14, 30, 20, 0.55);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
 
         /* ============ Mobile HUD compaction (both phases) ============ */
         /* Top bar: one compact scrollable row, never wraps */
@@ -226,7 +234,7 @@ function injectStyles() {
         body.touch-active .overlay-top { margin-top: 84px !important; }
         body.touch-active #top-center-status {
             top: calc(58px + env(safe-area-inset-top, 0px)) !important;
-            max-width: 80vw;
+            max-width: 62vw; /* clears the mini buttons flanking it */
         }
         /* Club/shot/power/stance: horizontal chip row above the pill */
         body.touch-active #fullscreen-controls {
@@ -440,8 +448,53 @@ function makeAim(id, label, key) {
 /** Setup shows the decision UI; address shows only the shot surfaces. */
 function setAddressMode(on) {
     addressMode = on;
+    // Addressing the ball ends any fly-over inspection: back to the shot view
+    if (on && isFreeCameraActive()) toggleFreeCamera();
     document.body.classList.toggle('tc-address', on);
     overlayEl.classList.toggle('setup', !on);
+}
+
+/**
+ * Setup-phase fly-over: two-finger drag pans across the hole, pinch
+ * changes altitude. Rides the existing free camera (terrain-clamped,
+ * restored to the shot view when the player addresses the ball).
+ */
+function initInspectGestures() {
+    const canvas = document.getElementById('golf-canvas');
+    if (!canvas) return;
+    let gesturing = false;
+    let lastCx = 0, lastCy = 0, lastDist = 0;
+    const inSetup = () => overlayEl.classList.contains('visible') && overlayEl.classList.contains('setup');
+    const measure = (e) => ({
+        cx: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+        cy: (e.touches[0].clientY + e.touches[1].clientY) / 2,
+        dist: Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY),
+    });
+    canvas.addEventListener('touchstart', (e) => {
+        if (e.touches.length !== 2 || !inSetup()) return;
+        e.preventDefault();
+        gesturing = true;
+        ({ cx: lastCx, cy: lastCy, dist: lastDist } = measure(e));
+    }, { passive: false });
+    canvas.addEventListener('touchmove', (e) => {
+        if (!gesturing || e.touches.length !== 2) return;
+        e.preventDefault();
+        if (!inSetup()) return;
+        if (!isFreeCameraActive()) toggleFreeCamera();
+        const { cx, cy, dist } = measure(e);
+        // Pan speed grows with altitude so the map-drag feel stays constant
+        const perPx = Math.min(0.6, Math.max(0.03, (camera?.position.y || 10) * 0.004));
+        freeCamNudge(
+            -(cx - lastCx) * perPx,          // content follows the fingers
+            -(cy - lastCy) * perPx,          // drag up = fly toward the green
+            -(dist - lastDist) * 0.06);      // pinch out = descend for a closer look
+        lastCx = cx; lastCy = cy; lastDist = dist;
+    }, { passive: false });
+    const end = (e) => { if (!e.touches || e.touches.length < 2) gesturing = false; };
+    canvas.addEventListener('touchend', end);
+    canvas.addEventListener('touchcancel', end);
 }
 
 /** Keeps the overlay in sync with menu/game, shot type, and game state. */
@@ -472,8 +525,12 @@ function updateZones() {
     // The shot is over — bring the info panels back for the next decision
     if (addressMode && state === 'result') setAddressMode(false);
 
-    // Bottom pill follows context: address the ball, or advance after a shot
-    els.address.textContent = state === 'result' ? 'NEXT  ᐅ' : '⛳ ADDRESS BALL';
+    // Bottom pill follows context: address the ball (once a club is
+    // chosen), or advance after a shot
+    const clubMissing = state === 'ready' && !getSelectedClub();
+    els.address.classList.toggle('tc-disabled', clubMissing);
+    els.address.textContent = state === 'result' ? 'NEXT  ᐅ'
+        : clubMissing ? '👆 PICK A CLUB' : '⛳ ADDRESS BALL';
 
     if (els.slope) els.slope.classList.toggle('tc-on', isSlopeOverlayVisible());
 
@@ -519,8 +576,14 @@ export function initTouchControls() {
     addressBtn.className = 'tc-action';
     addressBtn.textContent = '⛳ ADDRESS BALL';
     bindZone(addressBtn, () => {
-        if (getGameState() === 'result') sendKey('keydown', 'n');
-        else setAddressMode(true);
+        if (getGameState() === 'result') {
+            sendKey('keydown', 'n');
+        } else if (getGameState() === 'ready' && !getSelectedClub()) {
+            // No club yet: the pill opens the club picker instead
+            document.getElementById('fs-club-btn')?.click();
+        } else {
+            setAddressMode(true);
+        }
     }, null);
     overlayEl.appendChild(addressBtn);
     els.address = addressBtn;
@@ -535,6 +598,8 @@ export function initTouchControls() {
     // Keep the page pinned while thumbs mash zones near the edges
     document.documentElement.style.overscrollBehavior = 'none';
     document.body.style.overscrollBehavior = 'none';
+
+    initInspectGestures();
 
     updateZones();
     updateTimer = setInterval(updateZones, 350);
