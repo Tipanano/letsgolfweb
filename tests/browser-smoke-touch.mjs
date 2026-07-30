@@ -202,6 +202,22 @@ await tapZone('tc-address');
 await sleep(200);
 await page.screenshot({ path: OUT + 'shot-touch-full.png' });
 
+// --- Instruction hints: hidden by default, top-bar button toggles them ---
+const hudVisible = () => page.evaluate(() => {
+    const el = document.getElementById('rhythm-putt-hud');
+    return !!el && el.classList.contains('visible');
+});
+if (await hudVisible()) fail('instruction hint visible at address despite hidden-by-default');
+await page.evaluate(() => document.getElementById('fs-hints-btn').click());
+await sleep(200);
+const hintOn = await page.evaluate(() =>
+    document.getElementById('rhythm-putt-hint')?.textContent || '');
+if (!/SWING|Hold/.test(hintOn)) fail(`hints toggle did not show instructions: "${hintOn}"`);
+await page.evaluate(() => document.getElementById('fs-hints-btn').click());
+await sleep(200);
+if (await hudVisible()) fail('hints toggle did not hide instructions again');
+console.log('hints: hidden by default, top-bar toggle shows/hides ✓');
+
 // Hold SWING via CDP touch events (touchscreen.tap can't hold)
 const cdp = await context.newCDPSession(page);
 const swingBox = await zoneRect('tc-swing');

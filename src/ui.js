@@ -3,6 +3,7 @@ import { getDownswingTimingStretch } from './swingPhysics.js';
 import { metersToYards, YARDS_TO_METERS } from './utils/unitConversions.js'; // Import conversion utilities
 import { getWind, getTemperature, getCurrentShotType } from './gameLogic/state.js'; // Import environment state getters (Corrected Path)
 import { toast } from './ui/toast.js';
+import { swingHintsShown, toggleSwingHints } from './ui/rhythmPuttHud.js';
 import { modal } from './ui/modal.js';
 import * as playHoleModal from './playHoleModal.js';
 import { DEBUG_MODE } from './config.js'; // Import debug mode setting
@@ -1914,6 +1915,22 @@ if (fsHelpBtn) {
         e.stopPropagation();
         const currentType = getShotType();
         showShotInstructions(currentType);
+    });
+}
+
+// Hints toggle: shows/hides the at-address instruction hint (hidden by
+// default; Green Card drills always show it). Dimmed when hints are off.
+const fsHintsBtn = document.getElementById('fs-hints-btn');
+function reflectHintsButton(shown) {
+    if (!fsHintsBtn) return;
+    fsHintsBtn.style.opacity = shown ? '' : '0.55';
+    fsHintsBtn.setAttribute('aria-pressed', shown ? 'true' : 'false');
+}
+if (fsHintsBtn) {
+    reflectHintsButton(swingHintsShown());
+    fsHintsBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        reflectHintsButton(toggleSwingHints());
     });
 }
 

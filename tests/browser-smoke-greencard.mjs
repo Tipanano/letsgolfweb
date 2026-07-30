@@ -80,7 +80,13 @@ await sleep(5000); // layout draw + placement
 
 const drillInfo = await page.evaluate(async () => {
     const gc = await import('./src/career/greenCard.js');
-    return { active: gc.getActiveDrill() };
+    // Drills are the tutorial: instruction hints must show during a drill
+    // even though they are hidden by default everywhere else.
+    const hud = document.getElementById('rhythm-putt-hud');
+    return {
+        active: gc.getActiveDrill(),
+        hintShown: !!hud && hud.classList.contains('visible'),
+    };
 });
 
 // Simulate a holed attempt straight through the real shot-result path
@@ -110,6 +116,7 @@ if (errors.length) fail('page errors:\n' + errors.join('\n'));
 if (modalInfo.drills !== 6) fail(`expected 6 drills, got ${modalInfo.drills}`);
 if (!modalInfo.titles.some(t => t.startsWith('Driving'))) fail(`missing Driving drill: ${modalInfo.titles}`);
 if (drillInfo.active !== 'holing') fail(`expected active drill 'holing', got ${drillInfo.active}`);
+if (!drillInfo.hintShown) fail('instruction hint hidden during a Green Card drill (drills are the tutorial)');
 if (afterShot.holingCount !== 1) fail(`expected holing count 1, got ${afterShot.holingCount}`);
 if (!/1\/5/.test(afterShot.status)) fail(`status missing 1/5: "${afterShot.status}"`);
 if (!layoutCheck.drive || !layoutCheck.par3) fail(`drill layouts failed processing: ${JSON.stringify(layoutCheck)}`);

@@ -3,6 +3,8 @@
 // Compact HUD for the rhythm putting input: beat pulse, projected distance,
 // tempo + steadiness readout, and stage hints. Owns its own DOM and styles.
 
+import { getActiveDrill } from '../career/greenCard.js';
+
 let hudEl = null;
 let pulseEl = null;
 let distanceEl = null;
@@ -157,12 +159,56 @@ export function setSwingReport(text) {
     swingReport = text || null;
 }
 
+// --- Instruction hints: hidden by default, toggled from the top bar ---
+// Green Card drills are the tutorial, so an active drill always shows them.
+// Live readouts (beat dot, tempo, distance) and the post-shot swing report
+// are information, not instructions — they stay regardless.
+const HINTS_KEY = 'gih-swing-hints-shown';
+let hintsShown = localStorage.getItem(HINTS_KEY) === '1';
+let lastHint = null; // last showAddressHint call, replayed on toggle
+
+export function swingHintsShown() {
+    return hintsShown;
+}
+
+/** Flips the preference and re-renders the current hint. Returns new state. */
+export function toggleSwingHints() {
+    hintsShown = !hintsShown;
+    try { localStorage.setItem(HINTS_KEY, hintsShown ? '1' : '0'); } catch (e) { /* private mode */ }
+    if (lastHint) showAddressHint(lastHint.type, lastHint.opts);
+    return hintsShown;
+}
+
+function hintsMuted() {
+    let drillActive = false;
+    try { drillActive = !!getActiveDrill(); } catch (e) { /* career stack unavailable */ }
+    return !hintsShown && !drillActive;
+}
+
 /** Name of the strike input as the player sees it: a key, or a zone. */
 export function strikeName() {
     return isTouchInput() ? 'STROKE' : 'i';
 }
 
 export function showAddressHint(type, { hasClub = true } = {}) {
+    lastHint = { type, opts: { hasClub } };
+
+    // Instructions are muted by default: skip the how-to text, but never
+    // swallow the swing report ('next' after a practice shot) or the
+    // pick-a-club prompt (state, not instructions).
+    if (hintsMuted() && hasClub) {
+        if (type !== 'next') { hideRhythmHud(); return; }
+        if (!swingReport) { hideRhythmHud(); return; }
+        ensureCreated();
+        showRhythmHud();
+        hudEl.classList.add('hint-mode');
+        pulseEl.classList.remove('beat');
+        distanceEl.textContent = '';
+        tempoEl.textContent = '';
+        hintEl.innerHTML = `<span class="swing-report">${swingReport}</span>`;
+        return;
+    }
+
     ensureCreated();
     showRhythmHud();
     hudEl.classList.add('hint-mode');

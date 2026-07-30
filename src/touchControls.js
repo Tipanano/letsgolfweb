@@ -233,6 +233,9 @@ function injectStyles() {
         body.touch-active #fs-help-btn-text { display: none; }
         body.touch-active #fs-help-btn::before { content: '?'; font-weight: 800; }
         body.touch-active #fs-help-btn { min-width: 36px; }
+        body.touch-active #fs-hints-btn-text { display: none; }
+        body.touch-active #fs-hints-btn::before { content: '💡'; }
+        body.touch-active #fs-hints-btn { min-width: 36px; }
         /* Info text: compact */
         body.touch-active .overlay-text-item {
             font-size: 12.5px;
