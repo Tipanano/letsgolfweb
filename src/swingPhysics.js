@@ -39,6 +39,9 @@ let downswingTimingStretch = 1.0;
 export function setDownswingTimingStretch(factor) {
     downswingTimingStretch = Math.max(1, Math.min(3, factor || 1));
 }
+export function getDownswingTimingStretch() {
+    return downswingTimingStretch;
+}
 
 export const IDEAL_ROTATION_OFFSET_MS = 50; // Ideal 'a' press relative to downswing start
 export const IDEAL_ARMS_OFFSET_MS = 100; // Ideal 'd' press relative to downswing start

@@ -1,4 +1,5 @@
 import { clubs, defaultPlayerBag } from './clubs.js'; // Import club data and defaultPlayerBag
+import { getDownswingTimingStretch } from './swingPhysics.js';
 import { metersToYards, YARDS_TO_METERS } from './utils/unitConversions.js'; // Import conversion utilities
 import { getWind, getTemperature, getCurrentShotType } from './gameLogic/state.js'; // Import environment state getters (Corrected Path)
 import { toast } from './ui/toast.js';
@@ -139,6 +140,9 @@ const overlayTempSpan = document.getElementById('overlay-temp'); // Added for te
 // --- Constants from gameLogic (will be passed in or imported if needed) ---
 // These might be better managed within gameLogic or passed during initialization
 const DOWNSWING_TIMING_BAR_DURATION_MS = 500;
+// The full-swing downswing timeline stretches with the input device's
+// timing stretch (touch = 1.75x) so the bar/arc sweep, the auto-fire
+// timeout, post-shot windows, and tap markers all share one clock.
 const BACKSWING_BAR_MAX_DURATION_MS = 1500;
 const BACKSWING_BAR_MAX_DURATION_CHIP_PUTT_MS = 2000; // Slower for chips and putts - easier timing
 const IDEAL_BACKSWING_DURATION_MS = 1150; // Match physics (swingPhysics.js)
@@ -291,7 +295,7 @@ export function markHipInitiationOnBackswingBar(hipPressTime, swingSpeed) {
 }
 
 export function updateTimingBars(elapsedTime, swingSpeed) {
-    const effectiveDownswingDuration = DOWNSWING_TIMING_BAR_DURATION_MS / swingSpeed;
+    const effectiveDownswingDuration = (DOWNSWING_TIMING_BAR_DURATION_MS * getDownswingTimingStretch()) / swingSpeed;
     const progressPercent = Math.min(100, (elapsedTime / effectiveDownswingDuration) * 100);
     // Update progress bars (IDs remain the same: a=Rotation, j=Arms, d=Wrists)
     progressA.style.width = `${progressPercent}%`; // Rotation ('a') -> progress-a
@@ -322,7 +326,7 @@ export function showKeyPressMarker(key, offset, speedFactor) {
     if (currentShotType === 'chip') {
         effectiveDownswingDuration = CHIP_DOWNSWING_DURATION_MS;
     } else if (currentShotType === 'full') {
-        effectiveDownswingDuration = DOWNSWING_TIMING_BAR_DURATION_MS / speedFactor;
+        effectiveDownswingDuration = (DOWNSWING_TIMING_BAR_DURATION_MS * getDownswingTimingStretch()) / speedFactor;
     } else {
         // Putt doesn't use these key press markers in the downswing bar
         return;
@@ -934,7 +938,7 @@ export function displayDownswingFeedbackWindows(rotationStartMs, rotationWidthMs
         return;
     }
 
-    const effectiveDownswingDuration = DOWNSWING_TIMING_BAR_DURATION_MS / shotSwingSpeed;
+    const effectiveDownswingDuration = (DOWNSWING_TIMING_BAR_DURATION_MS * getDownswingTimingStretch()) / shotSwingSpeed;
     if (effectiveDownswingDuration <= 0) {
         elements.forEach(item => { if (item.el) item.el.style.display = 'none'; });
         return;
