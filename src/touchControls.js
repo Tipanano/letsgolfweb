@@ -33,6 +33,7 @@ import {
     getHipInitiationTime, getRotationInitiationTime,
     getRotationStartTime, getArmsStartTime, getWristsStartTime,
 } from './gameLogic/state.js';
+import { isSlopeOverlayVisible } from './visuals/slopeOverlay.js';
 
 let overlayEl = null;
 let updateTimer = null;
@@ -113,9 +114,36 @@ function injectStyles() {
             -webkit-tap-highlight-color: transparent;
         }
         .tc-mini.pressed { background: rgba(125, 255, 160, 0.4); }
-        #tc-aim-left { left: 8px; }
-        #tc-aim-right { left: 60px; }
-        #tc-cam { left: 112px; }
+        .tc-mini.tc-on { background: rgba(125, 255, 160, 0.35); border-color: #7dffa0; }
+        #tc-cam { left: 8px; }
+        #tc-slope { left: 60px; }
+        /* Aim: vertical pills at mid-edge — where thumbs rest, and tapping
+           the left edge aims left. Available in BOTH phases (aiming is a
+           setup decision too); hold to keep turning. */
+        .tc-aim {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: auto;
+            width: 46px;
+            height: 96px;
+            border-radius: 14px;
+            border: 1.5px solid rgba(255, 255, 255, 0.35);
+            background: rgba(14, 30, 20, 0.5);
+            color: #eaf6ec;
+            font-weight: 700;
+            font-size: 1.15em;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .tc-aim.pressed { background: rgba(125, 255, 160, 0.4); border-color: #7dffa0; }
+        #tc-aim-left { left: 6px; }
+        #tc-aim-right { right: 6px; }
         /* Bottom pill (context-aware) and the Setup return button */
         .tc-action {
             position: absolute;
@@ -178,7 +206,14 @@ function injectStyles() {
         body.touch-active #back-to-menu-button,
         body.touch-active #switch-hole-button,
         body.touch-active #fullscreen-toggle-btn { font-size: 12px; padding: 7px 10px; }
-        body.touch-active #reset-game-data-button { display: none; }
+        body.touch-active #reset-game-data-button,
+        body.touch-active #fs-reset-data-btn { display: none; }
+        /* Instructions live behind a compact ? — not a permanent banner.
+           The Controls modal is a keyboard reference: meaningless on touch. */
+        body.touch-active #fs-controls-btn { display: none; }
+        body.touch-active #fs-help-btn-text { display: none; }
+        body.touch-active #fs-help-btn::before { content: '?'; font-weight: 800; }
+        body.touch-active #fs-help-btn { min-width: 36px; }
         /* Info text: compact */
         body.touch-active .overlay-text-item {
             font-size: 12.5px;
@@ -225,14 +260,20 @@ function injectStyles() {
             max-height: 45vh;
             overflow-y: auto;
         }
-        /* Practice placement panel: right column below the shot info */
+        /* Practice placement panel: right column below the shot info,
+           clear of the mid-edge aim pill */
         body.touch-active #practice-panel {
-            top: 124px;
+            top: 164px;
             left: auto;
-            right: 8px;
-            max-height: calc(100vh - 320px);
+            right: 58px;
+            max-height: calc(100vh - 330px);
             overflow-y: auto;
         }
+        /* Keyboard shortcut hints are dead weight on touch */
+        body.touch-active #practice-panel .practice-keys { display: none; }
+        /* The panel IS the setup guidance when it's open — the rhythm hint
+           would just sit on top of it */
+        body.tc-panel-open:not(.tc-address) #rhythm-putt-hud { display: none !important; }
         /* Player/score line: small strip above the chip row */
         body.touch-active .overlay-bottom {
             position: fixed;
@@ -378,6 +419,24 @@ function makeMini(id, label, onDown) {
     return el;
 }
 
+/** Edge aim pill: fires immediately, then repeats while held. */
+function makeAim(id, label, key) {
+    const el = document.createElement('div');
+    el.id = id;
+    el.className = 'tc-aim';
+    el.textContent = label;
+    let repeatTimer = null;
+    bindZone(el,
+        () => {
+            sendKey('keydown', key);
+            clearInterval(repeatTimer);
+            repeatTimer = setInterval(() => sendKey('keydown', key), 70);
+        },
+        () => clearInterval(repeatTimer));
+    overlayEl.appendChild(el);
+    return el;
+}
+
 /** Setup shows the decision UI; address shows only the shot surfaces. */
 function setAddressMode(on) {
     addressMode = on;
@@ -400,6 +459,14 @@ function updateZones() {
     }
     if (!wasInGame) setAddressMode(false); // every mode entry starts in setup
 
+    // With the placement panel open, the setup-phase rhythm hint is hidden
+    // (CSS keys off this class) so the panel has the column to itself.
+    const panel = document.getElementById('practice-panel');
+    const panelOpen = !!panel && (panel.checkVisibility
+        ? panel.checkVisibility()
+        : panel.getClientRects().length > 0);
+    document.body.classList.toggle('tc-panel-open', panelOpen);
+
     const state = getGameState();
 
     // The shot is over — bring the info panels back for the next decision
@@ -407,6 +474,8 @@ function updateZones() {
 
     // Bottom pill follows context: address the ball, or advance after a shot
     els.address.textContent = state === 'result' ? 'NEXT  ᐅ' : '⛳ ADDRESS BALL';
+
+    if (els.slope) els.slope.classList.toggle('tc-on', isSlopeOverlayVisible());
 
     const full = getCurrentShotType() === 'full';
     if (full !== els.lastFull) {
@@ -436,12 +505,13 @@ export function initTouchControls() {
         lastFull: null,
     };
 
-    makeMini('tc-aim-left', '◀', () => sendKey('keydown', 'ArrowLeft'));
-    makeMini('tc-aim-right', '▶', () => sendKey('keydown', 'ArrowRight'));
+    makeAim('tc-aim-left', '◀', 'ArrowLeft');
+    makeAim('tc-aim-right', '▶', 'ArrowRight');
     makeMini('tc-cam', '📷', () => {
         cameraIdx = (cameraIdx + 1) % 4;
         sendKey('keydown', String(cameraIdx + 1));
     });
+    els.slope = makeMini('tc-slope', '⛰', () => sendKey('keydown', 'g'));
 
     // Context pill: ADDRESS BALL when ready, NEXT after a shot resolves
     const addressBtn = document.createElement('div');
