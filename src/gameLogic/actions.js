@@ -48,7 +48,7 @@ import * as multiplayerManager from '../multiplayerManager.js'; // Import multip
 // Rhythm putting
 import * as RhythmPutt from '../rhythmPutt.js';
 import { updatePuttPreview, hidePuttPreview } from '../visuals/puttPreview.js';
-import { updateRhythmHud, hideRhythmHud, flashBeat, showRhythmHud, showAddressHint } from '../ui/rhythmPuttHud.js';
+import { updateRhythmHud, hideRhythmHud, flashBeat, showRhythmHud, showAddressHint, strikeName } from '../ui/rhythmPuttHud.js';
 import { ball } from '../visuals/core.js';
 import { getCurrentTargetLineAngle, getShotDirectionAngle } from './state.js';
 
@@ -61,6 +61,9 @@ chipShotSound.preload = 'auto'; // Preload the sound
 
 const puttShotSound = new Audio('assets/sounds/putt_shot.mp3');
 puttShotSound.preload = 'auto'; // Preload the sound
+
+// True when the on-screen touch zones are the input device (status wording).
+const isTouchStatus = () => typeof document !== 'undefined' && document.body.classList.contains('touch-active');
 
 // --- Action Functions for Input Handler ---
 
@@ -290,7 +293,7 @@ export function recordPuttRhythmTap() {
         resetUIForNewShot();
         multiplayerManager.onShotStarted();
         showRhythmHud();
-        updateStatus('Putt: tap w to a rhythm...');
+        updateStatus(isTouchStatus() ? 'Putt: tap a tempo...' : 'Putt: tap w to a rhythm...');
     }
 
     const result = RhythmPutt.recordTap(performance.now());
@@ -386,7 +389,7 @@ export function recordChipRhythmTap() {
         resetUIForNewShot();
         multiplayerManager.onShotStarted();
         showRhythmHud();
-        updateStatus('Chip: tap w to a rhythm...');
+        updateStatus(isTouchStatus() ? 'Chip: tap a tempo...' : 'Chip: tap w to a rhythm...');
     }
 
     const result = RhythmPutt.recordTap(performance.now());
@@ -412,7 +415,7 @@ export function refreshRhythmChipUI(snapshot = null) {
     }
 
     updateRhythmHud({ ...snap, distanceMeters: carry }, RhythmPutt.MIN_TAPS_TO_ARM,
-        snap.armed ? 'Press i on the beat to chip' : null);
+        snap.armed ? `${strikeName()} on the beat to chip` : null);
 
     if (carry !== null && ball) {
         const aimAngleRad = (getCurrentTargetLineAngle() + getShotDirectionAngle()) * Math.PI / 180;
@@ -452,9 +455,9 @@ export function strikeRhythmChip() {
     }
 
     setGameState('chipShapeWindow');
-    updateStatus('Shape it: i early = draw · on beat = spin · late = fade');
+    updateStatus(`Shape it: ${strikeName()} early = draw · on beat = spin · late = fade`);
     updateRhythmHud({ ...RhythmPutt.getSnapshot(), tempoMs: strike.tempoMs, cv: strike.cv, armed: true, distanceMeters: null },
-        RhythmPutt.MIN_TAPS_TO_ARM, 'Shape: i early=draw · beat=spin · late=fade');
+        RhythmPutt.MIN_TAPS_TO_ARM, `Shape: ${strikeName()} early=draw · beat=spin · late=fade`);
 
     // No shape tap within the window → fire with stock spin
     chipShapeTimerId = setTimeout(() => {

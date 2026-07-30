@@ -139,6 +139,14 @@ export function showRhythmHud() {
  * type ('full' | 'chip' | 'putt'), or 'next' after a shot, or to pick a club.
  * The pill switches back to the live tempo display once tapping starts.
  */
+/** True when the on-screen touch zones are the input device. */
+const isTouchInput = () => document.body.classList.contains('touch-active');
+
+/** Name of the strike input as the player sees it: a key, or a zone. */
+export function strikeName() {
+    return isTouchInput() ? 'STROKE' : 'i';
+}
+
 export function showAddressHint(type, { hasClub = true } = {}) {
     ensureCreated();
     showRhythmHud();
@@ -147,22 +155,33 @@ export function showAddressHint(type, { hasClub = true } = {}) {
     distanceEl.textContent = '';
     tempoEl.textContent = '';
 
+    const touch = isTouchInput();
     let html;
     if (type === 'next') {
-        html = '<kbd>N</kbd> next shot';
+        html = touch ? '<kbd>NEXT</kbd> for your next shot' : '<kbd>N</kbd> next shot';
     } else if (!hasClub) {
         html = 'Pick a club to play your shot';
     } else if (type === 'putt') {
-        html = 'Tap <kbd>W</kbd> to a rhythm — tempo sets distance';
+        html = touch
+            ? 'Tap a rhythm on <kbd>TAP</kbd> — tempo sets distance'
+            : 'Tap <kbd>W</kbd> to a rhythm — tempo sets distance';
     } else if (type === 'chip') {
-        html = 'Tap <kbd>W</kbd> to a rhythm — tempo sets carry';
+        html = touch
+            ? 'Tap a rhythm on <kbd>TAP</kbd> — tempo sets carry'
+            : 'Tap <kbd>W</kbd> to a rhythm — tempo sets carry';
     } else {
-        html = 'Hold <kbd>W</kbd> for backswing — release at the top';
+        html = touch
+            ? 'Hold <kbd>SWING</kbd> — release at the top'
+            : 'Hold <kbd>W</kbd> for backswing — release at the top';
     }
 
     if (type !== 'next' && hasClub) {
-        const extras = (type === 'putt' || type === 'chip') ? ' · <kbd>G</kbd> slopes' : '';
-        html += `<span class="rhythm-subkeys"><kbd>←</kbd><kbd>→</kbd> aim · <kbd>H</kbd> aim at flag${extras}</span>`;
+        if (touch) {
+            html += '<span class="rhythm-subkeys"><kbd>◀</kbd><kbd>▶</kbd> aim</span>';
+        } else {
+            const extras = (type === 'putt' || type === 'chip') ? ' · <kbd>G</kbd> slopes' : '';
+            html += `<span class="rhythm-subkeys"><kbd>←</kbd><kbd>→</kbd> aim · <kbd>H</kbd> aim at flag${extras}</span>`;
+        }
     }
     hintEl.innerHTML = html;
 }
@@ -193,7 +212,9 @@ export function updateRhythmHud(snap, minTaps = 3, hintOverride = null) {
     if (!snap.tempoMs) {
         distanceEl.textContent = '–';
         tempoEl.textContent = '';
-        hintEl.textContent = `Tap w to a rhythm (${snap.tapCount}/${minTaps})`;
+        hintEl.textContent = isTouchInput()
+            ? `Tap a rhythm (${snap.tapCount}/${minTaps})`
+            : `Tap w to a rhythm (${snap.tapCount}/${minTaps})`;
         return;
     }
 
@@ -203,6 +224,6 @@ export function updateRhythmHud(snap, minTaps = 3, hintOverride = null) {
     tempoEl.innerHTML = `${Math.round(snap.tempoMs)} ms · <span class="${steadiness.cls}">${steadiness.label}</span>`;
 
     hintEl.textContent = snap.armed
-        ? (hintOverride || 'Press i on the beat to putt')
+        ? (hintOverride || `${strikeName()} on the beat to putt`)
         : `Keep tapping (${snap.tapCount}/${minTaps})`;
 }
