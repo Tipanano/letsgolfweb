@@ -95,12 +95,12 @@ function injectStyles() {
         /* Two thumb zones — that's all of it */
         #tc-swing  { left: 10px; bottom: var(--tc-bottom); width: min(42vw, 240px); height: min(30vh, 170px); font-size: 1.15em; }
         #tc-stroke { right: 10px; bottom: var(--tc-bottom); width: min(42vw, 240px); height: min(30vh, 170px); font-size: 1.15em; }
-        /* Utility minis (camera, slopes): address phase, top-left (the bar
-           is stripped there). Setup's camera story is the two-finger
-           fly-over + pinch. */
+        /* Utility minis (camera, slopes): both phases, docked above the
+           mid-edge aim pills — reachable during the fly-over, where slope
+           reading matters most. */
         .tc-mini {
             position: absolute;
-            top: calc(8px + env(safe-area-inset-top, 0px));
+            top: calc(50% - 100px);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -120,8 +120,8 @@ function injectStyles() {
         }
         .tc-mini.pressed { background: rgba(125, 255, 160, 0.4); }
         .tc-mini.tc-on { background: rgba(125, 255, 160, 0.35); border-color: #7dffa0; }
-        #tc-cam { left: 8px; }
-        #tc-slope { left: 60px; }
+        #tc-slope { left: 6px; }
+        #tc-cam { right: 6px; }
         /* Aim: vertical pills at mid-edge — where thumbs rest, and tapping
            the left edge aims left. Available in BOTH phases (aiming is a
            setup decision too); hold to keep turning. */
@@ -186,10 +186,19 @@ function injectStyles() {
             color: #eaf6ec;
             border: 1.5px solid rgba(255, 255, 255, 0.35);
         }
-        /* Phase gating inside the overlay (aim pills stay in both) */
+        /* Phase gating inside the overlay (aim pills + minis stay in both) */
         #touch-controls.setup .tc-zone,
-        #touch-controls.setup .tc-mini,
         #touch-controls.setup #tc-exit { display: none; }
+        /* Follow-ball opt-in: appears only while a shot is in the air */
+        #tc-follow {
+            bottom: calc(var(--tc-bottom) + 4px);
+            left: 50%;
+            transform: translateX(-50%);
+            height: 48px;
+            padding: 0 22px;
+            font-size: 0.95em;
+            display: none;
+        }
         #touch-controls:not(.setup) #tc-address { display: none; }
         .tc-action.tc-disabled {
             background: rgba(180, 200, 185, 0.55);
@@ -233,7 +242,7 @@ function injectStyles() {
         }
         body.touch-active #visual-info-overlay { padding: 8px; }
         /* Vertical rhythm: bar/minis (0-52) → status line (58-78) → info (84+) */
-        body.touch-active .overlay-top { margin-top: 84px !important; }
+        body.touch-active .overlay-top { margin-top: 84px !important; padding: 0 58px; box-sizing: border-box; }
         body.touch-active #top-center-status {
             top: calc(58px + env(safe-area-inset-top, 0px)) !important;
             max-width: 62vw; /* clears the mini buttons flanking it */
@@ -304,7 +313,7 @@ function injectStyles() {
             padding: 6px 12px;
             gap: 10px;
             font-size: 12px;
-            top: calc(164px + env(safe-area-inset-top, 0px));
+            top: calc(196px + env(safe-area-inset-top, 0px));
             bottom: auto;
         }
         body.tc-address #rhythm-putt-hud {
@@ -637,6 +646,12 @@ function updateZones() {
 
     if (els.slope) els.slope.classList.toggle('tc-on', isSlopeOverlayVisible());
 
+    // Offer the follow camera only while a shot is in the air
+    if (els.follow) {
+        els.follow.style.display =
+            String(getGameState()).startsWith('calculating') ? 'flex' : 'none';
+    }
+
     const full = getCurrentShotType() === 'full';
     if (full !== els.lastFull) {
         els.lastFull = full;
@@ -678,6 +693,15 @@ export function initTouchControls() {
         sendKey('keydown', String(cameraIdx + 1));
     });
     els.slope = makeMini('tc-slope', '⛰', () => sendKey('keydown', 'g'));
+
+    // Follow-ball opt-in while the shot is airborne (camera '2')
+    const followBtn = document.createElement('div');
+    followBtn.id = 'tc-follow';
+    followBtn.className = 'tc-action';
+    followBtn.textContent = '🎥 FOLLOW';
+    bindZone(followBtn, () => sendKey('keydown', '2'), null);
+    overlayEl.appendChild(followBtn);
+    els.follow = followBtn;
 
     // Context pill: ADDRESS BALL when ready, NEXT after a shot resolves
     const addressBtn = document.createElement('div');
