@@ -372,8 +372,12 @@ function makeZone(id, html, onDown, onUp) {
 function nextBeatKey() {
     const state = getGameState();
     if (state === 'backswing') {
-        if (!getRotationInitiationTime()) return 'a';
+        // The ideal transition fires hips ~150 ms BEFORE the top (see
+        // IDEAL_TRANSITION_OFFSET_MS), so a tap while still holding the
+        // backswing is hips first — that's the flowing PC-style swing.
+        // A second tap pre-loads rotation (keyboard's early 'a').
         if (!getHipInitiationTime()) return 'j';
+        if (!getRotationInitiationTime()) return 'a';
         return null;
     }
     if (state === 'backswingPausedAtTop') {

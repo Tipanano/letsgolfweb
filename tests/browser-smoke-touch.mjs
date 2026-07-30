@@ -198,6 +198,43 @@ for (let i = 0; i < 40; i++) {
     await sleep(300);
 }
 if (flew !== 'result' && flew !== 'ready') fail(`swing never resolved, state ${flew}`);
+
+// --- Second swing: PC-style early transition (beat tap DURING the hold) ---
+if (flew === 'result') { await tapZone('tc-address'); await sleep(400); } // NEXT
+await tapZone('tc-address'); await sleep(300);                            // back to address
+await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: sx, y: sy }] });
+await sleep(250);
+// Mid-backswing beat tap must fire HIPS (the flowing transition), not rotation
+const midHold = await page.evaluate(async () => {
+    const el = document.getElementById('tc-stroke');
+    el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+    const s = await import('./src/gameLogic/state.js');
+    return { hips: s.getHipInitiationTime() !== null, state: s.getGameState() };
+});
+await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+await sleep(120);
+const afterRelease = await state();
+if (!midHold.hips || midHold.state !== 'backswing') {
+    fail(`mid-hold tap did not fire hips during backswing: ${JSON.stringify(midHold)}`);
+}
+// The release must flow into the downswing — never pause at the top.
+// (On a slow machine the downswing may already have auto-resolved.)
+if (afterRelease === 'backswingPausedAtTop') fail('early transition paused at top');
+// Feed the remaining beats if the swing is still live, then let it resolve
+if (afterRelease === 'downswingWaiting') {
+    await tapZone('tc-swing'); await sleep(90);
+    await tapZone('tc-stroke'); await sleep(90);
+    await tapZone('tc-swing');
+}
+let flew2 = null;
+for (let i = 0; i < 40; i++) {
+    flew2 = await state();
+    if (flew2 === 'result' || flew2 === 'ready') break;
+    await sleep(300);
+}
+if (flew2 !== 'result' && flew2 !== 'ready') fail(`early-transition swing never resolved, state ${flew2}`);
+console.log(`early transition: hips mid-hold ✓, release → ${afterRelease}, resolved → ${flew2}`);
 const shotInfo = await page.evaluate(() =>
     document.getElementById('status-text-display')?.textContent || '');
 await page.screenshot({ path: OUT + 'shot-touch-result.png' });
