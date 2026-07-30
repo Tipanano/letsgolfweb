@@ -37,6 +37,7 @@ import { isSlopeOverlayVisible } from './visuals/slopeOverlay.js';
 import { isFreeCameraActive, toggleFreeCamera, freeCamNudge, freeCamLook, camera, ball, applyAimAngleToCamera } from './visuals/core.js';
 import { setShotDirectionAngle } from './gameLogic/state.js';
 import { updateStatus } from './ui.js';
+import { setDownswingTimingStretch } from './swingPhysics.js';
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
 
 let overlayEl = null;
@@ -677,6 +678,10 @@ export function initTouchControls() {
 
     injectStyles();
     document.body.classList.add('touch-active');
+    // Thumbs can't drum +50/+100/+250 ms like home-row fingers: stretch the
+    // downswing ideal offsets to humanly drummable times. Precision (deg/ms
+    // sensitivity) is unchanged — the swing stays hard, just fair.
+    setDownswingTimingStretch(1.75);
     overlayEl = document.createElement('div');
     overlayEl.id = 'touch-controls';
     overlayEl.classList.add('setup');

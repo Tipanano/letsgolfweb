@@ -73,6 +73,14 @@ function injectStyles() {
         .rhythm-steady-bad  { color: #ff8a7a; }
         #rhythm-putt-hud.hint-mode #rhythm-putt-distance,
         #rhythm-putt-hud.hint-mode #rhythm-putt-tempo { display: none; }
+        #rhythm-putt-hud .swing-report {
+            display: block;
+            font-size: 12px;
+            line-height: 1.45;
+            white-space: pre-line;
+            margin-bottom: 6px;
+            opacity: 0.92;
+        }
         #rhythm-putt-hud.hint-mode #rhythm-putt-hint { font-size: 15px; }
         #rhythm-putt-hud kbd {
             display: inline-block;
@@ -142,6 +150,13 @@ export function showRhythmHud() {
 /** True when the on-screen touch zones are the input device. */
 const isTouchInput = () => document.body.classList.contains('touch-active');
 
+// Post-shot swing feedback (set by calculations for practice contexts);
+// rendered with the next-shot hint, cleared implicitly by the next report.
+let swingReport = null;
+export function setSwingReport(text) {
+    swingReport = text || null;
+}
+
 /** Name of the strike input as the player sees it: a key, or a zone. */
 export function strikeName() {
     return isTouchInput() ? 'STROKE' : 'i';
@@ -159,6 +174,9 @@ export function showAddressHint(type, { hasClub = true } = {}) {
     let html;
     if (type === 'next') {
         html = touch ? '<kbd>NEXT</kbd> for your next shot' : '<kbd>N</kbd> next shot';
+        if (swingReport) {
+            html = `<span class="swing-report">${swingReport}</span>` + html;
+        }
     } else if (!hasClub) {
         html = 'Pick a club to play your shot';
     } else if (type === 'putt') {

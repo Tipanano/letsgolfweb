@@ -24,6 +24,37 @@ import { getSurfaceProperties } from '../surfaces.js'; // Import surface propert
 // Removed Putt Trajectory import as roll simulation handles it
 import { clamp, getSurfaceTypeAtPoint } from '../utils/gameUtils.js'; // Import getSurfaceTypeAtPoint
 import { getCurrentGameMode } from '../main.js'; // Import mode checker
+import { isPracticeMode } from '../modes/playHole.js';
+import { setSwingReport } from '../ui/rhythmPuttHud.js';
+
+/**
+ * Human-readable swing feedback for practice contexts: what shape came
+ * out, and which beats of the swing caused it.
+ */
+function buildSwingReport(r) {
+    const face = r.faceAngleRelPath;
+    const path = r.clubPathAngle;
+    const curve = Math.abs(face) < 2 ? 'straight'
+        : face > 6 ? 'slice' : face > 0 ? 'fade'
+        : face < -6 ? 'hook' : 'draw';
+    const start = Math.abs(path) < 2.5 ? '' : path > 0 ? ' push' : ' pull';
+    const power = (r.potentialCHS > 0)
+        ? Math.round((r.actualCHS / r.potentialCHS) * 100) : null;
+
+    const beats = [
+        ['hips', r.transitionDev], ['rotation', r.rotationDev],
+        ['arms', r.armsDev], ['wrists', r.wristsDev],
+    ].map(([name, dev]) => {
+        if (typeof dev !== 'number' || !isFinite(dev) || Math.abs(dev) > 999) return `${name} missed`;
+        if (Math.abs(dev) < 25) return null; // close enough to pure
+        return `${name} ${dev > 0 ? 'late' : 'early'} ${Math.round(Math.abs(dev))}ms`;
+    }).filter(Boolean);
+
+    const line1 = `${r.strikeQuality} strike · ${curve}${start}` +
+        (power !== null ? ` · power ${power}%` : '');
+    const line2 = beats.length ? beats.join(' · ') : 'timing pure — great swing';
+    return `${line1}\n${line2}`;
+}
 import { getCurrentBallPosition as getPlayHoleBallPosition } from '../modes/playHole.js'; // Import position getter
 import { BALL_RADIUS } from '../visuals/core.js'; // Import BALL_RADIUS
 import { getFlagPosition, getGreenCenter, getGreenRadius, getObstacles as getHoleObstacles } from '../visuals/holeView.js'; // For hole/green checks
@@ -101,6 +132,13 @@ export function calculateFullSwingShot() {
 
     // --- Call the full swing physics calculation module ---
     const impactResult = calculateImpactPhysics(timingInputs, selectedClub, swingSpeed, ballPositionFactor, currentSurface); // Pass currentSurface
+
+    // Practice contexts (range, practice/drill holes) get a post-shot swing
+    // report explaining the outcome; it renders with the next-shot hint.
+    try {
+        const practice = getCurrentGameMode() === 'range' || isPracticeMode();
+        setSwingReport(practice ? buildSwingReport(impactResult) : null);
+    } catch (e) { /* feedback must never break the shot */ }
 
     // --- Use results from impactResult ---
     const ballSpeed = impactResult.ballSpeed;
@@ -333,6 +371,7 @@ export function calculateFullSwingShot() {
 
 
 export function calculateChipShot() {
+    setSwingReport(null); // full-swing feedback only
     const state = getGameState();
     const shotType = getCurrentShotType();
     if (state !== 'calculatingChip' || shotType !== 'chip') return;
@@ -584,6 +623,7 @@ export function calculateChipShot() {
 
 
 export function calculatePuttShot() {
+    setSwingReport(null); // full-swing feedback only
     const state = getGameState();
     const shotType = getCurrentShotType();
     if (state !== 'calculatingPutt' || shotType !== 'putt') return;

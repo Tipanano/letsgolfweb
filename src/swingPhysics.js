@@ -31,6 +31,15 @@ const MIN_PENALTY_SCALE_FACTOR = 0.6;          // Multiplier for max loss at low
 
 
 // Arms/Rotation & Path/Speed Efficiency
+// Touch thumbs can't drum the pianistic keyboard offsets (+50/+100/+250 ms
+// between alternating taps), so the touch layer stretches the downswing
+// ideal offsets. Sensitivities (deg/ms) stay untouched - precision still
+// matters, the targets just land at humanly drummable times.
+let downswingTimingStretch = 1.0;
+export function setDownswingTimingStretch(factor) {
+    downswingTimingStretch = Math.max(1, Math.min(3, factor || 1));
+}
+
 export const IDEAL_ROTATION_OFFSET_MS = 50; // Ideal 'a' press relative to downswing start
 export const IDEAL_ARMS_OFFSET_MS = 100; // Ideal 'd' press relative to downswing start
 const RELATIVE_ARMS_ROTATION_PATH_SENSITIVITY = 1.0; // Degrees of path change per ms of relative diff (d vs a)
@@ -454,9 +463,9 @@ export function calculateImpactPhysics(timingInputs, club, swingSpeed, ballPosit
     // Calculate Deviations (relative to downswing start)
     const rotationTime = timingInputs.rotationStartTime ?? timingInputs.rotationInitiationTime; // Use whichever 'a' press happened
     // Pass actualBackswingDuration and IDEAL_BACKSWING_DURATION_MS for scaling calculations
-    const rotationDev = calculateTimingDeviation(rotationTime, timingInputs.downswingPhaseStartTime, IDEAL_ROTATION_OFFSET_MS, swingSpeed, timingInputs.backswingDuration, IDEAL_BACKSWING_DURATION_MS);
-    const armsDev = calculateTimingDeviation(timingInputs.armsStartTime, timingInputs.downswingPhaseStartTime, IDEAL_ARMS_OFFSET_MS, swingSpeed, timingInputs.backswingDuration, IDEAL_BACKSWING_DURATION_MS);
-    const wristsDev = calculateTimingDeviation(timingInputs.wristsStartTime, timingInputs.downswingPhaseStartTime, IDEAL_WRISTS_OFFSET_MS, swingSpeed, timingInputs.backswingDuration, IDEAL_BACKSWING_DURATION_MS);
+    const rotationDev = calculateTimingDeviation(rotationTime, timingInputs.downswingPhaseStartTime, IDEAL_ROTATION_OFFSET_MS * downswingTimingStretch, swingSpeed, timingInputs.backswingDuration, IDEAL_BACKSWING_DURATION_MS);
+    const armsDev = calculateTimingDeviation(timingInputs.armsStartTime, timingInputs.downswingPhaseStartTime, IDEAL_ARMS_OFFSET_MS * downswingTimingStretch, swingSpeed, timingInputs.backswingDuration, IDEAL_BACKSWING_DURATION_MS);
+    const wristsDev = calculateTimingDeviation(timingInputs.wristsStartTime, timingInputs.downswingPhaseStartTime, IDEAL_WRISTS_OFFSET_MS * downswingTimingStretch, swingSpeed, timingInputs.backswingDuration, IDEAL_BACKSWING_DURATION_MS);
 
     // --- New Transition Deviation Logic ---
     // CRITICAL ASSUMPTION: timingInputs.idealBackswingEndTime is now expected to be the timestamp of the ACTUAL 'w' key release (end of player's chosen backswing).
@@ -572,9 +581,9 @@ export function calculateImpactPhysics(timingInputs, club, swingSpeed, ballPosit
         return (idealOffset / swingSpeed) * currentDurationScalingFactor;
     };
 
-    const idealRotationCenterMs = getIdealCenter(rotationTime, IDEAL_ROTATION_OFFSET_MS);
-    const idealArmsCenterMs = getIdealCenter(timingInputs.armsStartTime, IDEAL_ARMS_OFFSET_MS);
-    const idealWristsCenterMs = getIdealCenter(timingInputs.wristsStartTime, IDEAL_WRISTS_OFFSET_MS);
+    const idealRotationCenterMs = getIdealCenter(rotationTime, IDEAL_ROTATION_OFFSET_MS * downswingTimingStretch);
+    const idealArmsCenterMs = getIdealCenter(timingInputs.armsStartTime, IDEAL_ARMS_OFFSET_MS * downswingTimingStretch);
+    const idealWristsCenterMs = getIdealCenter(timingInputs.wristsStartTime, IDEAL_WRISTS_OFFSET_MS * downswingTimingStretch);
 
     const idealRotationWindowStart = idealRotationCenterMs - (downswingFeedbackWindowWidth / 2);
     const idealArmsWindowStart = idealArmsCenterMs - (downswingFeedbackWindowWidth / 2);

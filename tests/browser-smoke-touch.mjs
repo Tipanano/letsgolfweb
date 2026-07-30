@@ -230,6 +230,13 @@ for (let i = 0; i < 40; i++) {
 }
 if (flew !== 'result' && flew !== 'ready') fail(`swing never resolved, state ${flew}`);
 
+// Range full swings produce a post-shot swing report in the hint HUD
+await sleep(700);
+const report = await page.evaluate(() =>
+    document.getElementById('rhythm-putt-hint')?.textContent || '');
+if (!/strike/.test(report)) fail(`no swing report in hint: "${report}"`);
+console.log(`swing report: "${report.split('\n')[0].trim()}..."`);
+
 // --- Second swing: PC-style early transition (beat tap DURING the hold) ---
 if (flew === 'result') { await tapZone('tc-address'); await sleep(400); } // NEXT
 await tapZone('tc-address'); await sleep(300);                            // back to address
