@@ -344,19 +344,31 @@ function injectStyles() {
  * zone even if the thumb slides off — vital for the held SWING zone.
  */
 function bindZone(el, onDown, onUp) {
+    let activeId = null;
     el.addEventListener('pointerdown', (e) => {
         e.preventDefault();
         try { el.setPointerCapture(e.pointerId); } catch (err) { /* synthetic events have no active pointer */ }
+        activeId = e.pointerId;
         el.classList.add('pressed');
         onDown();
     });
     const release = (e) => {
+        // Only the finger that pressed this zone may release it — a tap on
+        // another zone must not end a held SWING.
+        if (e && e.pointerId !== undefined && activeId !== null && e.pointerId !== activeId) return;
+        activeId = null;
         if (!el.classList.contains('pressed')) return;
         el.classList.remove('pressed');
         if (onUp) onUp();
     };
     el.addEventListener('pointerup', release);
     el.addEventListener('pointercancel', release);
+    // Safety net: iOS sometimes drops the element-level release (failed
+    // capture, finger sliding off) — without this, hold-to-repeat loops
+    // forever. Window-level releases are pointer-id matched.
+    window.addEventListener('pointerup', release);
+    window.addEventListener('pointercancel', release);
+    window.addEventListener('blur', () => release(null));
     el.addEventListener('contextmenu', (e) => e.preventDefault());
 }
 
@@ -449,7 +461,11 @@ function makeAim(id, label, key) {
         () => {
             sendKey('keydown', key);
             clearInterval(repeatTimer);
-            repeatTimer = setInterval(() => sendKey('keydown', key), 70);
+            repeatTimer = setInterval(() => {
+                // Self-stopping: never outlive the visible pressed state
+                if (!el.classList.contains('pressed')) { clearInterval(repeatTimer); return; }
+                sendKey('keydown', key);
+            }, 70);
         },
         () => clearInterval(repeatTimer));
     overlayEl.appendChild(el);
