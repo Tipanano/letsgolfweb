@@ -697,12 +697,15 @@ export function initTouchControls() {
     });
     els.slope = makeMini('tc-slope', '⛰', () => sendKey('keydown', 'g'));
 
-    // Follow-ball opt-in while the shot is airborne (camera '2')
+    // Follow-ball opt-in while the shot is airborne (camera '2'). One-shot:
+    // it watches THIS ball land — NEXT restores the normal view, otherwise
+    // the follow camera silently sticks for every later shot.
+    let followedShot = false;
     const followBtn = document.createElement('div');
     followBtn.id = 'tc-follow';
     followBtn.className = 'tc-action';
     followBtn.textContent = '🎥 FOLLOW';
-    bindZone(followBtn, () => sendKey('keydown', '2'), null);
+    bindZone(followBtn, () => { sendKey('keydown', '2'); followedShot = true; }, null);
     overlayEl.appendChild(followBtn);
     els.follow = followBtn;
 
@@ -714,6 +717,11 @@ export function initTouchControls() {
     bindZone(addressBtn, () => {
         if (getGameState() === 'result') {
             sendKey('keydown', 'n');
+            if (followedShot) {
+                followedShot = false;
+                cameraIdx = 0;
+                sendKey('keydown', '1'); // back to the static view at the new lie
+            }
         } else if (getGameState() === 'ready' && !getSelectedClub()) {
             // No club yet: the pill opens the club picker instead
             document.getElementById('fs-club-btn')?.click();
