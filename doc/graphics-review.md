@@ -2,6 +2,12 @@
 
 <!-- Review of the render stack: what to improve visually without costing frame time. -->
 
+> **Status: phases 1 and 2 are implemented.** Everything in Tier 1 and Tier 2
+> below has landed, plus the trajectory and backdrop fixes. See
+> [What shipped](#what-shipped) at the end for measured results and for the two
+> places where the diagnosis in this document turned out to be wrong.
+> Tier 3 is still open.
+
 Scope: everything under `src/visuals/`, `src/surfaces.js`, `src/obstacleConfig.js`,
 `assets/textures/`, and the course JSON as it feeds the renderer.
 
@@ -470,3 +476,67 @@ Net expected result after phases 1–2: **~300 draw calls → ~40**, shadow pass
 removed from the steady-state frame, mobile fragment load cut by up to 4×,
 alongside correctly-lit, correctly-filtered, properly-scaled ground textures with
 mow patterns — i.e. materially better looking *and* materially faster.
+
+---
+
+## What shipped
+
+Phases 1 and 2 are done. Measured on Augusta hole 1 (137 obstacles), same
+camera, same viewport:
+
+| | Before | After |
+| --- | --- | --- |
+| Meshes in scene | 299 | 35 |
+| Geometries | 288 | 32 |
+| Materials | 292 | 28 |
+| GPU textures | 12 (5 unique images) | 7 (6 unique) |
+| Steady-state render | 1.62 ms | 0.25–0.45 ms |
+
+Plus, not visible in those numbers: the per-hole texture leak is gone, the
+pixel-ratio clamp cuts fragment load up to 4× on a high-DPI phone, and the
+shadow map no longer re-renders every frame.
+
+### Two things this document got wrong
+
+Worth recording, because both cost real debugging time and both look
+plausible on paper.
+
+**Ring winding does not control ground orientation.** Section 2.11 proposed
+normalizing polygon winding so the ground could use `FrontSide`. Earcut
+*normalizes its own output winding*, so reversing the input ring changes
+nothing — the whole course still faced down and vanished under front-face
+culling, leaving the bare earth backdrop showing through. The fix has to flip
+the triangle indices after triangulation. `orientTrianglesUp()` in
+`holeRenderer.js` now measures the resulting normal from the mesh instead of
+assuming a convention, so an earcut version that changes its mind can't
+silently invert every hole.
+
+**A camera-facing ribbon is the wrong shape for the shot trace.** Section 2.8
+suggested screen-space-width lines. Built as a ribbon oriented for the camera
+at creation time, it turned edge-on and disappeared the moment the view moved
+— which is every shot, because the follow cam swings in behind the ball. It's
+a tube now; no preferred viewing direction, same cost.
+
+### Discovered while implementing
+
+Not in the original review:
+
+- **Textured surfaces were tinting their texture by the surface colour.**
+  Multiplying two dark greens crushed the rough to near black. Invisible
+  before, because the excess brightness from the missing sRGB decode was
+  cancelling it out — fixing the colour space exposed it immediately.
+- **The earth backdrop and treeline became a dark wall.** They were tuned
+  against the old washed-out palette; against a correct one they ringed every
+  hole in black-green. Both lightened, and the earth plane is vertex-coloured
+  now so it varies instead of reading as one slab.
+- **The flag can't use a lit material.** Because it billboards, its normal
+  almost never faces the sun, so it sat in its own shadow from most angles.
+  It's unlit with shading derived from its own wave, which also reads as folds.
+- **A flat cup half-sinks into a contoured green.** It needed the same
+  gradient-tracking treatment the ball halo already had.
+
+### Still open (Tier 3)
+
+Ball dimple normal map, render-on-demand, distant tree impostors, a cloud
+layer, and the texture format conversion (still ~5 MB of PNG — the single
+biggest remaining win for load time, though it costs nothing at runtime).
