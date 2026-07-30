@@ -3,7 +3,7 @@ import {
     getBackswingDuration, getHipInitiationTime, getRotationStartTime,
     getRotationInitiationTime, getArmsStartTime, getWristsStartTime,
     getDownswingPhaseStartTime, getChipRotationStartTime, getChipWristsStartTime,
-    getPuttHitTime, getOnShotCompleteCallback, setGameState,
+    getPuttHitTime, getOnShotCompleteCallback, setGameState, getChipProfile,
     getBackswingStartTime, // <-- Added missing import
     getShotDirectionAngle, // <-- Gets RELATIVE angle
     getCurrentTargetLineAngle, // <-- Gets ABSOLUTE target line angle
@@ -15,7 +15,7 @@ import { ctfConfigToHoleLayout } from '../holeConfigGenerator.js'; // Import CTF
 import { stopFullDownswingAnimation, stopChipDownswingAnimation /* Putt stopped in actions */ } from './animations.js';
 import { updateStatus, getBallPositionIndex, getBallPositionLevels, displayIdealJPressWindowOnBackswing, displayDownswingFeedbackWindows } from '../ui.js'; // Added displayDownswingFeedbackWindows
 import { calculateImpactPhysics } from '../swingPhysics.js';
-import { calculateChipImpact, calculateRhythmChipImpact } from '../chipPhysics.js';
+import { calculateChipImpact, calculateRhythmChipImpact, CHIP_PROFILES } from '../chipPhysics.js';
 import { calculatePuttImpact, calculateRhythmPuttImpact } from '../puttPhysics.js';
 import { consumeStrike as consumeRhythmStrike } from '../rhythmPutt.js';
 // Import both simulation functions and HOLE_RADIUS
@@ -385,7 +385,8 @@ export function calculateChipShot() {
     // Rhythm chipping: strike scored against the player's tap tempo.
     const rhythmStrike = consumeRhythmStrike();
     const impactResult = rhythmStrike
-        ? calculateRhythmChipImpact(rhythmStrike, selectedClub, ballPositionFactor, currentSurface)
+        ? calculateRhythmChipImpact(rhythmStrike, selectedClub, ballPositionFactor, currentSurface,
+            CHIP_PROFILES[getChipProfile()] || CHIP_PROFILES.chip)
         : calculateChipImpact(backswingDuration, rotationOffset, hitOffset, selectedClub, ballPositionFactor, currentSurface); // Legacy fallback
 
     // --- Use results ---
