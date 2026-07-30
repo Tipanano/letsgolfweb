@@ -19,6 +19,9 @@ import { showCareer } from './careerModal.js'; // Career overview (handicap, rou
 import { showGreenCard } from './greenCardModal.js'; // Green Card drill checklist
 import { startDrill, drillLaunchConfig } from './career/greenCard.js';
 import { initTouchControls } from './touchControls.js'; // On-screen swing zones for touch devices
+import { getGameState } from './gameLogic/state.js';
+import { isViewActive as measurementViewActive } from './visuals/measurementView.js';
+import { aimAtScreenPoint } from './aimAtPoint.js'; // Double-click / double-tap point-to-aim
 
 // --- Game Modes ---
 export const GAME_MODES = {
@@ -474,6 +477,19 @@ document.addEventListener('keydown', (event) => {
 
 document.addEventListener('keyup', (event) => {
     inputHandler.handleKeyUp(event); // Call the input handler
+});
+
+// Double-click to aim: same point-to-aim path as the touch double-tap.
+// Drags don't trigger dblclick, so rotate-drag and this coexist cleanly.
+canvas?.addEventListener('dblclick', (event) => {
+    const menu = document.getElementById('main-menu');
+    const menuVisible = menu && (menu.checkVisibility
+        ? menu.checkVisibility()
+        : menu.getClientRects().length > 0);
+    if (menuVisible) return;
+    if (getGameState() !== 'ready') return; // never mid-swing
+    if (measurementViewActive()) return; // measurement clicks own the canvas
+    aimAtScreenPoint(event.clientX, event.clientY);
 });
 
 // Add mouse down listener for measurement view clicks

@@ -6,6 +6,7 @@ import { setupTimingBarWindows, setBallPosition, getBallPositionLevels, setSwing
 import { resetStaticCameraZoom } from '../visuals/core.js'; // Import the new zoom reset function
 import * as visuals from '../visuals.js'; // Import visuals main module
 import { resetUIForNewShot } from '../ui.js'; // Needed for resetSwingState
+import { resetSwingArc } from '../swingArcVisualizer.js'; // Clear stale arc on shot-type change
 
 // --- Constants ---
 // These might be better placed elsewhere if used by physics too, but keep here for now
@@ -248,6 +249,11 @@ export function setShotType(type) {
     }
 
     currentShotType = type;
+
+    // The previous shot type's swing arc (path, beat zones, tap dots) must
+    // not linger over the new shot's UI — rhythm chips/putts never draw an
+    // arc of their own to replace it.
+    resetSwingArc();
 
     // Enable/disable swing speed slider based on type
     const isFullSwing = (type === 'full');
