@@ -1,7 +1,7 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
 import { TextureLoader } from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js'; // Import TextureLoader
 // Import both relative and target line angles
-import { getShotDirectionAngle, getCurrentTargetLineAngle, getSelectedClub, setRelativeShotDirectionAngle } from '../gameLogic/state.js';
+import { getShotDirectionAngle, getCurrentTargetLineAngle, getSelectedClub, setRelativeShotDirectionAngle, getWind } from '../gameLogic/state.js';
 import * as MeasurementView from './measurementView.js';
 // Import position getters needed for re-applying hole view camera
 import { getCurrentBallPosition as getPlayHoleBallPosition } from '../modes/playHole.js';
@@ -10,6 +10,10 @@ import { getTargetObjects, getFlagPosition as getTargetFlagPosition } from './ta
 import { createTeeMesh } from './objects.js'; // Import the tee creator
 import { getSurfaceProperties } from '../surfaces.js'; // Import surface properties getter
 import { heightAt as terrainHeightAt } from '../greenContours.js';
+import { initTextureCaps } from './textures.js';
+import { updateFlagstick } from './flagstick.js';
+import { updateWind, getWindStrength } from './wind.js';
+import { updateWater } from './holeRenderer.js';
 
 import { YARDS_TO_METERS } from '../utils/unitConversions.js';
 import { gradientAt as contourGradientAt } from '../greenContours.js';
@@ -216,8 +220,10 @@ function createSkyAndHorizon(targetScene) {
         }
     }
     treeGeom.computeVertexNormals();
+    // Lightened from near-black: the far treeline should sit close to the fog
+    // colour so it recedes, rather than ringing the hole in a dark band.
     const treeMat = new THREE.MeshBasicMaterial({
-        color: 0x2a4a30,
+        color: 0x4d6b4a,
         side: THREE.BackSide,
         fog: true, // Haze softens it into the distance
     });
@@ -230,7 +236,27 @@ function createSkyAndHorizon(targetScene) {
     // Subdivided so updateEarthTerrain() can drape it over DEM elevation —
     // otherwise a hole dropping 40m (Augusta 10) would sink below it.
     const earthGeom = new THREE.PlaneGeometry(1600, 1600, 96, 96);
-    const earthMat = new THREE.MeshLambertMaterial({ color: 0x315c34 });
+    // Vertex-coloured so the backdrop varies instead of reading as one flat
+    // slab. It also needs to sit close to the course's own greens in value —
+    // too dark and the surrounds become a wall behind the hole rather than
+    // land receding into haze.
+    const earthColors = new Float32Array(earthGeom.attributes.position.count * 3);
+    const nearGrass = new THREE.Color(0x54793f);
+    const farGrass = new THREE.Color(0x6b8a4e);
+    const ec = new THREE.Color();
+    const ePos = earthGeom.attributes.position;
+    for (let i = 0; i < ePos.count; i++) {
+        const gx = ePos.getX(i), gy = ePos.getY(i);
+        // Broad, low-frequency variation — this is scenery, not playable ground
+        const n = Math.sin(gx * 0.012) * Math.cos(gy * 0.009)
+                + 0.5 * Math.sin(gx * 0.031 + gy * 0.017);
+        ec.copy(nearGrass).lerp(farGrass, 0.5 + 0.5 * Math.max(-1, Math.min(1, n)));
+        earthColors[i * 3] = ec.r;
+        earthColors[i * 3 + 1] = ec.g;
+        earthColors[i * 3 + 2] = ec.b;
+    }
+    earthGeom.setAttribute('color', new THREE.BufferAttribute(earthColors, 3));
+    const earthMat = new THREE.MeshLambertMaterial({ vertexColors: true });
     const earth = new THREE.Mesh(earthGeom, earthMat);
     earth.rotation.x = -Math.PI / 2;
     earth.position.y = -0.9; // Below every depression floor (bunker bowls, water beds)
@@ -240,6 +266,38 @@ function createSkyAndHorizon(targetScene) {
 }
 
 let earthMesh = null;
+let sunLight = null;
+
+/**
+ * Device pixel ratio, capped. An uncapped 3x DPR phone renders NINE times the
+ * fragments of a 1x display for a difference almost nobody can see — by far
+ * the biggest mobile cost in the scene. MSAA is already on, so edge quality
+ * doesn't depend on the extra density.
+ */
+function displayPixelRatio() {
+    return Math.min(window.devicePixelRatio || 1, 2);
+}
+
+/**
+ * Re-renders the shadow map once on the next frame. Call after anything that
+ * casts a shadow is added, removed, or moved — shadowMap.autoUpdate is off.
+ */
+export function requestShadowUpdate() {
+    if (renderer) renderer.shadowMap.needsUpdate = true;
+}
+
+/**
+ * Centres the sun's shadow frustum on a point. The frustum is deliberately
+ * tight (±70m) for texel density, so it has to follow play rather than try to
+ * cover the whole hole at once.
+ */
+export function focusShadowsOn(x, z) {
+    if (!sunLight) return;
+    sunLight.position.set(x + 60, 70, z + 25);
+    sunLight.target.position.set(x, 0, z);
+    sunLight.target.updateMatrixWorld();
+    requestShadowUpdate();
+}
 
 /**
  * Drapes the earth backdrop over the active terrain field (call after
@@ -278,34 +336,52 @@ export function initCoreVisuals(canvasElement) {
     // 3. Renderer
     renderer = new THREE.WebGLRenderer({ canvas: canvasElement, antialias: true });
     renderer.setSize(canvasElement.clientWidth, canvasElement.clientHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setPixelRatio(displayPixelRatio());
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Soft shadow edges
+    // The scene is static apart from the ball, so re-rendering the shadow map
+    // every frame just reproduces the same result at the cost of a second full
+    // traversal. Refreshed explicitly via requestShadowUpdate().
+    renderer.shadowMap.autoUpdate = false;
+    renderer.shadowMap.needsUpdate = true;
     renderer.toneMapping = THREE.ACESFilmicToneMapping; // Filmic color response
-    renderer.toneMappingExposure = 1.15;
+    // Textures now decode from sRGB properly (see visuals/textures.js), so the
+    // renderer receives correct linear values instead of far-too-bright ones.
+    // Exposure comes back down to compensate.
+    renderer.toneMappingExposure = 1.0;
+    initTextureCaps(renderer);
 
     // 4. Lighting
-    // Lighting: modest ambient + sky/ground hemisphere for natural color,
-    // and a warm sun at a raking angle so terrain contours actually model.
+    // Sun-dominant rig: a strong warm key at a raking angle does the modelling,
+    // with a cool sky/ground hemisphere for bounce and only a trace of flat
+    // ambient. Before the colour-space fix the ambient had to be high to stop
+    // everything reading as mud; now that grass returns real values, the
+    // contrast can come from the sun where it belongs.
     // Keep the sun direction in sync with SHADE_SUN in holeRenderer.js.
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.28);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.12);
     scene.add(ambientLight);
 
-    const hemiLight = new THREE.HemisphereLight(0xbfdcff, 0x3f6b3f, 0.45);
+    const hemiLight = new THREE.HemisphereLight(0xbcd8ff, 0x4a7a46, 0.55);
     scene.add(hemiLight);
 
-    const directionalLight = new THREE.DirectionalLight(0xfff2dd, 1.0);
+    const directionalLight = new THREE.DirectionalLight(0xfff0d4, 2.1);
     directionalLight.position.set(60, 70, 25);
     directionalLight.castShadow = true;
-    directionalLight.shadow.mapSize.width = 1024;
-    directionalLight.shadow.mapSize.height = 1024;
+    // 2048² over a tight ±70m frustum ≈ 7cm per texel. The old 1024² spread
+    // over ±100m gave 19.5cm — every shadow in the game was a blurry blob.
+    directionalLight.shadow.mapSize.width = 2048;
+    directionalLight.shadow.mapSize.height = 2048;
     directionalLight.shadow.camera.near = 0.5;
-    directionalLight.shadow.camera.far = 500;
-    directionalLight.shadow.camera.left = -100;
-    directionalLight.shadow.camera.right = 100;
-    directionalLight.shadow.camera.top = 100;
-    directionalLight.shadow.camera.bottom = -100;
+    directionalLight.shadow.camera.far = 400;
+    directionalLight.shadow.camera.left = -70;
+    directionalLight.shadow.camera.right = 70;
+    directionalLight.shadow.camera.top = 70;
+    directionalLight.shadow.camera.bottom = -70;
+    directionalLight.shadow.bias = -0.0008;
+    directionalLight.shadow.normalBias = 0.02;
     scene.add(directionalLight);
+    scene.add(directionalLight.target);
+    sunLight = directionalLight;
 
     // 5. Ball (Common element)
     const textureLoader = new TextureLoader();
@@ -364,7 +440,7 @@ export function onWindowResize() {
     camera.aspect = newWidth / newHeight;
     camera.updateProjectionMatrix();
 
-    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setPixelRatio(displayPixelRatio());
     renderer.setSize(newWidth, newHeight, false);
 
     // Explicitly render the scene with the updated camera and renderer size
@@ -381,6 +457,15 @@ function animate(timestamp) {
 
     // --- Camera Update Logic ---
     updateCamera(timestamp); // Call camera update logic each frame
+
+    // --- Ambient motion ---
+    // Wind drives the grass (one shared shader uniform) and the flag cloth
+    // (21 vertices). Both are effectively free and both are what stop the
+    // course reading as a still life.
+    const timeSeconds = (timestamp || 0) / 1000;
+    updateWind(timeSeconds, getWind?.());
+    updateWater(timeSeconds);
+    updateFlagstick(camera, timeSeconds, getWindStrength());
 
     // --- Ball Flight Animation Logic (Time-Based) ---
     if (isBallAnimating) {
@@ -434,12 +519,12 @@ function animate(timestamp) {
                 isBallAnimating = false; // Stop animation on error
             }
 
-            // Update trajectory line draw range based on current point index
+            // Reveal the trace up to the ball. The tube emits TRACE_SIDES
+            // quads (6 indices each) per trajectory segment, where the old
+            // line had one vertex per point.
             if (trajectoryLine) {
-                const drawCount = Math.min(pointIndex + 2, currentTrajectoryPoints.length);
-                if (drawCount >= 0 && drawCount <= currentTrajectoryPoints.length) {
-                    trajectoryLine.geometry.setDrawRange(0, drawCount);
-                }
+                const segments = Math.min(pointIndex + 1, currentTrajectoryPoints.length - 1);
+                trajectoryLine.geometry.setDrawRange(0, Math.max(0, segments) * TRACE_SIDES * 6);
             }
         }
 
@@ -462,7 +547,7 @@ function animate(timestamp) {
                 // Draw the line to the end of the calculated trajectory.
                 // If holed out, currentTrajectoryPoints should already end at the hole.
                 if (currentTrajectoryPoints.length > 0) { // Ensure there are points to draw
-                    trajectoryLine.geometry.setDrawRange(0, currentTrajectoryPoints.length);
+                    trajectoryLine.geometry.setDrawRange(0, (currentTrajectoryPoints.length - 1) * TRACE_SIDES * 6);
                 } else {
                     trajectoryLine.geometry.setDrawRange(0, 0); // No points, draw nothing
                 }
@@ -478,9 +563,6 @@ function animate(timestamp) {
     // Determine which camera to use for rendering
     const activeRenderCamera = MeasurementView.isViewActive() ? MeasurementView.getCamera() : camera;
     if (activeRenderCamera) { // Ensure there's a camera to render with
-        // Add occasional debug logging
-        if (Math.random() < 0.001) { // Log ~once per second at 60fps
-        }
         renderer.render(scene, activeRenderCamera);
     } else {
         // This case should ideally not happen if MeasurementView.init ensures its camera is created
@@ -737,6 +819,44 @@ export function removeTrajectoryLine() {
 let ballHaloMesh = null;
 const BALL_HALO_LIFT = 0.008; // Above the surface's render layer, below the ball
 
+// Soft contact shadow under the ball. At 7cm per shadow-map texel the ball's
+// real shadow is smaller than a single texel, so it never appears — and the
+// halo ring reads as UI, not as lighting. This blob is what actually plants
+// the ball on the surface. One small quad with a generated radial-gradient
+// texture; no external asset, one draw call.
+let ballShadowMesh = null;
+
+function createBlobShadowTexture() {
+    const size = 64;
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    g.addColorStop(0, 'rgba(0,0,0,0.55)');
+    g.addColorStop(0.55, 'rgba(0,0,0,0.28)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+}
+
+function ensureBallShadow() {
+    if (ballShadowMesh || !scene) return;
+    const geom = new THREE.PlaneGeometry(1, 1);
+    geom.rotateX(-Math.PI / 2);
+    ballShadowMesh = new THREE.Mesh(geom, new THREE.MeshBasicMaterial({
+        map: createBlobShadowTexture(),
+        transparent: true,
+        depthWrite: false,
+    }));
+    ballShadowMesh.name = 'BallContactShadow';
+    ballShadowMesh.renderOrder = 19; // Under the halo ring (20) and chevron (21)
+    ballShadowMesh.visible = false;
+    scene.add(ballShadowMesh);
+}
+
 function ensureBallHalo() {
     if (ballHaloMesh || !scene) return;
     const geom = new THREE.RingGeometry(0.22, 0.34, 40);
@@ -759,6 +879,17 @@ const HALO_UP = new THREE.Vector3(0, 1, 0);
 
 export function setBallHalo(visible, x = 0, z = 0, surfaceLayerHeight = 0.06) {
     ensureBallHalo();
+    ensureBallShadow();
+    if (ballShadowMesh) {
+        ballShadowMesh.visible = visible;
+        if (visible) {
+            // Sized to the drawn ball (which is scaled up off the green), and
+            // offset slightly down-sun so it reads as cast rather than painted
+            const scale = BALL_RADIUS * (ball?.scale?.x ?? 1) * 5.5;
+            ballShadowMesh.scale.set(scale, 1, scale);
+            ballShadowMesh.position.set(x - 0.012, surfaceLayerHeight + 0.004, z - 0.005);
+        }
+    }
     if (!ballHaloMesh) return;
     ballHaloMesh.visible = visible;
     if (visible) {
@@ -902,6 +1033,10 @@ export function showBallAtAddress(position = null, surfaceType = null) {
     ball.position.copy(ballPos);
     ball.visible = true;
 
+    // The shadow frustum is tight for texel density, so it follows play.
+    // Address is the natural moment to re-centre and re-bake it.
+    focusShadowsOn(ballPos.x, ballPos.z);
+
     // Locator ring on every lie: surface render layer + terrain height.
     // The incoming position's y is terrain + BALL_RADIUS before display
     // offsets, so the terrain component is recoverable without imports.
@@ -951,10 +1086,12 @@ export function startBallAnimation(points, duration, onCompleteCallback = null, 
         const firstTime = points[0].time;
         const lastTime = points[points.length - 1].time;
 
-        const geometry = new THREE.BufferGeometry().setFromPoints(points);
-        const material = new THREE.LineBasicMaterial({ color: trajectoryColor, linewidth: 3 });
-        trajectoryLine = new THREE.Line(geometry, material);
-        trajectoryLine.geometry.setDrawRange(0, 0);
+        // A ribbon, not a line. LineBasicMaterial.linewidth is ignored by the
+        // WebGL renderer on every platform, so the old `linewidth: 3` drew a
+        // 1px hairline — nearly invisible against the sky on a phone. Two
+        // camera-facing triangles per segment give a real, readable arc for
+        // about the same cost, in one draw call.
+        trajectoryLine = createTrajectoryRibbon(points, trajectoryColor);
         scene.add(trajectoryLine);
 
         ballAnimationDuration = duration;
@@ -968,6 +1105,77 @@ export function startBallAnimation(points, duration, onCompleteCallback = null, 
     }
 }
 
+
+// Radial slices around the flight path. A TUBE rather than a camera-facing
+// ribbon: the camera changes mid-shot (the follow cam swings behind the ball,
+// and the player can orbit afterwards), and a strip oriented for one viewpoint
+// turns edge-on and disappears from the others. A tube has no preferred
+// viewing direction at all. 4 sides is enough at this thickness.
+const TRACE_SIDES = 4;
+const TRACE_RADIUS = 0.055; // Metres — reads as a clean line at 200m
+
+/**
+ * Builds the shot-trace tube. One draw call; ~8 triangles per trajectory
+ * segment, which is nothing against a scene already drawing 340k.
+ */
+function createTrajectoryRibbon(points, color) {
+    const n = points.length;
+    const positions = new Float32Array(n * TRACE_SIDES * 3);
+    const indices = new Uint32Array((n - 1) * TRACE_SIDES * 6);
+
+    const dir = new THREE.Vector3();
+    const up = new THREE.Vector3();
+    const right = new THREE.Vector3();
+    const WORLD_UP = new THREE.Vector3(0, 1, 0);
+    const ALT_UP = new THREE.Vector3(1, 0, 0);
+
+    for (let i = 0; i < n; i++) {
+        const p = points[i];
+        const q = points[Math.min(i + 1, n - 1)];
+        const r = points[Math.max(i - 1, 0)];
+        dir.set(q.x - r.x, q.y - r.y, q.z - r.z);
+        if (dir.lengthSq() === 0) dir.set(0, 0, 1);
+        dir.normalize();
+
+        // Frame perpendicular to the flight direction. Swap the reference up
+        // when the path is near-vertical, or the cross product degenerates.
+        const ref = Math.abs(dir.y) > 0.95 ? ALT_UP : WORLD_UP;
+        right.crossVectors(dir, ref).normalize();
+        up.crossVectors(right, dir).normalize();
+
+        for (let s = 0; s < TRACE_SIDES; s++) {
+            const a = (s / TRACE_SIDES) * Math.PI * 2;
+            const ca = Math.cos(a) * TRACE_RADIUS, sa = Math.sin(a) * TRACE_RADIUS;
+            const o = (i * TRACE_SIDES + s) * 3;
+            positions[o] = p.x + right.x * ca + up.x * sa;
+            positions[o + 1] = p.y + right.y * ca + up.y * sa;
+            positions[o + 2] = p.z + right.z * ca + up.z * sa;
+        }
+    }
+
+    let k = 0;
+    for (let i = 0; i < n - 1; i++) {
+        for (let s = 0; s < TRACE_SIDES; s++) {
+            const s2 = (s + 1) % TRACE_SIDES;
+            const a = i * TRACE_SIDES + s, b = i * TRACE_SIDES + s2;
+            const c = (i + 1) * TRACE_SIDES + s, d = (i + 1) * TRACE_SIDES + s2;
+            indices[k++] = a; indices[k++] = c; indices[k++] = b;
+            indices[k++] = b; indices[k++] = c; indices[k++] = d;
+        }
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+    geometry.setDrawRange(0, 0);
+    geometry.computeBoundingSphere();
+
+    const material = new THREE.MeshBasicMaterial({ color, toneMapped: false });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.name = 'TrajectoryTrace';
+    mesh.frustumCulled = false;
+    return mesh;
+}
 
 export function resetCoreVisuals() {
      if (!scene) return; // Guard against uninitialized scene

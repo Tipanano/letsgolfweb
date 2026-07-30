@@ -11,25 +11,27 @@ import { createNoise2D } from 'https://esm.sh/simplex-noise';
 import { getSurfaceTypeAtPoint } from '../utils/gameUtils.js';
 import { heightAt as contourHeightAt } from '../greenContours.js';
 import { SURFACES } from '../surfaces.js';
+import { WIND_GLSL_COMMON, bindWindUniforms } from './wind.js';
 
 // Per-surface tuft styling. density = tufts per m².
 const GRASS_STYLES = {
     lightRough: {
         surfaceKey: 'LIGHT_ROUGH', density: 0.35, minH: 0.09, maxH: 0.16,
-        colors: ['#4e8a44', '#5f9c4e', '#457a3e'], patchNoise: null,
+        colors: ['#4e8a44', '#5f9c4e', '#457a3e'], patchNoise: null, sway: 0.05,
     },
     mediumRough: {
         surfaceKey: 'MEDIUM_ROUGH', density: 1.1, minH: 0.14, maxH: 0.26,
-        colors: ['#41763a', '#528a46', '#39682f'], patchNoise: null,
+        colors: ['#41763a', '#528a46', '#39682f'], patchNoise: null, sway: 0.09,
     },
     thickRough: {
         surfaceKey: 'THICK_ROUGH', density: 2.2, minH: 0.22, maxH: 0.4,
-        colors: ['#35622f', '#417538', '#2c5427'], patchNoise: null,
+        colors: ['#35622f', '#417538', '#2c5427'], patchNoise: null, sway: 0.14,
     },
     nativeAreas: {
         surfaceKey: 'NATIVE_AREA', density: 3.0, minH: 0.35, maxH: 0.75,
         colors: ['#b89d4f', '#c9b160', '#a98f45', '#d3bf78'],
         patchNoise: { scale: 0.12, threshold: -0.15 }, // Clumpy patches
+        sway: 0.22, // Tall wispy stuff moves most
     },
 };
 
@@ -39,11 +41,54 @@ const OOB_SCRUB_STYLE = {
     surfaceKey: 'OUT_OF_BOUNDS', density: 0.12, minH: 0.25, maxH: 0.55,
     colors: ['#6b7a45', '#7d8a4f', '#5a683c'],
     patchNoise: { scale: 0.06, threshold: 0.05 },
+    sway: 0.16,
     rootY: -0.9, // Offset below local terrain — matches the draped earth plane (see core.js)
 };
 
 const MAX_TUFTS_PER_TYPE = 14000;
 const BLADES_PER_TUFT = 5;
+
+// --- Wind ---------------------------------------------------------------
+// The tuft field was completely static, which is the single thing that made
+// it read as scenery rather than grass. Sway is injected into the stock
+// Lambert vertex shader via onBeforeCompile, driven by the shared wind state
+// (visuals/wind.js) so grass, tree canopies and the flag all answer to the
+// real in-game wind — same direction, same gusts.
+//
+// Displacement scales with the vertex's local Y, so roots stay planted and
+// only tips move. One shared uniform updated once per frame; the GPU cost is
+// a handful of ALU ops on geometry already being transformed.
+
+// Distance beyond which tufts scale to nothing, so the field has no hard
+// "carpet edge" — and distant tufts stop costing fragments. One draw call
+// either way.
+const FADE_START = 55.0;
+const FADE_END = 95.0;
+
+/** Patches a Lambert material with tip sway and distance fade. */
+function applyWindShader(material, swayAmount) {
+    material.onBeforeCompile = (shader) => {
+        bindWindUniforms(shader);
+        shader.vertexShader = shader.vertexShader
+            .replace('#include <common>', `#include <common>\n${WIND_GLSL_COMMON}`)
+            .replace('#include <begin_vertex>', `
+                #include <begin_vertex>
+                // World position of this instance's root, for phase and range
+                vec4 rootWorld = modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+
+                // Fade out with distance: collapse the tuft toward its root
+                float dist = length(cameraPosition - rootWorld.xyz);
+                float fade = 1.0 - smoothstep(${FADE_START.toFixed(1)}, ${FADE_END.toFixed(1)}, dist);
+                transformed *= fade;
+
+                // position.y is 0 at the root and 1 at the blade tip
+                float lever = position.y * position.y;
+                transformed += windSway(rootWorld.xyz, lever, ${swayAmount.toFixed(3)});
+            `);
+    };
+    // Distinct key or three reuses one compiled program for every sway value
+    material.customProgramCacheKey = () => `grass_${swayAmount.toFixed(3)}`;
+}
 
 /** One unit-height tuft: BLADES_PER_TUFT thin leaning triangles. */
 function createTuftGeometry() {
@@ -141,8 +186,15 @@ export function buildGrass(holeLayout, scene, objectsArray) {
         if (placements.length === 0) continue;
 
         const material = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide });
+        // Taller grass sways further; native-area wisps move most of all
+        applyWindShader(material, style.sway ?? 0.12);
         const mesh = new THREE.InstancedMesh(tuftGeom, material, placements.length);
-        mesh.receiveShadow = true;
+        // Deliberately no receiveShadow: a shadow-map sample per fragment
+        // across tens of thousands of 0.1–0.4m blades buys almost nothing.
+        mesh.receiveShadow = false;
+        // The wind shader displaces vertices, so three's bounds are a slight
+        // underestimate; frustum culling on a field this wide would pop.
+        mesh.frustumCulled = false;
 
         for (let i = 0; i < placements.length; i++) {
             const p = placements[i];
