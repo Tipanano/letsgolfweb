@@ -519,11 +519,12 @@ function animate(timestamp) {
                 isBallAnimating = false; // Stop animation on error
             }
 
-            // Reveal the ribbon up to the ball: 6 indices (2 triangles) per
-            // trajectory segment, versus 1 vertex per point for the old line
+            // Reveal the trace up to the ball. The tube emits TRACE_SIDES
+            // quads (6 indices each) per trajectory segment, where the old
+            // line had one vertex per point.
             if (trajectoryLine) {
                 const segments = Math.min(pointIndex + 1, currentTrajectoryPoints.length - 1);
-                trajectoryLine.geometry.setDrawRange(0, Math.max(0, segments) * 6);
+                trajectoryLine.geometry.setDrawRange(0, Math.max(0, segments) * TRACE_SIDES * 6);
             }
         }
 
@@ -546,7 +547,7 @@ function animate(timestamp) {
                 // Draw the line to the end of the calculated trajectory.
                 // If holed out, currentTrajectoryPoints should already end at the hole.
                 if (currentTrajectoryPoints.length > 0) { // Ensure there are points to draw
-                    trajectoryLine.geometry.setDrawRange(0, currentTrajectoryPoints.length);
+                    trajectoryLine.geometry.setDrawRange(0, (currentTrajectoryPoints.length - 1) * TRACE_SIDES * 6);
                 } else {
                     trajectoryLine.geometry.setDrawRange(0, 0); // No points, draw nothing
                 }
@@ -1089,19 +1090,28 @@ export function startBallAnimation(points, duration, onCompleteCallback = null, 
 }
 
 
+// Radial slices around the flight path. A TUBE rather than a camera-facing
+// ribbon: the camera changes mid-shot (the follow cam swings behind the ball,
+// and the player can orbit afterwards), and a strip oriented for one viewpoint
+// turns edge-on and disappears from the others. A tube has no preferred
+// viewing direction at all. 4 sides is enough at this thickness.
+const TRACE_SIDES = 4;
+const TRACE_RADIUS = 0.055; // Metres — reads as a clean line at 200m
+
 /**
- * Builds the shot-trace ribbon: a flat strip that always presents its face to
- * the camera, widened in the plane perpendicular to both the flight direction
- * and the view. Width is in metres and grows a little with height so the apex
- * of a long carry stays as readable as the start of it.
+ * Builds the shot-trace tube. One draw call; ~8 triangles per trajectory
+ * segment, which is nothing against a scene already drawing 340k.
  */
 function createTrajectoryRibbon(points, color) {
     const n = points.length;
-    const positions = new Float32Array(n * 2 * 3);
-    const indices = new Uint32Array((n - 1) * 6);
+    const positions = new Float32Array(n * TRACE_SIDES * 3);
+    const indices = new Uint32Array((n - 1) * TRACE_SIDES * 6);
+
     const dir = new THREE.Vector3();
-    const side = new THREE.Vector3();
-    const toCam = new THREE.Vector3();
+    const up = new THREE.Vector3();
+    const right = new THREE.Vector3();
+    const WORLD_UP = new THREE.Vector3(0, 1, 0);
+    const ALT_UP = new THREE.Vector3(1, 0, 0);
 
     for (let i = 0; i < n; i++) {
         const p = points[i];
@@ -1111,24 +1121,31 @@ function createTrajectoryRibbon(points, color) {
         if (dir.lengthSq() === 0) dir.set(0, 0, 1);
         dir.normalize();
 
-        toCam.set(camera.position.x - p.x, camera.position.y - p.y, camera.position.z - p.z).normalize();
-        side.crossVectors(dir, toCam);
-        if (side.lengthSq() < 1e-8) side.set(1, 0, 0); // Looking straight down the flight line
-        side.normalize();
+        // Frame perpendicular to the flight direction. Swap the reference up
+        // when the path is near-vertical, or the cross product degenerates.
+        const ref = Math.abs(dir.y) > 0.95 ? ALT_UP : WORLD_UP;
+        right.crossVectors(dir, ref).normalize();
+        up.crossVectors(right, dir).normalize();
 
-        // 6cm base, opening out with altitude so the apex doesn't thin away
-        const halfWidth = 0.03 + Math.min(0.09, p.y * 0.004);
-        positions[i * 6] = p.x - side.x * halfWidth;
-        positions[i * 6 + 1] = p.y - side.y * halfWidth;
-        positions[i * 6 + 2] = p.z - side.z * halfWidth;
-        positions[i * 6 + 3] = p.x + side.x * halfWidth;
-        positions[i * 6 + 4] = p.y + side.y * halfWidth;
-        positions[i * 6 + 5] = p.z + side.z * halfWidth;
+        for (let s = 0; s < TRACE_SIDES; s++) {
+            const a = (s / TRACE_SIDES) * Math.PI * 2;
+            const ca = Math.cos(a) * TRACE_RADIUS, sa = Math.sin(a) * TRACE_RADIUS;
+            const o = (i * TRACE_SIDES + s) * 3;
+            positions[o] = p.x + right.x * ca + up.x * sa;
+            positions[o + 1] = p.y + right.y * ca + up.y * sa;
+            positions[o + 2] = p.z + right.z * ca + up.z * sa;
+        }
     }
 
+    let k = 0;
     for (let i = 0; i < n - 1; i++) {
-        const a = i * 2, b = a + 1, c = a + 2, d = a + 3;
-        indices.set([a, b, c, b, d, c], i * 6);
+        for (let s = 0; s < TRACE_SIDES; s++) {
+            const s2 = (s + 1) % TRACE_SIDES;
+            const a = i * TRACE_SIDES + s, b = i * TRACE_SIDES + s2;
+            const c = (i + 1) * TRACE_SIDES + s, d = (i + 1) * TRACE_SIDES + s2;
+            indices[k++] = a; indices[k++] = c; indices[k++] = b;
+            indices[k++] = b; indices[k++] = c; indices[k++] = d;
+        }
     }
 
     const geometry = new THREE.BufferGeometry();
@@ -1137,15 +1154,9 @@ function createTrajectoryRibbon(points, color) {
     geometry.setDrawRange(0, 0);
     geometry.computeBoundingSphere();
 
-    const material = new THREE.MeshBasicMaterial({
-        color,
-        side: THREE.DoubleSide,
-        transparent: true,
-        opacity: 0.85,
-        depthWrite: false,
-    });
+    const material = new THREE.MeshBasicMaterial({ color, toneMapped: false });
     const mesh = new THREE.Mesh(geometry, material);
-    mesh.name = 'TrajectoryRibbon';
+    mesh.name = 'TrajectoryTrace';
     mesh.frustumCulled = false;
     return mesh;
 }

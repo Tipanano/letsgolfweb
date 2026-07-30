@@ -131,7 +131,7 @@ export const SURFACES = {
   },
   NATIVE_AREA: {
     name: 'Native Area',
-    color: '#a9945a', // Golden wild grass base
+    color: '#bfa96e', // Pale golden fescue — the tufts on top carry the detail
     bounce: 0.07, // Tall grass swallows the bounce
     rollOut: 0.12, // Barely rolls
     spinResponse: 0.25,
