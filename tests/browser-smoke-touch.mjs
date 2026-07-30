@@ -100,6 +100,37 @@ const setupPhase = await page.evaluate(() => ({
 if (!setupPhase.setup || !setupPhase.zoneHidden) fail(`setup phase wrong: ${JSON.stringify(setupPhase)}`);
 await page.screenshot({ path: OUT + 'shot-touch-setup.png' });
 
+// Double-tap on the scene (setup phase) sets the aim toward that spot.
+// setShotDirectionAngle stores the ABSOLUTE target line (relative resets
+// to 0), so assert on getCurrentTargetLineAngle.
+const aimBefore = await page.evaluate(async () => {
+    const s = await import('./src/gameLogic/state.js');
+    return s.getCurrentTargetLineAngle();
+});
+// Two taps at human speed: playwright's per-tap roundtrip (~1 s here)
+// blows the 400 ms double-tap window, so dispatch TouchEvents in-page.
+await page.evaluate(() => {
+    const c = document.getElementById('golf-canvas');
+    const mk = (type, x, y) => {
+        const touch = new Touch({ identifier: 1, target: c, clientX: x, clientY: y });
+        c.dispatchEvent(new TouchEvent(type, {
+            touches: type === 'touchend' ? [] : [touch],
+            changedTouches: [touch], bubbles: true, cancelable: true,
+        }));
+    };
+    const tap = () => { mk('touchstart', 700, 300); mk('touchend', 700, 300); };
+    // Back-to-back: this sandbox throttles timers far past the 400 ms
+    // double-tap window, so the two taps land in the same tick.
+    tap(); tap(); // open ground, clear of panels/pills/chips
+});
+await sleep(500);
+const aimAfter = await page.evaluate(async () => {
+    const s = await import('./src/gameLogic/state.js');
+    return s.getCurrentTargetLineAngle();
+});
+if (aimAfter === aimBefore) fail(`double-tap did not set aim (still ${aimAfter})`);
+console.log(`double-tap aim: target line ${aimBefore.toFixed(1)}° → ${aimAfter.toFixed(1)}°`);
+
 await tapZone('tc-address');
 await sleep(200);
 const addressPhase = await page.evaluate(() => ({

@@ -34,7 +34,10 @@ import {
     getRotationStartTime, getArmsStartTime, getWristsStartTime,
 } from './gameLogic/state.js';
 import { isSlopeOverlayVisible } from './visuals/slopeOverlay.js';
-import { isFreeCameraActive, toggleFreeCamera, freeCamNudge, freeCamLook, camera } from './visuals/core.js';
+import { isFreeCameraActive, toggleFreeCamera, freeCamNudge, freeCamLook, camera, ball, applyAimAngleToCamera } from './visuals/core.js';
+import { setShotDirectionAngle } from './gameLogic/state.js';
+import { updateStatus } from './ui.js';
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
 
 let overlayEl = null;
 let updateTimer = null;
@@ -250,6 +253,10 @@ function injectStyles() {
             -webkit-overflow-scrolling: touch;
         }
         body.touch-active #fullscreen-controls::-webkit-scrollbar { display: none; }
+        /* The chip row spans the width; its empty space must not eat taps
+           meant for the scene (double-tap aim, camera gestures) */
+        body.touch-active #fullscreen-controls { pointer-events: none; }
+        body.touch-active #fullscreen-controls .fs-control-btn { pointer-events: auto; }
         body.touch-active .fs-control-btn {
             min-width: auto;
             flex: 0 0 auto;
@@ -459,6 +466,29 @@ function setAddressMode(on) {
 }
 
 /**
+ * Sets the aim toward the world point under a screen tap: raycast through
+ * the camera onto the ball's ground plane, then the same math as the
+ * keyboard's aim-at-flag ('h'). Works from any fly-over angle.
+ */
+function aimAtScreenPoint(sx, sy) {
+    if (!camera || !ball) return;
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(new THREE.Vector2(
+        (sx / window.innerWidth) * 2 - 1,
+        -(sy / window.innerHeight) * 2 + 1), camera);
+    const { origin, direction } = raycaster.ray;
+    const t = (ball.position.y - origin.y) / direction.y;
+    if (!isFinite(t) || t <= 0) return; // tap didn't hit the ground
+    const dx = origin.x + direction.x * t - ball.position.x;
+    const dz = origin.z + direction.z * t - ball.position.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist < 2) return; // tapped the ball itself
+    setShotDirectionAngle(Math.atan2(dx, dz) * (180 / Math.PI));
+    applyAimAngleToCamera();
+    updateStatus(`🎯 Aiming at that spot — ${dist.toFixed(0)} m out`);
+}
+
+/**
  * Camera touch gestures on the canvas.
  *   One finger drag — rotate the view: synthesized mouse-drag (the same
  *     path desktop uses: horizontal = aim/rotate, vertical = height), or
@@ -487,6 +517,7 @@ function initCameraGestures() {
     let twoFinger = false;
     let lastCx = 0, lastCy = 0, lastDist = 0;
     let oneFinger = null; // { x, y, dragging } — drag begins past a small threshold
+    let lastTap = { t: 0, x: 0, y: 0 }; // for double-tap-to-aim
     const measure = (e) => ({
         cx: (e.touches[0].clientX + e.touches[1].clientX) / 2,
         cy: (e.touches[0].clientY + e.touches[1].clientY) / 2,
@@ -553,7 +584,24 @@ function initCameraGestures() {
 
     const end = (e) => {
         if (!e.touches || e.touches.length < 2) twoFinger = false;
-        if (!e.touches || e.touches.length === 0) endOneFinger();
+        if (!e.touches || e.touches.length === 0) {
+            // A clean tap (no drag): double-tap in setup sets the aim — a
+            // deliberate two-tap commit so a stray touch never re-aims.
+            if (oneFinger && !oneFinger.dragging) {
+                const now = performance.now();
+                const isDouble = now - lastTap.t < 400 &&
+                    Math.hypot(oneFinger.x - lastTap.x, oneFinger.y - lastTap.y) < 40;
+                if (isDouble) {
+                    if (inSetup() && getGameState() === 'ready') {
+                        aimAtScreenPoint(oneFinger.x, oneFinger.y);
+                    }
+                    lastTap = { t: 0, x: 0, y: 0 };
+                } else {
+                    lastTap = { t: now, x: oneFinger.x, y: oneFinger.y };
+                }
+            }
+            endOneFinger();
+        }
     };
     canvas.addEventListener('touchend', end);
     canvas.addEventListener('touchcancel', end);
