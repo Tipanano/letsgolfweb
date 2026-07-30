@@ -33,6 +33,7 @@ import {
     getHipInitiationTime, getRotationInitiationTime,
     getRotationStartTime, getArmsStartTime, getWristsStartTime,
 } from './gameLogic/state.js';
+import { isSlopeOverlayVisible } from './visuals/slopeOverlay.js';
 
 let overlayEl = null;
 let updateTimer = null;
@@ -113,7 +114,9 @@ function injectStyles() {
             -webkit-tap-highlight-color: transparent;
         }
         .tc-mini.pressed { background: rgba(125, 255, 160, 0.4); }
+        .tc-mini.tc-on { background: rgba(125, 255, 160, 0.35); border-color: #7dffa0; }
         #tc-cam { left: 8px; }
+        #tc-slope { left: 60px; }
         /* Aim: vertical pills at mid-edge — where thumbs rest, and tapping
            the left edge aims left. Available in BOTH phases (aiming is a
            setup decision too); hold to keep turning. */
@@ -472,6 +475,8 @@ function updateZones() {
     // Bottom pill follows context: address the ball, or advance after a shot
     els.address.textContent = state === 'result' ? 'NEXT  ᐅ' : '⛳ ADDRESS BALL';
 
+    if (els.slope) els.slope.classList.toggle('tc-on', isSlopeOverlayVisible());
+
     const full = getCurrentShotType() === 'full';
     if (full !== els.lastFull) {
         els.lastFull = full;
@@ -506,6 +511,7 @@ export function initTouchControls() {
         cameraIdx = (cameraIdx + 1) % 4;
         sendKey('keydown', String(cameraIdx + 1));
     });
+    els.slope = makeMini('tc-slope', '⛰', () => sendKey('keydown', 'g'));
 
     // Context pill: ADDRESS BALL when ready, NEXT after a shot resolves
     const addressBtn = document.createElement('div');
