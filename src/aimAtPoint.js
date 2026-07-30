@@ -42,9 +42,18 @@ export function aimAtScreenPoint(sx, sy) {
     if (!camera || !ball) return;
     const canvas = document.getElementById('golf-canvas');
     const rect = canvas ? canvas.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+    let ndcX = ((sx - rect.left) / rect.width) * 2 - 1;
+    // The canvas is DISPLAYED horizontally mirrored (style.css scaleX(-1)),
+    // so a tap's screen-x is the mirror of the render-space x the raycaster
+    // needs. Read the live transform rather than assuming, so this keeps
+    // working if the CSS flip is ever removed. (Same fix as measurementView.)
+    if (canvas) {
+        const tf = getComputedStyle(canvas).transform;
+        if (tf && tf !== 'none' && new DOMMatrix(tf).a < 0) ndcX = -ndcX;
+    }
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(new THREE.Vector2(
-        ((sx - rect.left) / rect.width) * 2 - 1,
+        ndcX,
         -((sy - rect.top) / rect.height) * 2 + 1), camera);
     const { origin, direction } = raycaster.ray;
 
