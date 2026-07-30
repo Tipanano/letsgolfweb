@@ -737,7 +737,9 @@ export function initTouchControls() {
     // Thumbs can't drum +50/+100/+250 ms like home-row fingers: stretch the
     // downswing ideal offsets to humanly drummable times. Precision (deg/ms
     // sensitivity) is unchanged — the swing stays hard, just fair.
-    setDownswingTimingStretch(1.75);
+    // Everything downstream (targets, windows, bar/arc clock, auto-fire,
+    // markers) derives from this one value.
+    setDownswingTimingStretch(1.5);
     overlayEl = document.createElement('div');
     overlayEl.id = 'touch-controls';
     overlayEl.classList.add('setup');
