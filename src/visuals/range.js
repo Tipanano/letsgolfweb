@@ -7,7 +7,8 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
 import { TextureLoader } from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
 import { SURFACES } from '../surfaces.js';
-import { renderRoughAreas, renderFairways, renderGreen, renderBunkers } from './holeRenderer.js';
+import { renderRoughAreas, renderFairways, renderGreen, renderBunkers, setMowPattern, setBunkerRims } from './holeRenderer.js';
+import { disposeSceneObject } from './textures.js';
 import { buildGrass } from './grass.js';
 import { setTerrainFromLayout } from '../greenContours.js';
 import { updateEarthTerrain } from './core.js';
@@ -132,6 +133,9 @@ export function initRangeVisuals(scene) {
     updateEarthTerrain();
     const textureLoader = new TextureLoader();
 
+    setMowPattern(7); // Fixed mow direction — the range is always the same place
+    setBunkerRims(layout.bunkers);
+
     renderRoughAreas(layout, scene, textureLoader, rangeObjects);
     renderBunkers(layout, scene, textureLoader, rangeObjects);
     renderFairways(layout, scene, textureLoader, rangeObjects);
@@ -144,18 +148,9 @@ export function initRangeVisuals(scene) {
 export function removeRangeVisuals(scene) {
     for (const obj of rangeObjects) {
         scene.remove(obj);
-        obj.traverse?.(child => {
-            child.geometry?.dispose?.();
-            if (child.material) {
-                (Array.isArray(child.material) ? child.material : [child.material])
-                    .forEach(m => { m.map?.dispose?.(); m.dispose?.(); });
-            }
-        });
-        obj.geometry?.dispose?.();
-        if (obj.material) {
-            (Array.isArray(obj.material) ? obj.material : [obj.material])
-                .forEach(m => { m.map?.dispose?.(); m.dispose?.(); });
-        }
+        // Frees geometry and per-object materials/maps, but skips anything
+        // owned by the shared surface registry — those outlive every mode.
+        disposeSceneObject(obj);
     }
     rangeObjects = [];
 }

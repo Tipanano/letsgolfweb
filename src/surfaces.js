@@ -18,6 +18,8 @@ export const SURFACES = {
       thinForgiveness: 1.0  // Same as fairway
     },
     height: 0.075, // Layer height: above green
+    texturePath: 'assets/textures/fairway.png',
+    uvScale: 2.5, // Tee decks are mown tightest of all
     ballLieOffset: 0.05 // Small lift; the tee peg height is added on top (tuned for 3.5x ball)
   },
   GREEN: {
@@ -38,7 +40,8 @@ export const SURFACES = {
       thinForgiveness: 0.7  // Very tight lie - easier to thin
     },
     height: 0.06, // Layer height: above fairway
-    texturePath: 'assets/textures/green.png', // Added texture path
+    texturePath: 'assets/textures/green.png',
+    uvScale: 3.0, // Metres of ground per texture tile (world-space UVs)
     ballLieOffset: 0.06 // Display offset = green layer height, so the ball sits ON the rendered green
   },
   FAIRWAY: {
@@ -59,7 +62,8 @@ export const SURFACES = {
       thinForgiveness: 1.0  // Baseline
     },
     height: 0.045, // Layer height: above rough and water
-    texturePath: 'assets/textures/fairway.png', // Added texture path
+    texturePath: 'assets/textures/fairway.png',
+    uvScale: 5.0,
     ballLieOffset: 0.09 // Ball sits slightly into the grass (tuned for 3.5x ball on 0.045 layer)
   },
   LIGHT_ROUGH: {
@@ -79,7 +83,8 @@ export const SURFACES = {
       thinForgiveness: 1.1  // Ball sits up a bit - easier to get under
     },
     height: 0.01, // Layer height: above base ground, below all playing surfaces
-    texturePath: 'assets/textures/rough.png', // Added texture path
+    texturePath: 'assets/textures/rough.png',
+    uvScale: 4.0,
     ballLieOffset: 0.02 // Sits down in the grass (~70% of ball visible)
   },
   MEDIUM_ROUGH: {
@@ -99,7 +104,8 @@ export const SURFACES = {
       thinForgiveness: 1.3  // Ball sits up more - easier to get under, harder to thin
     },
     height: 0.02, // Layer height: above light rough
-    texturePath: 'assets/textures/rough.png', // Added texture path
+    texturePath: 'assets/textures/rough.png',
+    uvScale: 3.5,
     ballLieOffset: 0.0 // Half hidden - center sits at the grass top
   },
   THICK_ROUGH: {
@@ -119,7 +125,8 @@ export const SURFACES = {
       thinForgiveness: 1.5  // Ball sits well up - much easier to get under, harder to thin
     },
     height: 0.03, // Layer height: above medium rough
-    texturePath: 'assets/textures/rough.png', // Added texture path
+    texturePath: 'assets/textures/rough.png',
+    uvScale: 3.0,
     ballLieOffset: -0.02 // Almost hidden - only the crown pokes out
   },
   NATIVE_AREA: {
@@ -157,7 +164,8 @@ export const SURFACES = {
       thinForgiveness: 0.8  // Less forgiving of thin - ball sits down, easier to blade
     },
     height: 0.09, // Layer height: highest (bunkers overlap rough/fairway)
-    texturePath: 'assets/textures/bunker.png', // Added texture path
+    texturePath: 'assets/textures/bunker.png',
+    uvScale: 4.0,
     ballLieOffset: 0.08 // Settled into the sand (~60% visible)
   },
   WATER: {

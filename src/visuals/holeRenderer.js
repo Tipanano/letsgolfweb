@@ -5,6 +5,7 @@ import { TextureLoader } from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/
 import { createNoise2D } from 'https://esm.sh/simplex-noise';
 import earcut from 'https://cdn.skypack.dev/earcut@2.2.4';
 import { heightAt as contourHeightAt, gradientAt as contourGradientAt, hasContour, isNearContour, isNearFineFeature, bankLevelAt, getWaterSheets, WATER_SURFACE_Y } from '../greenContours.js';
+import { getSurfaceMaterial } from './textures.js';
 
 // Baked hillshade for contoured ground: the scene's high ambient light washes
 // out real shading, so slope readability is painted into vertex colors —
@@ -100,6 +101,44 @@ function adaptiveSubdivideForContour(positions, indices, fixedBudgetSq = null) {
 }
 
 /**
+ * Forces every triangle to wind so its geometric normal points UP (+Y).
+ *
+ * Ring winding can't do this job: earcut normalizes its output orientation, so
+ * reversing the input polygon changes nothing. With the (x → x, z → z) mapping
+ * used here that fixed orientation comes out facing DOWN, so the indices have
+ * to be flipped after the fact.
+ *
+ * This never mattered while every surface used DoubleSide — three flips the
+ * normal for back faces, which hid both the wrong orientation and the wrong
+ * lighting that came with it. Under front-face culling a down-facing ground
+ * polygon simply vanishes, leaving the bare earth backdrop showing through.
+ *
+ * Measured from the mesh itself rather than assumed, so an earcut version that
+ * changes its convention can't silently invert the whole course.
+ */
+function orientTrianglesUp(positions, triangles) {
+    for (let t = 0; t < triangles.length; t += 3) {
+        const ia = triangles[t] * 3, ib = triangles[t + 1] * 3, ic = triangles[t + 2] * 3;
+        // Cross product's Y component for this triangle, in the XZ plane
+        const abx = positions[ib] - positions[ia], abz = positions[ib + 2] - positions[ia + 2];
+        const acx = positions[ic] - positions[ia], acz = positions[ic + 2] - positions[ia + 2];
+        const ny = abz * acx - abx * acz;
+        if (ny === 0) continue; // Degenerate sliver — no orientation to read
+        if (ny < 0) {
+            // Flip the whole set to match the first triangle that has an
+            // opinion; earcut is internally consistent, so one probe is enough.
+            for (let k = 0; k < triangles.length; k += 3) {
+                const tmp = triangles[k + 1];
+                triangles[k + 1] = triangles[k + 2];
+                triangles[k + 2] = tmp;
+            }
+        }
+        return triangles;
+    }
+    return triangles;
+}
+
+/**
  * Triangulates a polygon with optional height data on vertices
  * @param {Array} vertices - Array of {x, y?, z} vertices
  * @returns {Object} - {positions: Float32Array, indices: Uint16Array/Uint32Array}
@@ -130,6 +169,9 @@ function triangulatePolygonWithHeights(vertices, heightOffset = 0) {
         positions[i * 3 + 2] = vertices[i].z;
     }
 
+    // Ground must face up, or front-face culling removes it entirely
+    orientTrianglesUp(positions, triangles);
+
     // Convert triangles to appropriate typed array
     const indices = vertices.length > 65535
         ? new Uint32Array(triangles)
@@ -144,7 +186,7 @@ function triangulatePolygonWithHeights(vertices, heightOffset = 0) {
  * @param {Uint16Array|Uint32Array} indices
  * @returns {THREE.BufferGeometry}
  */
-function createGeometryFromTriangulation(positions, indices) {
+function createGeometryFromTriangulation(positions, indices, uvScale = 4.0) {
     const geometry = new THREE.BufferGeometry();
 
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -153,27 +195,120 @@ function createGeometryFromTriangulation(positions, indices) {
     // Compute normals for lighting
     geometry.computeVertexNormals();
 
-    // Compute bounding box for UVs
-    geometry.computeBoundingBox();
-    const bbox = geometry.boundingBox;
-
-    // Generate UVs based on XZ plane (top-down)
+    // WORLD-SPACE UVs: uvScale is metres of ground per texture tile, so grass
+    // is the same physical size on a 15m bunker and a 300m rough. The old
+    // bounding-box normalization + fixed texture.repeat meant tile size scaled
+    // with the polygon — a huge rough got 30m grass blades and visible
+    // stretching, a small one got 2m. It also let one shared texture instance
+    // serve every polygon, since repeat can now stay at (1, 1).
     const uvs = new Float32Array((positions.length / 3) * 2);
-    const sizeX = bbox.max.x - bbox.min.x;
-    const sizeZ = bbox.max.z - bbox.min.z;
-
-    if (sizeX > 0 && sizeZ > 0) {
-        for (let i = 0; i < positions.length / 3; i++) {
-            const x = positions[i * 3];
-            const z = positions[i * 3 + 2];
-            uvs[i * 2] = (x - bbox.min.x) / sizeX;
-            uvs[i * 2 + 1] = (z - bbox.min.z) / sizeZ;
-        }
+    const inv = 1 / uvScale;
+    for (let i = 0; i < positions.length / 3; i++) {
+        uvs[i * 2] = positions[i * 3] * inv;
+        uvs[i * 2 + 1] = positions[i * 3 + 2] * inv;
     }
 
     geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+    geometry.computeBoundingBox();
 
     return geometry;
+}
+
+// --- Mow patterns ------------------------------------------------------
+// Real golf reads as golf largely because of mow stripes. The vertex-colour
+// attribute already exists on these meshes and is already written per-vertex,
+// so banding costs nothing: no extra attribute, no shader change, no draw call.
+const STRIPE_WIDTH_M = { Green: 3.2, Fairway: 7.0, 'Tee Box': 2.4 };
+const STRIPE_CONTRAST = { Green: 0.05, Fairway: 0.055, 'Tee Box': 0.05 };
+
+// Mow direction, set per hole so all 18 don't look stamped from one template.
+let stripeAngle = 0;
+
+/** Seeds the mow direction for a hole (any stable per-hole number works). */
+export function setMowPattern(seed = 0) {
+    // Irrational multiplier keeps consecutive holes far apart in angle
+    stripeAngle = ((seed * 0.6180339887) % 1) * Math.PI;
+}
+
+/**
+ * Brightness multiplier for the mow band at x,z, or 1 for unmown surfaces.
+ * Greens are cut across the fairway's direction, the way they usually are.
+ */
+function mowFactor(surfaceName, x, z) {
+    const width = STRIPE_WIDTH_M[surfaceName];
+    if (!width) return 1;
+    const angle = surfaceName === 'Green' ? stripeAngle + Math.PI / 2 : stripeAngle;
+    const along = x * Math.cos(angle) + z * Math.sin(angle);
+    const band = Math.floor(along / width);
+    const contrast = STRIPE_CONTRAST[surfaceName] ?? 0.05;
+    // Soften the seam so bands read as mown grass, not painted stripes
+    const frac = along / width - band;
+    const edge = Math.min(1, Math.min(frac, 1 - frac) * 8);
+    return 1 + ((band & 1) ? contrast : -contrast) * (0.55 + 0.45 * edge);
+}
+
+// --- Bunker rims -------------------------------------------------------
+// A bunker reads from the tee mostly through the darker, shadowed grass lip
+// around it. Sand is deliberately excluded from hillshade (exaggerated
+// darkening turns a bowl into a pit), so the definition has to come from the
+// grass side. Baked into vertex colour at build time: free at render.
+
+const RIM_WIDTH_M = 1.6;
+const RIM_DARKEN = 0.26; // Peak darkening right at the sand's edge
+let bunkerRims = []; // { verts, minX, maxX, minZ, maxZ }
+
+/** Registers the hole's bunker polygons so surrounding grass can be shaded. */
+export function setBunkerRims(bunkers) {
+    bunkerRims = [];
+    if (!Array.isArray(bunkers)) return;
+    for (const b of bunkers) {
+        const verts = b?.vertices;
+        if (!verts || verts.length < 3) continue;
+        let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+        for (const v of verts) {
+            if (v.x < minX) minX = v.x;
+            if (v.x > maxX) maxX = v.x;
+            if (v.z < minZ) minZ = v.z;
+            if (v.z > maxZ) maxZ = v.z;
+        }
+        bunkerRims.push({ verts, minX, maxX, minZ, maxZ });
+    }
+}
+
+/** Squared distance from a point to a segment, on the XZ plane. */
+function distSqToSegment(px, pz, ax, az, bx, bz) {
+    const dx = bx - ax, dz = bz - az;
+    const lenSq = dx * dx + dz * dz;
+    let t = lenSq > 0 ? ((px - ax) * dx + (pz - az) * dz) / lenSq : 0;
+    t = t < 0 ? 0 : (t > 1 ? 1 : t);
+    const cx = ax + dx * t - px, cz = az + dz * t - pz;
+    return cx * cx + cz * cz;
+}
+
+/** Brightness multiplier for grass near a bunker edge (1 = untouched). */
+function bunkerRimShade(surfaceName, x, z) {
+    // Sand shades itself; water and OOB have no lip
+    if (!bunkerRims.length || surfaceName === 'Bunker' || surfaceName === 'Water') return 1;
+
+    let bestSq = Infinity;
+    for (const rim of bunkerRims) {
+        // Cheap bbox reject keeps this near-free for the vast majority of
+        // ground vertices, which are nowhere near a bunker
+        if (x < rim.minX - RIM_WIDTH_M || x > rim.maxX + RIM_WIDTH_M ||
+            z < rim.minZ - RIM_WIDTH_M || z > rim.maxZ + RIM_WIDTH_M) continue;
+        const v = rim.verts;
+        for (let i = 0; i < v.length; i++) {
+            const a = v[i], b = v[(i + 1) % v.length];
+            const d = distSqToSegment(x, z, a.x, a.z, b.x, b.z);
+            if (d < bestSq) bestSq = d;
+        }
+    }
+    if (bestSq === Infinity) return 1;
+
+    const d = Math.sqrt(bestSq);
+    if (d >= RIM_WIDTH_M) return 1;
+    const t = d / RIM_WIDTH_M;          // 0 at the sand edge, 1 at rim's outer limit
+    return 1 - RIM_DARKEN * (1 - t) * (1 - t);
 }
 
 /**
@@ -213,18 +348,29 @@ export function renderPolygonWithHeights(polygonData, scene, textureLoader, obje
             ({ positions, indices } = adaptiveSubdivideForContour(positions, indices));
         }
 
-        // Create geometry
-        const geometry = createGeometryFromTriangulation(positions, indices);
+        const surface = polygonData.surface;
+        const surfaceName = surface?.name;
 
-        // Vertex colors: optional simplex noise (rough) and baked hillshade
-        // near the contour, so slopes read even under heavy ambient light.
+        // Create geometry (world-space UVs at the surface's real-world tiling)
+        const geometry = createGeometryFromTriangulation(positions, indices, surface?.uvScale ?? 4.0);
+
+        // Vertex colours carry three free effects: optional simplex noise
+        // (rough), baked hillshade near the contour, and mow stripes on the
+        // mown surfaces. All are written in this one pass — no extra cost.
         const vertexCount = positions.length / 3;
-        let useVertexColors = false;
         const colors = new Float32Array(positions.length);
         const noise2D = addNoise ? createNoise2D() : null;
-        const baseColor = addNoise
-            ? new THREE.Color(colorOverride || polygonData.surface?.color || '#228b22')
-            : new THREE.Color(1, 1, 1); // White multiplies textures unchanged
+        // A textured surface must keep a WHITE vertex base: the texture already
+        // carries the grass colour, so tinting it by the surface colour as well
+        // multiplies two dark greens together and crushes the rough to near
+        // black. Only untextured surfaces use their flat colour as the base.
+        const textured = !!surface?.texturePath;
+        const baseColor = (addNoise && !textured)
+            ? new THREE.Color(colorOverride || surface?.color || '#228b22')
+            : new THREE.Color(1, 1, 1);
+        // Textures supply their own fine detail, so noise only needs to break
+        // up the large-scale flatness — a much gentler hand than on flat colour.
+        const noiseAmount = textured ? variationStrength * 0.35 : variationStrength;
         const contourActive = hasContour();
 
         for (let i = 0; i < vertexCount; i++) {
@@ -233,31 +379,31 @@ export function renderPolygonWithHeights(polygonData, scene, textureLoader, obje
 
             let factor = 1.0;
             if (addNoise) {
-                factor *= Math.max(0, 1.0 + noise2D(x * noiseScale, z * noiseScale) * variationStrength);
+                factor *= Math.max(0, 1.0 + noise2D(x * noiseScale, z * noiseScale) * noiseAmount);
             }
             // Bake slope shading into grass — but not sand: exaggerated
             // darkening makes bunker bowls read as pits instead of sand
-            if (contourActive && polygonData.surface?.name !== 'Bunker' && isNearContour(x, z, 0)) {
+            if (contourActive && surfaceName !== 'Bunker' && isNearContour(x, z, 0)) {
                 factor *= hillshadeFactor(x, z);
             }
-            if (factor !== 1.0) useVertexColors = true;
+            factor *= mowFactor(surfaceName, x, z);
+            // Grass darkens into a bunker's lip — real bunkers read from
+            // distance almost entirely via that rim, and the sand itself is
+            // deliberately excluded from hillshade above.
+            factor *= bunkerRimShade(surfaceName, x, z);
 
             colors[i * 3] = baseColor.r * factor;
             colors[i * 3 + 1] = baseColor.g * factor;
             colors[i * 3 + 2] = baseColor.b * factor;
         }
 
-        if (addNoise || useVertexColors) {
-            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-        }
+        // Always attach colours so every ground polygon can share one material
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
         // Create mesh
         const mesh = new THREE.Mesh(geometry);
         mesh.receiveShadow = true;
         mesh.name = name;
-
-        // Apply material
-        const surface = polygonData.surface;
 
         // Layer stacking: surfaces overlap freely in layouts (rough often sits
         // under fairway/green/bunkers), so coplanar polygons would z-fight.
@@ -268,40 +414,24 @@ export function renderPolygonWithHeights(polygonData, scene, textureLoader, obje
         const layerHeight = flatY !== undefined ? 0 : (surface?.height ?? 0);
         mesh.position.y = layerHeight;
 
-        const materialOptions = {
-            side: THREE.DoubleSide,
-            ...((addNoise || useVertexColors) && { vertexColors: true })
-        };
+        // Ground is only ever seen from above, so front-face culling halves the
+        // rasterization work and makes the shadow pass correct. Safe now that
+        // triangulatePolygonWithHeights normalizes ring winding. Water sheets
+        // stay double-sided — the camera can end up under the surface.
+        const side = flatY !== undefined || drapeY !== undefined
+            ? THREE.DoubleSide
+            : THREE.FrontSide;
 
-        if (surface?.texturePath) {
-            textureLoader.load(
-                surface.texturePath,
-                (texture) => {
-                    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-                    const textureRepetitions = options.textureRepetitions || 10;
-                    texture.repeat.set(textureRepetitions, textureRepetitions);
-                    mesh.material = new THREE.MeshStandardMaterial({
-                        ...materialOptions,
-                        map: texture
-                    });
-                    mesh.material.needsUpdate = true;
-                },
-                undefined,
-                (err) => {
-                    console.error(`Error loading ${name} texture:`, err);
-                    mesh.material = new THREE.MeshStandardMaterial({
-                        ...materialOptions,
-                        color: surface?.color || '#228b22'
-                    });
-                    mesh.material.needsUpdate = true;
-                }
-            );
-        } else {
-            mesh.material = new THREE.MeshStandardMaterial({
-                ...materialOptions,
-                color: colorOverride || surface?.color || '#228b22'
-            });
-        }
+        // Shared material from the registry: one instance per surface type
+        // instead of one per polygon, and the texture behind it is uploaded to
+        // the GPU exactly once for the whole app. Assigned synchronously —
+        // TextureLoader hands back the Texture immediately and fills in the
+        // image later, so there's no longer a flash of default white material.
+        mesh.material = getSurfaceMaterial({
+            texturePath: surface?.texturePath,
+            color: colorOverride || surface?.color || '#228b22',
+            side,
+        });
 
         scene.add(mesh);
         objectsArray.push(mesh);
@@ -337,7 +467,6 @@ export function renderBackground(holeLayout, scene, textureLoader, objectsArray)
 
     renderPolygonWithHeights(bgData, scene, textureLoader, objectsArray, {
         name: 'Background',
-        textureRepetitions: 5,
     });
 }
 
@@ -346,14 +475,14 @@ export function renderBackground(holeLayout, scene, textureLoader, objectsArray)
  */
 export function renderRoughAreas(holeLayout, scene, textureLoader, objectsArray) {
     const roughTypes = [
-        { key: 'lightRough', name: 'Light Rough', reps: 10 },
-        { key: 'mediumRough', name: 'Medium Rough', reps: 10 },
-        { key: 'thickRough', name: 'Thick Rough', reps: 10 },
-        { key: 'nativeAreas', name: 'Native Area', reps: 10 }, // Wild grass base
-        { key: 'rough', name: 'Rough (Legacy)', reps: 10 } // Legacy support
+        { key: 'lightRough', name: 'Light Rough' },
+        { key: 'mediumRough', name: 'Medium Rough' },
+        { key: 'thickRough', name: 'Thick Rough' },
+        { key: 'nativeAreas', name: 'Native Area' }, // Wild grass base
+        { key: 'rough', name: 'Rough (Legacy)' } // Legacy support
     ];
 
-    roughTypes.forEach(({ key, name, reps }) => {
+    roughTypes.forEach(({ key, name }) => {
         const roughData = holeLayout[key];
 
         if (Array.isArray(roughData)) {
@@ -363,7 +492,6 @@ export function renderRoughAreas(holeLayout, scene, textureLoader, objectsArray)
                     addNoise: true,
                     noiseScale: 0.001,
                     variationStrength: 0.4,
-                    textureRepetitions: reps
                 });
             });
         } else if (roughData?.vertices) {
@@ -372,7 +500,6 @@ export function renderRoughAreas(holeLayout, scene, textureLoader, objectsArray)
                 addNoise: true,
                 noiseScale: 0.001,
                 variationStrength: 0.4,
-                textureRepetitions: reps
             });
         }
     });
@@ -408,16 +535,16 @@ export function renderWaterHazards(holeLayout, scene, textureLoader, objectsArra
             const info = getWaterSheets()[idx];
             const opts = {
                 name: `Water Hazard #${idx + 1}`,
-                textureRepetitions: 5,
             };
             if (info?.mode === 'flat') opts.flatY = info.y;
             else opts.drapeY = (x, z) => bankLevelAt(x, z) + WATER_SURFACE_Y;
             const mesh = renderPolygonWithHeights(water, scene, textureLoader, objectsArray, opts);
 
             // Lit water with a specular glint so it reads as water, plus a
-            // slight emissive floor so it never collapses into a dark pit
+            // slight emissive floor so it never collapses into a dark pit.
+            // Note: no dispose of the outgoing material — it belongs to the
+            // shared surface registry and is still in use by other polygons.
             if (mesh) {
-                mesh.material?.dispose?.();
                 mesh.material = new THREE.MeshPhongMaterial({
                     color: 0x3f81b8,
                     specular: 0xcfe6ff,
@@ -458,7 +585,6 @@ export function renderBunkers(holeLayout, scene, textureLoader, objectsArray) {
         } else if (bunker.type === 'polygon' || bunker.vertices) {
             renderPolygonWithHeights(bunker, scene, textureLoader, objectsArray, {
                 name: `Bunker #${idx + 1}`,
-                textureRepetitions: 8
             });
         }
     });
@@ -473,7 +599,6 @@ export function renderFairways(holeLayout, scene, textureLoader, objectsArray) {
     fairways.forEach((fairway, idx) => {
         renderPolygonWithHeights(fairway, scene, textureLoader, objectsArray, {
             name: `Fairway #${idx + 1}`,
-            textureRepetitions: 15
         });
     });
 }
@@ -497,7 +622,6 @@ export function renderGreen(holeLayout, scene, textureLoader, objectsArray) {
         if (green.type === 'polygon' || green.vertices) {
             renderPolygonWithHeights(green, scene, textureLoader, objectsArray, {
                 name: `Green #${idx + 1}`,
-                textureRepetitions: 10
             });
 
             // Collect all vertices for calculating overall center
@@ -563,7 +687,6 @@ export function renderTeeBox(holeLayout, scene, textureLoader, objectsArray) {
         console.log('renderTeeBox: Rendering as polygon with vertices:', holeLayout.tee.vertices);
         renderPolygonWithHeights(holeLayout.tee, scene, textureLoader, objectsArray, {
             name: 'Tee Box',
-            textureRepetitions: 5
             // Layer lift comes from SURFACES.TEE.height (0.03) like every other surface
         });
     } else if (holeLayout.tee.center) {

@@ -10,6 +10,7 @@ import { getTargetObjects, getFlagPosition as getTargetFlagPosition } from './ta
 import { createTeeMesh } from './objects.js'; // Import the tee creator
 import { getSurfaceProperties } from '../surfaces.js'; // Import surface properties getter
 import { heightAt as terrainHeightAt } from '../greenContours.js';
+import { initTextureCaps } from './textures.js';
 
 import { YARDS_TO_METERS } from '../utils/unitConversions.js';
 import { gradientAt as contourGradientAt } from '../greenContours.js';
@@ -240,6 +241,38 @@ function createSkyAndHorizon(targetScene) {
 }
 
 let earthMesh = null;
+let sunLight = null;
+
+/**
+ * Device pixel ratio, capped. An uncapped 3x DPR phone renders NINE times the
+ * fragments of a 1x display for a difference almost nobody can see — by far
+ * the biggest mobile cost in the scene. MSAA is already on, so edge quality
+ * doesn't depend on the extra density.
+ */
+function displayPixelRatio() {
+    return Math.min(window.devicePixelRatio || 1, 2);
+}
+
+/**
+ * Re-renders the shadow map once on the next frame. Call after anything that
+ * casts a shadow is added, removed, or moved — shadowMap.autoUpdate is off.
+ */
+export function requestShadowUpdate() {
+    if (renderer) renderer.shadowMap.needsUpdate = true;
+}
+
+/**
+ * Centres the sun's shadow frustum on a point. The frustum is deliberately
+ * tight (±70m) for texel density, so it has to follow play rather than try to
+ * cover the whole hole at once.
+ */
+export function focusShadowsOn(x, z) {
+    if (!sunLight) return;
+    sunLight.position.set(x + 60, 70, z + 25);
+    sunLight.target.position.set(x, 0, z);
+    sunLight.target.updateMatrixWorld();
+    requestShadowUpdate();
+}
 
 /**
  * Drapes the earth backdrop over the active terrain field (call after
@@ -278,34 +311,52 @@ export function initCoreVisuals(canvasElement) {
     // 3. Renderer
     renderer = new THREE.WebGLRenderer({ canvas: canvasElement, antialias: true });
     renderer.setSize(canvasElement.clientWidth, canvasElement.clientHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setPixelRatio(displayPixelRatio());
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Soft shadow edges
+    // The scene is static apart from the ball, so re-rendering the shadow map
+    // every frame just reproduces the same result at the cost of a second full
+    // traversal. Refreshed explicitly via requestShadowUpdate().
+    renderer.shadowMap.autoUpdate = false;
+    renderer.shadowMap.needsUpdate = true;
     renderer.toneMapping = THREE.ACESFilmicToneMapping; // Filmic color response
-    renderer.toneMappingExposure = 1.15;
+    // Textures now decode from sRGB properly (see visuals/textures.js), so the
+    // renderer receives correct linear values instead of far-too-bright ones.
+    // Exposure comes back down to compensate.
+    renderer.toneMappingExposure = 1.0;
+    initTextureCaps(renderer);
 
     // 4. Lighting
-    // Lighting: modest ambient + sky/ground hemisphere for natural color,
-    // and a warm sun at a raking angle so terrain contours actually model.
+    // Sun-dominant rig: a strong warm key at a raking angle does the modelling,
+    // with a cool sky/ground hemisphere for bounce and only a trace of flat
+    // ambient. Before the colour-space fix the ambient had to be high to stop
+    // everything reading as mud; now that grass returns real values, the
+    // contrast can come from the sun where it belongs.
     // Keep the sun direction in sync with SHADE_SUN in holeRenderer.js.
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.28);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.12);
     scene.add(ambientLight);
 
-    const hemiLight = new THREE.HemisphereLight(0xbfdcff, 0x3f6b3f, 0.45);
+    const hemiLight = new THREE.HemisphereLight(0xbcd8ff, 0x4a7a46, 0.55);
     scene.add(hemiLight);
 
-    const directionalLight = new THREE.DirectionalLight(0xfff2dd, 1.0);
+    const directionalLight = new THREE.DirectionalLight(0xfff0d4, 2.1);
     directionalLight.position.set(60, 70, 25);
     directionalLight.castShadow = true;
-    directionalLight.shadow.mapSize.width = 1024;
-    directionalLight.shadow.mapSize.height = 1024;
+    // 2048² over a tight ±70m frustum ≈ 7cm per texel. The old 1024² spread
+    // over ±100m gave 19.5cm — every shadow in the game was a blurry blob.
+    directionalLight.shadow.mapSize.width = 2048;
+    directionalLight.shadow.mapSize.height = 2048;
     directionalLight.shadow.camera.near = 0.5;
-    directionalLight.shadow.camera.far = 500;
-    directionalLight.shadow.camera.left = -100;
-    directionalLight.shadow.camera.right = 100;
-    directionalLight.shadow.camera.top = 100;
-    directionalLight.shadow.camera.bottom = -100;
+    directionalLight.shadow.camera.far = 400;
+    directionalLight.shadow.camera.left = -70;
+    directionalLight.shadow.camera.right = 70;
+    directionalLight.shadow.camera.top = 70;
+    directionalLight.shadow.camera.bottom = -70;
+    directionalLight.shadow.bias = -0.0008;
+    directionalLight.shadow.normalBias = 0.02;
     scene.add(directionalLight);
+    scene.add(directionalLight.target);
+    sunLight = directionalLight;
 
     // 5. Ball (Common element)
     const textureLoader = new TextureLoader();
@@ -364,7 +415,7 @@ export function onWindowResize() {
     camera.aspect = newWidth / newHeight;
     camera.updateProjectionMatrix();
 
-    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setPixelRatio(displayPixelRatio());
     renderer.setSize(newWidth, newHeight, false);
 
     // Explicitly render the scene with the updated camera and renderer size
@@ -478,9 +529,6 @@ function animate(timestamp) {
     // Determine which camera to use for rendering
     const activeRenderCamera = MeasurementView.isViewActive() ? MeasurementView.getCamera() : camera;
     if (activeRenderCamera) { // Ensure there's a camera to render with
-        // Add occasional debug logging
-        if (Math.random() < 0.001) { // Log ~once per second at 60fps
-        }
         renderer.render(scene, activeRenderCamera);
     } else {
         // This case should ideally not happen if MeasurementView.init ensures its camera is created
@@ -885,6 +933,10 @@ export function showBallAtAddress(position = null, surfaceType = null) {
 
     ball.position.copy(ballPos);
     ball.visible = true;
+
+    // The shadow frustum is tight for texel density, so it follows play.
+    // Address is the natural moment to re-centre and re-bake it.
+    focusShadowsOn(ballPos.x, ballPos.z);
 
     // Locator ring on every lie: surface render layer + terrain height.
     // The incoming position's y is terrain + BALL_RADIUS before display

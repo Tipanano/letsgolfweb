@@ -1,7 +1,7 @@
 // src/visuals/holeView.js
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
 import { TextureLoader } from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
-import { scene } from './core.js';
+import { scene, requestShadowUpdate } from './core.js';
 import { renderObstacles, clearObstacles } from './obstacles.js';
 import { createObstacle } from '../obstacleConfig.js';
 import {
@@ -11,8 +11,11 @@ import {
     renderBunkers,
     renderFairways,
     renderGreen,
-    renderTeeBox
+    renderTeeBox,
+    setMowPattern,
+    setBunkerRims
 } from './holeRenderer.js';
+import { disposeSceneObject } from './textures.js';
 import { queryTerrainHeight } from '../visuals.js'; // For getting terrain height at flag position
 import { buildGrass } from './grass.js'; // Instanced grass for rough/native areas
 import { buildOOBStakes } from './oobStakes.js'; // White boundary stakes
@@ -32,8 +35,11 @@ export function clearHoleLayout() {
     if (!scene) return;
     currentHoleObjects.forEach(obj => {
         scene.remove(obj);
-        if (obj.geometry) obj.geometry.dispose();
-        if (obj.material) obj.material.dispose();
+        // disposeSceneObject frees geometry and any per-hole material/maps, but
+        // deliberately leaves the shared surface registry alone. The old code
+        // disposed materials without their maps, so every hole change leaked
+        // the full texture set.
+        disposeSceneObject(obj);
     });
     currentHoleObjects = [];
     // Reset flagstick references when clearing
@@ -64,6 +70,12 @@ export function drawHoleLayout(holeLayout) {
     currentGreenRadius = null;
 
     const textureLoader = new TextureLoader();
+
+    // Per-hole ground styling, set before anything bakes vertex colours:
+    // a mow direction unique to this hole, and the bunker outlines whose
+    // surrounding grass gets a darkened lip.
+    setMowPattern(holeLayout.number ?? holeLayout.par ?? 0);
+    setBunkerRims(holeLayout.bunkers);
 
     // Render all surfaces using the new height-aware renderer
     renderBackground(holeLayout, scene, textureLoader, currentHoleObjects);
@@ -185,6 +197,9 @@ export function drawHoleLayout(holeLayout) {
         renderObstacles(scene, obstaclesWithProps);
     }
 
+    // Everything that casts a shadow is now in place; bake the map once
+    // (shadowMap.autoUpdate is off — see initCoreVisuals).
+    requestShadowUpdate();
 }
 
 /**
