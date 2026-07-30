@@ -1,7 +1,7 @@
 import {
     getGameState, getCurrentShotType, getHipInitiationTime, getRotationInitiationTime,
     getArmsStartTime, getWristsStartTime, getRotationStartTime, getChipRotationStartTime,
-    getChipWristsStartTime, getPuttHitTime, getBackswingDuration, getSelectedClub,
+    getChipWristsStartTime, getPuttHitTime, getBackswingDuration, getSelectedClub, getChipProfile,
     setGameState, setBackswingStartTime, setBackswingEndTime, setRotationInitiationTime,
     setHipInitiationTime, setDownswingPhaseStartTime, setArmsStartTime, setWristsStartTime,
     setRotationStartTime, setChipRotationStartTime, setChipWristsStartTime, setPuttHitTime,
@@ -16,7 +16,7 @@ import {
     updateStatus, resetUIForNewShot, updateDebugTimingInfo, clearClubSelection, setSelectedClubButton, // Import UI functions (resetUIForNewShot is already imported)
     getBallPositionIndex as getBallPositionIndexUI, getBallPositionLevels as getBallPositionLevelsUI
 } from '../ui.js';
-import { estimateRhythmChipCarry } from '../chipPhysics.js';
+import { estimateRhythmChipCarry, CHIP_PROFILES } from '../chipPhysics.js';
 import { gameAlert } from '../ui/gameAlert.js';
 // Import calculation functions directly
 import { calculateFullSwingShot, calculateChipShot, calculatePuttShot } from './calculations.js';
@@ -61,6 +61,9 @@ chipShotSound.preload = 'auto'; // Preload the sound
 
 const puttShotSound = new Audio('assets/sounds/putt_shot.mp3');
 puttShotSound.preload = 'auto'; // Preload the sound
+
+// The active rhythm short-game profile (chip vs pitch power band).
+const activeChipProfile = () => CHIP_PROFILES[getChipProfile()] || CHIP_PROFILES.chip;
 
 // True when the on-screen touch zones are the input device (status wording).
 const isTouchStatus = () => typeof document !== 'undefined' && document.body.classList.contains('touch-active');
@@ -389,7 +392,8 @@ export function recordChipRhythmTap() {
         resetUIForNewShot();
         multiplayerManager.onShotStarted();
         showRhythmHud();
-        updateStatus(isTouchStatus() ? 'Chip: tap a tempo...' : 'Chip: tap w to a rhythm...');
+        const profileLabel = activeChipProfile().label;
+        updateStatus(isTouchStatus() ? `${profileLabel}: tap a tempo...` : `${profileLabel}: tap w to a rhythm...`);
     }
 
     const result = RhythmPutt.recordTap(performance.now());
@@ -411,11 +415,11 @@ export function refreshRhythmChipUI(snapshot = null) {
     let carry = null;
     if (snap.tempoMs && club) {
         const { lie, ballPositionFactor } = _getChipContext();
-        carry = estimateRhythmChipCarry(snap.tempoMs, club, ballPositionFactor, lie);
+        carry = estimateRhythmChipCarry(snap.tempoMs, club, ballPositionFactor, lie, activeChipProfile());
     }
 
     updateRhythmHud({ ...snap, distanceMeters: carry }, RhythmPutt.MIN_TAPS_TO_ARM,
-        snap.armed ? `${strikeName()} on the beat to chip` : null);
+        snap.armed ? `${strikeName()} on the beat to ${activeChipProfile().label.toLowerCase()}` : null);
 
     if (carry !== null && ball) {
         const aimAngleRad = (getCurrentTargetLineAngle() + getShotDirectionAngle()) * Math.PI / 180;

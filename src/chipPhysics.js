@@ -19,6 +19,14 @@ const RCHIP_MAX_FACE_DEG = 8.0;        // Max push/pull face angle from strike t
 // scaled by the lie's strike forgiveness; this is where duffs come from)
 const RCHIP_CONTACT_BASE_THRESHOLD = 0.085; // Contact-error units before a mishit
 const RCHIP_CV_RISK_FACTOR = 1.0;      // How strongly tempo wobble feeds contact error
+
+// Power profiles for the rhythm short game. A pitch is the same tap-tempo
+// mechanic swung bigger: more clubhead speed and a higher floor, paid for
+// with a tighter contact window (mishit risk grows with swing size).
+export const CHIP_PROFILES = {
+    chip:  { label: 'Chip',  speedFraction: 0.45, minPower: 0.15, contactThreshold: 0.085, cvRiskMult: 1.0 },
+    pitch: { label: 'Pitch', speedFraction: 0.65, minPower: 0.30, contactThreshold: 0.070, cvRiskMult: 1.2 },
+};
 const RCHIP_OFFBEAT_RISK_FACTOR = 0.5; // Strikes way off the beat also risk contact
 const RCHIP_OFFBEAT_RISK_START = 0.20; // ...but only beyond this |deviation| fraction
 const RCHIP_DUFF_FACTOR = 1.8;         // Contact error this far past the threshold = full duff
@@ -42,11 +50,11 @@ function gaussianRandom() {
  * Clubhead delivery for a rhythm chip: tempo → clubhead speed, stance/club →
  * loft and attack angle. Shared by the impact calculation and the preview.
  */
-function rhythmChipDelivery(tempoMs, club, ballPositionFactor, currentSurface) {
-    const power = MIN_CHIP_POWER_FACTOR +
-        (MAX_CHIP_POWER_FACTOR - MIN_CHIP_POWER_FACTOR) *
+function rhythmChipDelivery(tempoMs, club, ballPositionFactor, currentSurface, profile = CHIP_PROFILES.chip) {
+    const power = profile.minPower +
+        (MAX_CHIP_POWER_FACTOR - profile.minPower) *
         Math.pow(tempoToPower(tempoMs), RCHIP_POWER_CURVE);
-    const clubheadSpeed = club.basePotentialSpeed * 0.45 * power;
+    const clubheadSpeed = club.basePotentialSpeed * profile.speedFraction * power;
 
     const dynamicLoft = club.loft - ballPositionFactor * BALLPOS_LOFT_EFFECT;
 
@@ -64,8 +72,8 @@ function rhythmChipDelivery(tempoMs, club, ballPositionFactor, currentSurface) {
  * Ideal-contact projectile with a speed-dependent drag knockdown — a learning
  * aid, deliberately approximate.
  */
-export function estimateRhythmChipCarry(tempoMs, club, ballPositionFactor, currentSurface) {
-    const d = rhythmChipDelivery(tempoMs, club, ballPositionFactor, currentSurface);
+export function estimateRhythmChipCarry(tempoMs, club, ballPositionFactor, currentSurface, profile = CHIP_PROFILES.chip) {
+    const d = rhythmChipDelivery(tempoMs, club, ballPositionFactor, currentSurface, profile);
     const ballSpeedMps = d.clubheadSpeed * BASE_CHIP_SMASH * 0.44704;
     const launchRad = clamp(d.dynamicLoft * 0.75 + d.attackAngle * 0.5, 1, 85) * Math.PI / 180;
     const vacuumCarry = (ballSpeedMps * ballSpeedMps) * Math.sin(2 * launchRad) / 9.81;
@@ -86,12 +94,12 @@ export function estimateRhythmChipCarry(tempoMs, club, ballPositionFactor, curre
  *   - Optional shape tap → sidespin (early = draw, late = fade) or extra
  *     backspin (on the beat).
  */
-export function calculateRhythmChipImpact(strike, club, ballPositionFactor, currentSurface) {
+export function calculateRhythmChipImpact(strike, club, ballPositionFactor, currentSurface, profile = CHIP_PROFILES.chip) {
     const { tempoMs, cv, beatDeviationMs, shapeDevFrac } = strike;
     const devFrac = clamp(beatDeviationMs / tempoMs, -1, 1);
 
     const surfaceProps = getSurfaceProperties(currentSurface);
-    const delivery = rhythmChipDelivery(tempoMs, club, ballPositionFactor, currentSurface);
+    const delivery = rhythmChipDelivery(tempoMs, club, ballPositionFactor, currentSurface, profile);
     const { clubheadSpeed, dynamicLoft, attackAngle } = delivery;
 
     // --- Direction: strike tap vs the beat (same feel as putting) ---
@@ -106,14 +114,14 @@ export function calculateRhythmChipImpact(strike, club, ballPositionFactor, curr
 
     // --- Contact quality: steadiness is the skill ---
     const offbeatRisk = Math.max(0, Math.abs(devFrac) - RCHIP_OFFBEAT_RISK_START) * RCHIP_OFFBEAT_RISK_FACTOR;
-    const contactRisk = cv * RCHIP_CV_RISK_FACTOR + offbeatRisk;
+    const contactRisk = cv * RCHIP_CV_RISK_FACTOR * profile.cvRiskMult + offbeatRisk;
     const contactError = Math.abs(gaussianRandom()) * contactRisk;
 
     const fatForgiveness = surfaceProps?.strikeFactors?.fatForgiveness || 1.0;
     const thinForgiveness = surfaceProps?.strikeFactors?.thinForgiveness || 1.0;
     // Forward ball (factor < 0) = easier to thin; back ball (factor > 0) = easier to fat
-    const thinThreshold = RCHIP_CONTACT_BASE_THRESHOLD * thinForgiveness * (1 + ballPositionFactor * 0.3);
-    const fatThreshold = RCHIP_CONTACT_BASE_THRESHOLD * fatForgiveness * (1 - ballPositionFactor * 0.3);
+    const thinThreshold = profile.contactThreshold * thinForgiveness * (1 + ballPositionFactor * 0.3);
+    const fatThreshold = profile.contactThreshold * fatForgiveness * (1 - ballPositionFactor * 0.3);
 
     // Miss side: an early strike leans thin, a late one leans fat (matches the
     // legacy model); near the beat, ball position decides; ties flip a coin.

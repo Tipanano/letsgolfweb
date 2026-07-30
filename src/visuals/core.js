@@ -600,6 +600,22 @@ export function toggleFreeCamera() {
     return freeCamActive;
 }
 
+/**
+ * Direct free-camera nudge for touch gestures (two-finger pan / pinch):
+ * meters right/forward along the current view heading, and up. Terrain
+ * clamping matches the keyboard path.
+ */
+export function freeCamNudge(rightM, forwardM, upM) {
+    if (!freeCamActive) return;
+    const fwd = new THREE.Vector3(Math.sin(freeCamYaw), 0, Math.cos(freeCamYaw));
+    const rightV = new THREE.Vector3(fwd.z, 0, -fwd.x);
+    camera.position.addScaledVector(fwd, forwardM);
+    camera.position.addScaledVector(rightV, rightM);
+    camera.position.y += upM;
+    const minY = terrainHeightAt(camera.position.x, camera.position.z) + 0.5;
+    if (camera.position.y < minY) camera.position.y = minY;
+}
+
 /** Consumes movement keys while the free camera is active. */
 export function freeCamHandleKey(event, isDown) {
     if (!freeCamActive) return false;

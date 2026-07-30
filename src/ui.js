@@ -672,7 +672,9 @@ export function setShotTypeRadio(shotType) {
     const fsShotTypeBtns = document.querySelectorAll('.fs-shot-type-btn');
 
     if (fsShotTypeValue) {
-        fsShotTypeValue.textContent = shotType === 'full' ? 'Regular' : shotType === 'putt' ? 'Putt' : 'Chip';
+        fsShotTypeValue.textContent = shotType === 'full' ? 'Regular'
+            : shotType === 'putt' ? 'Putt'
+            : shotType === 'pitch' ? 'Pitch' : 'Chip';
     }
 
     fsShotTypeBtns.forEach(btn => {
@@ -1847,6 +1849,7 @@ export function updateHelpButtonText(shotType) {
 
     switch (shotType) {
         case 'chip':
+        case 'pitch':
             fsHelpBtnText.textContent = 'How to Chip';
             break;
         case 'putt':

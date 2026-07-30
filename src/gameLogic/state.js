@@ -229,8 +229,23 @@ export function clearSelectedClub() {
 }
 
 // New function to set the shot type
+// Rhythm short-game power profile: 'chip' or 'pitch'. A pitch is shot type
+// 'chip' internally (same state machine, inputs, and guards) with a bigger
+// power band in chipPhysics. Explicitly chosen per shot; any other shot
+// type selection resets it.
+export let chipProfile = 'chip';
+export const getChipProfile = () => chipProfile;
+
 export function setShotType(type) {
-    if (currentShotType === type) return; // No change
+    const isPitch = type === 'pitch';
+    if (isPitch) type = 'chip';
+    chipProfile = isPitch ? 'pitch' : 'chip';
+
+    if (currentShotType === type) {
+        // Same underlying type (e.g. chip <-> pitch): just refresh the label
+        setShotTypeRadio(isPitch ? 'pitch' : type);
+        return;
+    }
 
     currentShotType = type;
 
@@ -248,7 +263,7 @@ export function setShotType(type) {
     setupBackswingBar(type);
 
     // Update club selection for putt and UI radio buttons
-    setShotTypeRadio(type); // Update UI radio buttons
+    setShotTypeRadio(chipProfile === 'pitch' ? 'pitch' : type); // Update UI radio buttons
 
     switch (type) {
         case 'chip':
