@@ -616,6 +616,13 @@ export function freeCamNudge(rightM, forwardM, upM) {
     if (camera.position.y < minY) camera.position.y = minY;
 }
 
+/** Free-camera look for touch: yaw/pitch deltas in radians. */
+export function freeCamLook(dYaw, dPitch) {
+    if (!freeCamActive) return;
+    freeCamYaw += dYaw;
+    freeCamPitch = Math.max(-1.4, Math.min(1.4, freeCamPitch + dPitch));
+}
+
 /** Consumes movement keys while the free camera is active. */
 export function freeCamHandleKey(event, isDown) {
     if (!freeCamActive) return false;

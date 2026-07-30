@@ -34,7 +34,7 @@ import {
     getRotationStartTime, getArmsStartTime, getWristsStartTime,
 } from './gameLogic/state.js';
 import { isSlopeOverlayVisible } from './visuals/slopeOverlay.js';
-import { isFreeCameraActive, toggleFreeCamera, freeCamNudge, camera } from './visuals/core.js';
+import { isFreeCameraActive, toggleFreeCamera, freeCamNudge, freeCamLook, camera } from './visuals/core.js';
 
 let overlayEl = null;
 let updateTimer = null;
@@ -455,16 +455,34 @@ function setAddressMode(on) {
 }
 
 /**
- * Setup-phase fly-over: two-finger drag pans across the hole, pinch
- * changes altitude. Rides the existing free camera (terrain-clamped,
- * restored to the shot view when the player addresses the ball).
+ * Camera touch gestures on the canvas.
+ *   One finger drag — rotate the view: synthesized mouse-drag (the same
+ *     path desktop uses: horizontal = aim/rotate, vertical = height), or
+ *     free-look while the fly-over camera is active.
+ *   Two fingers (setup only) — fly-over: drag pans across the hole,
+ *     pinch changes altitude. Terrain-clamped; addressing the ball
+ *     restores the shot view.
+ * iOS ignores user-scalable=no, so Safari's own pinch-zoom must be kept
+ * off the canvas: touch-action none + suppressed gesture events.
  */
-function initInspectGestures() {
+function initCameraGestures() {
     const canvas = document.getElementById('golf-canvas');
     if (!canvas) return;
-    let gesturing = false;
+    canvas.style.touchAction = 'none';
+    // iOS proprietary pinch/rotate events would hijack two-finger input
+    for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
+        document.addEventListener(type, (e) => e.preventDefault(), { passive: false });
+    }
+
+    const inGame = () => overlayEl.classList.contains('visible');
+    const inSetup = () => inGame() && overlayEl.classList.contains('setup');
+    const synthMouse = (type, x, y) => canvas.dispatchEvent(new MouseEvent(type, {
+        clientX: x, clientY: y, button: 0, bubbles: true,
+    }));
+
+    let twoFinger = false;
     let lastCx = 0, lastCy = 0, lastDist = 0;
-    const inSetup = () => overlayEl.classList.contains('visible') && overlayEl.classList.contains('setup');
+    let oneFinger = null; // { x, y, dragging } — drag begins past a small threshold
     const measure = (e) => ({
         cx: (e.touches[0].clientX + e.touches[1].clientX) / 2,
         cy: (e.touches[0].clientY + e.touches[1].clientY) / 2,
@@ -472,27 +490,67 @@ function initInspectGestures() {
             e.touches[0].clientX - e.touches[1].clientX,
             e.touches[0].clientY - e.touches[1].clientY),
     });
+    const endOneFinger = () => {
+        if (oneFinger?.dragging) synthMouse('mouseup', oneFinger.x, oneFinger.y);
+        oneFinger = null;
+    };
+
     canvas.addEventListener('touchstart', (e) => {
-        if (e.touches.length !== 2 || !inSetup()) return;
-        e.preventDefault();
-        gesturing = true;
-        ({ cx: lastCx, cy: lastCy, dist: lastDist } = measure(e));
+        if (!inGame()) return;
+        if (e.touches.length === 1) {
+            const t = e.touches[0];
+            oneFinger = { x: t.clientX, y: t.clientY, dragging: false };
+            return; // no preventDefault: plain taps stay clickable
+        }
+        if (e.touches.length === 2 && inSetup()) {
+            e.preventDefault();
+            endOneFinger();
+            twoFinger = true;
+            ({ cx: lastCx, cy: lastCy, dist: lastDist } = measure(e));
+        }
     }, { passive: false });
+
     canvas.addEventListener('touchmove', (e) => {
-        if (!gesturing || e.touches.length !== 2) return;
-        e.preventDefault();
-        if (!inSetup()) return;
-        if (!isFreeCameraActive()) toggleFreeCamera();
-        const { cx, cy, dist } = measure(e);
-        // Pan speed grows with altitude so the map-drag feel stays constant
-        const perPx = Math.min(0.6, Math.max(0.03, (camera?.position.y || 10) * 0.004));
-        freeCamNudge(
-            -(cx - lastCx) * perPx,          // content follows the fingers
-            -(cy - lastCy) * perPx,          // drag up = fly toward the green
-            -(dist - lastDist) * 0.06);      // pinch out = descend for a closer look
-        lastCx = cx; lastCy = cy; lastDist = dist;
+        if (twoFinger && e.touches.length === 2) {
+            e.preventDefault();
+            if (!inSetup()) return;
+            if (!isFreeCameraActive()) toggleFreeCamera();
+            const { cx, cy, dist } = measure(e);
+            // Pan speed grows with altitude so the map-drag feel stays constant
+            const perPx = Math.min(0.6, Math.max(0.03, (camera?.position.y || 10) * 0.004));
+            freeCamNudge(
+                -(cx - lastCx) * perPx,          // content follows the fingers
+                -(cy - lastCy) * perPx,          // drag up = fly toward the green
+                -(dist - lastDist) * 0.06);      // pinch out = descend for a closer look
+            lastCx = cx; lastCy = cy; lastDist = dist;
+            return;
+        }
+        if (oneFinger && e.touches.length === 1 && inGame()) {
+            const t = e.touches[0];
+            const dx = t.clientX - oneFinger.x;
+            const dy = t.clientY - oneFinger.y;
+            if (!oneFinger.dragging && Math.hypot(dx, dy) > 8) {
+                oneFinger.dragging = true;
+                if (!isFreeCameraActive()) synthMouse('mousedown', oneFinger.x, oneFinger.y);
+            }
+            if (oneFinger.dragging) {
+                e.preventDefault();
+                if (isFreeCameraActive()) {
+                    // Fly-over free-look: the view follows the finger
+                    freeCamLook(-dx * 0.004, -dy * 0.004);
+                    oneFinger.x = t.clientX; oneFinger.y = t.clientY;
+                } else {
+                    // Desktop mouse-drag path: rotate aim / adjust height
+                    synthMouse('mousemove', t.clientX, t.clientY);
+                }
+            }
+        }
     }, { passive: false });
-    const end = (e) => { if (!e.touches || e.touches.length < 2) gesturing = false; };
+
+    const end = (e) => {
+        if (!e.touches || e.touches.length < 2) twoFinger = false;
+        if (!e.touches || e.touches.length === 0) endOneFinger();
+    };
     canvas.addEventListener('touchend', end);
     canvas.addEventListener('touchcancel', end);
 }
@@ -599,7 +657,7 @@ export function initTouchControls() {
     document.documentElement.style.overscrollBehavior = 'none';
     document.body.style.overscrollBehavior = 'none';
 
-    initInspectGestures();
+    initCameraGestures();
 
     updateZones();
     updateTimer = setInterval(updateZones, 350);
