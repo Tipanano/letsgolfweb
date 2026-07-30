@@ -203,7 +203,14 @@ function injectStyles() {
         body.touch-active #back-to-menu-button,
         body.touch-active #switch-hole-button,
         body.touch-active #fullscreen-toggle-btn { font-size: 12px; padding: 7px 10px; }
-        body.touch-active #reset-game-data-button { display: none; }
+        body.touch-active #reset-game-data-button,
+        body.touch-active #fs-reset-data-btn { display: none; }
+        /* Instructions live behind a compact ? — not a permanent banner.
+           The Controls modal is a keyboard reference: meaningless on touch. */
+        body.touch-active #fs-controls-btn { display: none; }
+        body.touch-active #fs-help-btn-text { display: none; }
+        body.touch-active #fs-help-btn::before { content: '?'; font-weight: 800; }
+        body.touch-active #fs-help-btn { min-width: 36px; }
         /* Info text: compact */
         body.touch-active .overlay-text-item {
             font-size: 12.5px;
