@@ -192,6 +192,14 @@ function makeRidgeFeature(f) {
  * the tee), feathered to zero over the outer cells so the hole meets the
  * flat world seamlessly. C1-smooth; row-major flat heights array.
  */
+// The DEM grid covers only the hole corridor; the world beyond it must not
+// snap back to elevation 0 at the boundary. A hole cut 40 m into the DEM
+// (Augusta's 10th) otherwise plays inside a walled canyon. Instead of
+// feathering INSIDE the grid (which shaved real elevation off the corridor
+// edges), carry the clamped edge height OUTWARD and melt it into the flat
+// world over this distance.
+const GRID_EDGE_FEATHER_M = 130;
+
 function makeGridFeature(f) {
     const { x0, z0, cell, cols, rows } = f;
     const heights = f.heights;
@@ -199,23 +207,32 @@ function makeGridFeature(f) {
         Math.min(rows - 1, Math.max(0, r)) * cols + Math.min(cols - 1, Math.max(0, c))];
     const cr = (p0, p1, p2, p3, t) =>
         p1 + 0.5 * t * (p2 - p0 + t * (2 * p0 - 5 * p1 + 4 * p2 - p3 + t * (3 * (p1 - p2) + p3 - p0)));
+    const fm = GRID_EDGE_FEATHER_M;
     return {
         isGrid: true,
-        bbox: { minX: x0, maxX: x0 + (cols - 1) * cell, minZ: z0, maxZ: z0 + (rows - 1) * cell },
+        bbox: {
+            minX: x0 - fm, maxX: x0 + (cols - 1) * cell + fm,
+            minZ: z0 - fm, maxZ: z0 + (rows - 1) * cell + fm,
+        },
         evalAt(x, z) {
-            const u = (x - x0) / cell;
-            const v = (z - z0) / cell;
-            if (u < 0 || v < 0 || u > cols - 1 || v > rows - 1) return 0;
+            let u = (x - x0) / cell;
+            let v = (z - z0) / cell;
+            // Distance outside the grid (meters); clamp the sample point to
+            // the boundary so the edge height carries outward
+            const du = Math.max(0, -u, u - (cols - 1));
+            const dv = Math.max(0, -v, v - (rows - 1));
+            const dOut = Math.hypot(du, dv) * cell;
+            if (dOut >= fm) return 0;
+            u = Math.min(cols - 1, Math.max(0, u));
+            v = Math.min(rows - 1, Math.max(0, v));
             const ci = Math.floor(u), ri = Math.floor(v);
             const fu = u - ci, fv = v - ri;
             const r0 = cr(H(ci - 1, ri - 1), H(ci, ri - 1), H(ci + 1, ri - 1), H(ci + 2, ri - 1), fu);
             const r1 = cr(H(ci - 1, ri), H(ci, ri), H(ci + 1, ri), H(ci + 2, ri), fu);
             const r2 = cr(H(ci - 1, ri + 1), H(ci, ri + 1), H(ci + 1, ri + 1), H(ci + 2, ri + 1), fu);
             const r3 = cr(H(ci - 1, ri + 2), H(ci, ri + 2), H(ci + 1, ri + 2), H(ci + 2, ri + 2), fu);
-            let val = cr(r0, r1, r2, r3, fv);
-            // Feather to 0 over the outer 2.5 cells
-            const m = Math.min(u, v, cols - 1 - u, rows - 1 - v);
-            return val * smootherstep(Math.min(1, m / 2.5));
+            const val = cr(r0, r1, r2, r3, fv);
+            return dOut > 0 ? val * smootherstep(1 - dOut / fm) : val;
         },
     };
 }

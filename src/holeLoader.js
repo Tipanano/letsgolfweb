@@ -294,6 +294,12 @@ export function processHoleLayout(sourceLayout) {
             // The rendering code will need to handle these separately
         }
 
+        // Drop stray greens: the OSM import corridor can sweep in a
+        // NEIGHBORING hole's green (Augusta's 10th carried the 18th green
+        // beside its tee). Keep greens that contain the flag or sit near it —
+        // the containment test preserves huge shared/double greens.
+        dropStrayGreens(layout);
+
         // Merge vertices that are at the same position (within 10cm)
         // This helps when designers create adjacent polygons with shared edges
         mergeSharedVertices(layout, 0.1);
@@ -309,6 +315,37 @@ export function processHoleLayout(sourceLayout) {
     }
 
     return layout;
+}
+
+function pointInPolygon(pt, vs) {
+    let inside = false;
+    for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+        const xi = vs[i].x, zi = vs[i].z, xj = vs[j].x, zj = vs[j].z;
+        if ((zi > pt.z) !== (zj > pt.z) &&
+            pt.x < (xj - xi) * (pt.z - zi) / (zj - zi) + xi) inside = !inside;
+    }
+    return inside;
+}
+
+function dropStrayGreens(layout) {
+    const flag = layout.flagPosition;
+    if (!flag || !Array.isArray(layout.greens) || layout.greens.length < 2) return;
+    const keep = [];
+    let nearest = null, nearestD = Infinity;
+    for (const g of layout.greens) {
+        const vs = g.vertices || [];
+        if (vs.length < 3) continue;
+        let cx = 0, cz = 0;
+        for (const v of vs) { cx += v.x; cz += v.z; }
+        cx /= vs.length; cz /= vs.length;
+        const d = Math.hypot(cx - flag.x, cz - flag.z);
+        if (d < nearestD) { nearestD = d; nearest = g; }
+        if (d < 60 || pointInPolygon(flag, vs)) keep.push(g);
+    }
+    if (keep.length === 0 && nearest) keep.push(nearest);
+    if (keep.length && keep.length < layout.greens.length) {
+        layout.greens = keep;
+    }
 }
 
 // --- Auto green contour ---------------------------------------------------

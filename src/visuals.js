@@ -87,6 +87,11 @@ export function initVisuals(canvasElement) {
 function unloadCurrentView() {
     MeasurementView.deactivate(); // Always deactivate measurement view when switching
 
+    // Height/surface lookups must not outlive the hole they were built for —
+    // a stale mesh would answer range/practice queries with the old hole's
+    // polygons.
+    currentTerrainMesh = null;
+
     if (currentVisualMode === VISUAL_MODES.RANGE) {
         RangeVisuals.removeRangeVisuals(coreScene);
     } else if (currentVisualMode === VISUAL_MODES.TARGET) {
