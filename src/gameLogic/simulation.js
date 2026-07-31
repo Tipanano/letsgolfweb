@@ -101,8 +101,12 @@ export function simulateFlightStepByStep(initialPos, initialVel, spinVec, club, 
         y: 0,
         z: -wind.speed * Math.cos(windAngleRad),
     };
-    const WIND_HEIGHT_REF = 20;     // m — height where reported wind applies
-    const GROUND_WIND_FACTOR = 0.3; // ground level fraction
+    // Boundary layer: reported wind is the 10 m anemometer value (standard),
+    // and even at grass height roughly half of it is still blowing — a stiff
+    // breeze moves a lofted chip, not just the driver. (Was 20 m / 0.3,
+    // which let short-game shots fly in near-calm.)
+    const WIND_HEIGHT_REF = 10;      // m — height where reported wind applies
+    const GROUND_WIND_FACTOR = 0.55; // ground level fraction
 
     // Convert spin to rad/s. Note backspin component is stored negative so that
     // F_lift ∝ (ω × v) points up when the ball travels in +Z.

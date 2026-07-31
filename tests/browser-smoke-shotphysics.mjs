@@ -168,6 +168,34 @@ const rows = await page.evaluate(async () => {
         out.push({ label, ...fly({ x: 0, y: BALL_R, z: 0 }, impact, clubs[clubKey], null, surf) });
     }
 
+    // --- Wind sensitivity: same shots into an 8 m/s head/tail wind.
+    // Short-game shots fly low, but a stiff wind must still matter. ---
+    for (const [label, base, windDir] of [
+        ['LW60 pitch HEAD', 'LW60 pitch', 0],
+        ['LW60 pitch TAIL', 'LW60 pitch', 180],
+        ['LW60 chip HEAD', 'LW60 chip mid', 0],
+        ['7I full HEAD', '7I full', 0],
+        ['Driver HEAD', 'Driver full', 0],
+    ]) {
+        state.setWind(8, windDir);
+        if (base.includes('chip') || base.includes('pitch')) {
+            const [, clubKey, tempo, profile] = {
+                'LW60 pitch': [0, 'LW60', 500, 'pitch'],
+                'LW60 chip mid': [0, 'LW60', 600, 'chip'],
+            }[base];
+            const impact = chip.calculateRhythmChipImpact(
+                strike(tempo), clubs[clubKey], 0, 'FAIRWAY', chip.CHIP_PROFILES[profile]);
+            const probe = fly({ x: 0, y: BALL_R, z: 8 }, impact, clubs[clubKey]);
+            const start = { x: GREEN_CENTER.x, y: BALL_R, z: greenFrontZ + 2 - probe.carry };
+            out.push({ label, ...fly(start, impact, clubs[clubKey]) });
+        } else {
+            const clubKey = base.startsWith('7I') ? 'I7' : 'DR';
+            const impact = fullImpact(clubKey);
+            out.push({ label, ...fly({ x: 0, y: BALL_R, z: 0 }, impact, clubs[clubKey], null, 'FAIRWAY') });
+        }
+        state.setWind(0, 0);
+    }
+
     // --- Putt-speed ground roll from the green center (real green surface) ---
     {
         const THREE = await import('https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js');
@@ -208,6 +236,12 @@ check('Driver full', r => r.carry > 180 && r.carry < 280 && r.roll >= 8 && r.rol
 check('PW full onto green', r => r.roll < 10, 'a full wedge into a green must bite');
 // Green speed: a 2 m/s putt rolls a few meters, not across the county
 check('Putt roll @2m/s', r => r.roll > 1.5 && r.roll < 8, 'green speed off');
+// Wind must matter in the short game too (8 m/s head/tail vs calm)
+check('LW60 pitch HEAD', r => r.carry <= get('LW60 pitch').carry * 0.92, 'headwind must cost a pitch ≥8% carry');
+check('LW60 pitch TAIL', r => r.carry >= get('LW60 pitch').carry + 0.5, 'tailwind must push a pitch');
+check('LW60 chip HEAD', r => r.carry <= get('LW60 chip mid').carry - 0.3, 'headwind must shorten even a chip');
+check('7I full HEAD', r => r.carry <= get('7I full').carry * 0.92, 'headwind must cost a 7I ≥8%');
+check('Driver HEAD', r => r.carry <= get('Driver full').carry * 0.95, 'headwind must cost the driver');
 
 await browser.close();
 if (errs.length) fail('\n  ' + errs.join('\n  '));
