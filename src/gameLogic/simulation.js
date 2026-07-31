@@ -314,6 +314,29 @@ function impactFrictionFor(surfaceProps) {
     return 0.35 + 0.20 * sr; // GREEN(1.5)=0.65, FAIRWAY(1.0)=0.55, ROUGH(0.5)=0.45, BUNKER(0.4)=0.43
 }
 
+// Turf gives under a fast, steep impact (the ball pitches a mark instead of
+// skipping off a hard floor): effective restitution falls with impact speed.
+// Grippier surfaces (higher spinResponse — greens) dig the most. Putts never
+// bounce, so putting is untouched.
+const TURF_SOFTNESS_BASE = 0.05;  // 1/(m/s) of restitution softening
+const TURF_SOFTNESS_GRIP = 0.05;  // extra per unit of surface spinResponse
+// A grooved ball keeps part of its spin through a bounce (the contact patch
+// never perfectly rolls): only this fraction of the rigid-body spin change
+// applies. Surviving backspin is what makes the SECOND touch bite.
+const BOUNCE_SPIN_TRANSFER = 0.55;
+// Crater damping: a steep, fast impact buries the ball in the turf and eats
+// horizontal speed the impulse model can't account for (pitch marks!).
+// Engages only above ~30° descent — a driver's shallow landing skips and
+// runs untouched, while wedges and irons dropping at 40°+ bite.
+// keep = 1 / (1 + DIG_K · softness · |vy| · ramp(steepness))
+const TURF_DIG_K = 2.7;
+const TURF_DIG_STEEP_START = 0.5; // sin(descent) where digging begins (~30°)
+
+function turfSoftnessFor(surfaceProps) {
+    const sr = surfaceProps?.spinResponse ?? 1.0;
+    return TURF_SOFTNESS_BASE + TURF_SOFTNESS_GRIP * sr;
+}
+
 /**
  * Apply a single bounce impulse to ball velocity + spin.
  * Returns updated {velocity, spin} (mutating local copies of inputs).
@@ -325,10 +348,12 @@ function impactFrictionFor(surfaceProps) {
  *      v_slip_z = v_z - ω_x R
  *   Coulomb limit:     |J_t| ≤ μ J_n
  *   Stick impulse:     J_t_stick = -(2/7) m v_slip   (sphere, I = 2/5 m R^2)
- *   Spin update via torque τ = r × J_t with r = (0, -R, 0).
+ *   Spin update via torque τ = r × J_t with r = (0, -R, 0),
+ *   scaled by BOUNCE_SPIN_TRANSFER (grooves retain spin through contact).
  */
-function bounceImpulse(vel, omega, cor, mu) {
-    const Jn = BALL_MASS * (1 + cor) * Math.abs(vel.y);
+function bounceImpulse(vel, omega, cor, mu, softness = 0) {
+    const eff = cor / (1 + softness * Math.abs(vel.y));
+    const Jn = BALL_MASS * (1 + eff) * Math.abs(vel.y);
 
     // Slip at contact patch
     const sx = vel.x + omega.z * BALL_R;
@@ -349,14 +374,14 @@ function bounceImpulse(vel, omega, cor, mu) {
     const out = {
         velocity: {
             x: vel.x + Jtx / BALL_MASS,
-            y: -cor * vel.y,
+            y: -eff * vel.y,
             z: vel.z + Jtz / BALL_MASS,
         },
         spin: {
             // τ = (0,-R,0) × (Jtx, 0, Jtz) = (-R Jtz, 0, R Jtx); Δω = τ / I
-            x: omega.x + (-BALL_R * Jtz) / BALL_I,
+            x: omega.x + BOUNCE_SPIN_TRANSFER * (-BALL_R * Jtz) / BALL_I,
             y: omega.y, // y-axis spin (sidespin around vertical) unchanged by horizontal contact
-            z: omega.z + ( BALL_R * Jtx) / BALL_I,
+            z: omega.z + BOUNCE_SPIN_TRANSFER * ( BALL_R * Jtx) / BALL_I,
         },
     };
     return out;
@@ -367,9 +392,9 @@ function bounceImpulse(vel, omega, cor, mu) {
  * (normal from the terrain gradient), apply the flat-ground impulse model,
  * rotate back. On flat ground this is exactly bounceImpulse.
  */
-function bounceImpulseOnSlope(vel, omega, cor, mu, grad) {
+function bounceImpulseOnSlope(vel, omega, cor, mu, grad, softness = 0) {
     const slopeSq = grad ? grad.x * grad.x + grad.z * grad.z : 0;
-    if (slopeSq < 0.0001) return bounceImpulse(vel, omega, cor, mu);
+    if (slopeSq < 0.0001) return bounceImpulse(vel, omega, cor, mu, softness);
 
     const up = new THREE.Vector3(0, 1, 0);
     const n = new THREE.Vector3(-grad.x, 1, -grad.z).normalize();
@@ -378,7 +403,7 @@ function bounceImpulseOnSlope(vel, omega, cor, mu, grad) {
 
     const vL = new THREE.Vector3(vel.x, vel.y, vel.z).applyQuaternion(toLocal);
     const wL = new THREE.Vector3(omega.x, omega.y, omega.z).applyQuaternion(toLocal);
-    const r = bounceImpulse(vL, wL, cor, mu);
+    const r = bounceImpulse(vL, wL, cor, mu, softness);
     const vW = new THREE.Vector3(r.velocity.x, r.velocity.y, r.velocity.z).applyQuaternion(toWorld);
     const wW = new THREE.Vector3(r.spin.x, r.spin.y, r.spin.z).applyQuaternion(toWorld);
     return {
@@ -442,9 +467,20 @@ export function simulateBouncePhase(landingPosition, landingVelocity, landingAng
 
             // Apply impulse
             const r = bounceImpulseOnSlope({ x: velocity.x, y: velocity.y, z: velocity.z }, omega, cor, mu,
-                                           contourGradientAt(position.x, position.z));
+                                           contourGradientAt(position.x, position.z),
+                                           turfSoftnessFor(surfaceProps));
             velocity.set(r.velocity.x, r.velocity.y, r.velocity.z);
             omega = r.spin;
+
+            // Crater damping: bury horizontal speed on steep, fast impacts
+            {
+                const steep = impactSpeed > 0.01 ? Math.abs(before.y) / impactSpeed : 0;
+                const ramp = Math.max(0, steep - TURF_DIG_STEEP_START) / (1 - TURF_DIG_STEEP_START);
+                const keep = 1 / (1 + TURF_DIG_K * turfSoftnessFor(surfaceProps) *
+                                       Math.abs(before.y) * ramp);
+                velocity.x *= keep;
+                velocity.z *= keep;
+            }
 
             const newHSpeed = Math.sqrt(velocity.x ** 2 + velocity.z ** 2);
             const newBsRPM = Math.abs(omega.x) * 60 / (2 * Math.PI);
@@ -575,8 +611,11 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
     // Tuned k so that a 1500 RPM sidespin on a 5 m/s putt curves ~5 cm over 5 m of roll.
     const SIDESPIN_CURVE_K = 0.000012;
 
-    // Residual backspin slightly increases effective friction (still sliding part of the time)
-    const BACKSPIN_DRAG_K = 0.000008; // m/s² added per RPM of |backspin|
+    // Residual backspin means the ball is still SLIDING against the grass,
+    // not rolling — friction is far higher until the spin sheds. This is the
+    // bite that checks a spinning wedge up; putts (~100 rpm) barely notice.
+    const BACKSPIN_DRAG_K = 0.0005;  // m/s² added per RPM of |backspin|
+    const BACKSPIN_DRAG_CAP = 3.0;   // m/s² ceiling for the spin-braking term
 
     // Spin decay during roll: fast on grass, slower on green
     const SPIN_DECAY_PER_S = 1200; // RPM/s
@@ -654,7 +693,7 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
         const accel = new THREE.Vector3(0, 0, 0);
 
         // Friction (kinetic + small spin penalty while backspin remains)
-        const effectiveDecel = decel + BACKSPIN_DRAG_K * Math.abs(bsRPM);
+        const effectiveDecel = decel + Math.min(BACKSPIN_DRAG_CAP, BACKSPIN_DRAG_K * Math.abs(bsRPM));
         accel.addScaledVector(vDir, -effectiveDecel);
 
         // Sidespin curvature (perpendicular to current velocity, sign by sidespin direction)

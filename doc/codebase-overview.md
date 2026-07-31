@@ -76,3 +76,6 @@ Server reconcile for the career record, registered users only: GET /api/career �
 
 ### src/swingDemo.js
 Ghost demo of the ideal full-swing rhythm for the Green Card driving/approach drills: a ghost finger plays hold → hips (before the top!) → release → rotate → arms → wrists on the live touch zones (desktop: a W J A D I key-pill row), timed from the SAME swingPhysics constants the scoring uses (× stretch ÷ swing speed) so it demonstrates exactly what scores as pure. Soft WebAudio ticks per touch (fail-silent). Armed by the drill launch in main.js; on touch it plays when the ADDRESS phase puts the zones on screen (touchControls.setAddressMode), desktop right away. Purely visual — never sends input; aborts if the player starts their own swing. Verified by scratchpad check-demo (in-page caption recording).
+
+### tests/browser-smoke-shotphysics.mjs — shot physics characterization
+Runs the REAL impact→flight→bounce→roll pipeline for a matrix of shots (chips/pitches landing ON the practice green via two-pass placement, full swings onto fairway and green, a putt-speed roll) with wind zeroed, printing carry/roll/total/descent per shot and asserting per-class envelopes. Run this BEFORE and AFTER touching anything in simulation.js/chipPhysics.js/swingPhysics.js — the envelopes catch cross-shot regressions (e.g. a chip fix eating driver rollout).
