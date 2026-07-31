@@ -74,6 +74,7 @@ const data = await page.evaluate(async () => {
             carry: flight.carryDistance,
             total: Math.hypot(fp.x, fp.z),
             descent: flight.landingAngleRadians * 180 / Math.PI,
+            apex: flight.peakHeight,
         };
     }
 
@@ -107,6 +108,7 @@ const data = await page.evaluate(async () => {
             chs: +impact.actualCHS.toFixed(1), ball: +impact.ballSpeed.toFixed(1),
             launch: +impact.launchAngle.toFixed(1), spin: Math.round(impact.backSpin),
             carry: +f.carry.toFixed(1), total: +f.total.toFixed(1), descent: +f.descent.toFixed(0),
+            apex: +f.apex.toFixed(1),
             strike: impact.strikeQuality,
         });
     }
@@ -135,12 +137,20 @@ const TOUR_CARRY_YD = {
 };
 const M2YD = 1.09361;
 
-console.log('club            CHS   ball  launch  spin  | carry(m) total(m) desc | carry(yd) tour  Δ%');
+// TrackMan tour-average APEX ("max height", meters). Tour flights every club
+// to a similar window (~25-30 m); short irons peak as high as the driver.
+const TOUR_APEX_M = {
+    DR: 29, MD: 28, W3: 27, W5: 28, W7: 28, H3: 27, H4: 27,
+    I3: 25, I4: 26, I5: 28, I6: 28, I7: 29, I8: 28, I9: 28,
+    PW: 27, AW50: 26, GW54: 24, SW58: 22, LW60: 21,
+};
+
+console.log('club            CHS   ball  launch  spin  | carry(m) total(m) desc apex(m)/tour | carry(yd) tour  Δ%');
 for (const r of data.bag) {
     const cyd = r.carry * M2YD;
     const tour = TOUR_CARRY_YD[r.key];
     const delta = ((cyd / tour) - 1) * 100;
-    console.log(`${r.name.padEnd(15)} ${String(r.chs).padStart(5)} ${String(r.ball).padStart(6)} ${String(r.launch).padStart(6)}° ${String(r.spin).padStart(5)} | ${String(r.carry).padStart(8)} ${String(r.total).padStart(8)} ${String(r.descent).padStart(4)}° | ${cyd.toFixed(0).padStart(8)} ${String(tour).padStart(5)} ${(delta >= 0 ? '+' : '') + delta.toFixed(0)}%`);
+    console.log(`${r.name.padEnd(15)} ${String(r.chs).padStart(5)} ${String(r.ball).padStart(6)} ${String(r.launch).padStart(6)}° ${String(r.spin).padStart(5)} | ${String(r.carry).padStart(8)} ${String(r.total).padStart(8)} ${String(r.descent).padStart(4)}° ${String(r.apex).padStart(5)}/${String(TOUR_APEX_M[r.key]).padEnd(4)} | ${cyd.toFixed(0).padStart(8)} ${String(tour).padStart(5)} ${(delta >= 0 ? '+' : '') + delta.toFixed(0)}%`);
 }
 console.log('\nbackswing power stack (100% power):');
 for (const r of data.stack) {
@@ -168,6 +178,15 @@ for (const [key, [lo, hi]] of Object.entries(BANDS)) {
     const c = byKey[key].carry;
     if (c < lo || c > hi) fail(`${key} carry ${c} m outside target band [${lo}, ${hi}]`);
 }
+// Apex sanity: tour flights every club into a ~21-29 m window. Wide envelope
+// so tuning can move within reason but a flat-liner or moonball fails.
+// KNOWN GAP: the driver peaks ~24 m vs tour 29 — its launch (8.3°) is low vs
+// tour (10.9°) with carry compensated by the flight model. Fixing that means
+// re-working driver launch/spin generation, tracked separately.
+for (const r of data.bag) {
+    if (r.apex < 18 || r.apex > 34) fail(`${r.key} apex ${r.apex} m outside sanity envelope [18, 34]`);
+}
+
 // The full backswing stack must top out below long-drive territory
 const drOver = data.stack.find(r => r.key === 'DR' && r.label === 'overswing');
 if (drOver.total > 300) fail(`driver full-overswing total ${drOver.total} m (${(drOver.total * M2YD).toFixed(0)} yd) — above 300 m cap`);
