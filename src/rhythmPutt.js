@@ -23,7 +23,11 @@ const EXPIRY_MIN_MS = 1500;            // ...but never sooner than this
 // Tempo is mapped logarithmically (equal *relative* tempo changes feel equal,
 // per Weber's law), then shaped with a power curve so short putts get a wide,
 // comfortable tempo band.
-const FAST_TEMPO_MS = 200;             // Tapping this fast (or faster) = full power
+// Full power at ~3 taps/second: 200 ms demanded a frantic 5/s drumroll for
+// long chips and lag putts, and since the strike window scales WITH tempo
+// (6% of it), max power also meant a brutal 12 ms window. 340 ms keeps the
+// fast end quick but humane, with a ~20 ms window at full power.
+const FAST_TEMPO_MS = 340;             // Tapping this fast (or faster) = full power
 const SLOW_TEMPO_MS = 1400;            // Tapping this slow (or slower) = minimum power
 const MIN_DISTANCE_M = 0.3;            // Distance at minimum power
 const MAX_DISTANCE_M = 32;             // Distance at full power
