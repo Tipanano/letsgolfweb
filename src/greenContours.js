@@ -238,6 +238,52 @@ function makeGridFeature(f) {
 }
 
 /**
+ * Green construction pad: real greens are GRADED into their hillsides (cut
+ * and fill) — raw DEM elevation across a small green can run 10%+ grades
+ * where a ball cannot even rest (Augusta 12 measured 10% at the green
+ * center). Inside the green the base terrain is replaced by a near-level
+ * plane through the green center (tilt direction preserved, magnitude
+ * capped), feathered into the untouched surroundings over the contour's
+ * collar — which reads as the terraced pad real construction leaves.
+ * The putting break itself comes from the green contour on top.
+ */
+const MAX_GREEN_PAD_TILT = 0.015; // 1.5% residual base tilt across the green
+
+function makeGreenPadFeature(contour, baseFeatures) {
+    const cx = contour.center.x, cz = contour.center.z;
+    const inner = contour.innerRadius, outer = contour.outerRadius;
+    const baseAt = (x, z) => {
+        let h = 0;
+        for (const f of baseFeatures) {
+            const b = f.bbox;
+            if (x < b.minX || x > b.maxX || z < b.minZ || z > b.maxZ) continue;
+            h += f.evalAt(x, z);
+        }
+        return h;
+    };
+    const h0 = baseAt(cx, cz);
+    // Base gradient at the center (central differences over 2 m)
+    let gx = (baseAt(cx + 2, cz) - baseAt(cx - 2, cz)) / 4;
+    let gz = (baseAt(cx, cz + 2) - baseAt(cx, cz - 2)) / 4;
+    const gMag = Math.hypot(gx, gz);
+    if (gMag > MAX_GREEN_PAD_TILT) {
+        gx *= MAX_GREEN_PAD_TILT / gMag;
+        gz *= MAX_GREEN_PAD_TILT / gMag;
+    }
+    return {
+        bbox: { minX: cx - outer, maxX: cx + outer, minZ: cz - outer, maxZ: cz + outer },
+        evalAt(x, z) {
+            const d = Math.hypot(x - cx, z - cz);
+            if (d >= outer) return 0;
+            const plane = h0 + gx * (x - cx) + gz * (z - cz);
+            const correction = plane - baseAt(x, z);
+            if (d <= inner) return correction;
+            return correction * smootherstep(1 - (d - inner) / (outer - inner));
+        },
+    };
+}
+
+/**
  * Builds the terrain field for a hole layout: authored green contour and
  * hole-wide terrain features, plus automatic bunker bowls and water
  * depressions. Pass null to clear (flat).
@@ -252,18 +298,28 @@ export function setTerrainFromLayout(layout) {
     }
 
     // Authored hole-wide features (elevated tees/greens, mounds, valleys...)
+    const baseFeatures = [];
     if (Array.isArray(layout.terrainFeatures)) {
         for (const f of layout.terrainFeatures) {
             if (!f) continue;
             if (f.type === 'grid' && Array.isArray(f.heights)) {
-                features.push(makeGridFeature(f));
+                const g = makeGridFeature(f);
+                features.push(g);
+                baseFeatures.push(g);
                 continue;
             }
             if (typeof f.height !== 'number') continue;
-            if (f.type === 'bump') features.push(makeBumpFeature(f));
-            else if (f.type === 'plateau') features.push(makePlateauFeature(f));
-            else if (f.type === 'ridge' || f.type === 'valley') features.push(makeRidgeFeature(f));
+            let made = null;
+            if (f.type === 'bump') made = makeBumpFeature(f);
+            else if (f.type === 'plateau') made = makePlateauFeature(f);
+            else if (f.type === 'ridge' || f.type === 'valley') made = makeRidgeFeature(f);
+            if (made) { features.push(made); baseFeatures.push(made); }
         }
+    }
+
+    // Grade the green into the base terrain (see makeGreenPadFeature)
+    if (baseFeatures.length && layout.greenContour?.center && layout.greenContour.outerRadius > 0) {
+        features.push(makeGreenPadFeature(layout.greenContour, baseFeatures));
     }
 
     // Bunkers: depth scales gently with size (small pots stay shallow)
