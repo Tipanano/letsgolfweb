@@ -199,20 +199,25 @@ export function recordShot(result) {
     const success = evaluateDrillShot(activeDrillId, result);
 
     const progress = loadProgress();
-    let count = progress.counts[activeDrillId] || 0;
-    if (success) {
+    const countBefore = progress.counts[activeDrillId] || 0;
+    // Replaying a drill that's already complete: pure practice — counts
+    // stay put and the drill NEVER auto-stops. (It used to stop on the
+    // first shot, silently turning the session into play-the-hole golf:
+    // 'next' then continued from wherever the ball lay.)
+    const alreadyComplete = countBefore >= drill.target;
+    let count = countBefore;
+    if (success && !alreadyComplete) {
         count++;
         progress.counts[activeDrillId] = count;
+        if (count >= drill.target && !progress.completedAt &&
+            DRILLS.every(d => (progress.counts[d.id] || 0) >= d.target)) {
+            progress.completedAt = new Date().toISOString();
+        }
+        saveProgress(progress);
     }
 
-    const drillDone = count >= drill.target;
-    if (drillDone && !progress.completedAt &&
-        DRILLS.every(d => (progress.counts[d.id] || 0) >= d.target)) {
-        progress.completedAt = new Date().toISOString();
-    }
-    if (success) saveProgress(progress);
-
-    if (drillDone) {
+    // Only the FIRST crossing of the target ends the guided drill
+    if (!alreadyComplete && count >= drill.target) {
         const cardEarned = !!progress.completedAt;
         stopDrill();
         return {
@@ -227,8 +232,12 @@ export function recordShot(result) {
     attemptNo++;
     return {
         statusText: success
-            ? `✅ ${count}/${drill.target} — press (n) for the next ball`
-            : `❌ Not this time (${count}/${drill.target}) — press (n) to try again`,
+            ? (alreadyComplete
+                ? `✅ Still got it — drill already complete. Press (n) for another ball.`
+                : `✅ ${count}/${drill.target} — press (n) for the next ball`)
+            : (alreadyComplete
+                ? `❌ Not this time — press (n) to try again`
+                : `❌ Not this time (${count}/${drill.target}) — press (n) to try again`),
         nextSpot: nextSpot(activeDrillId, attemptNo),
         drillDone: false,
     };

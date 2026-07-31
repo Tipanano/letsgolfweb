@@ -102,4 +102,23 @@ assert.ok(!getProgress().complete);
     stopDrill();
 }
 
+// Replaying an already-complete drill: it must STAY a drill. It used to
+// auto-stop on the first shot, silently turning the session into
+// play-the-hole golf ('next' then continued from wherever the ball lay).
+{
+    store.clear();
+    localStorage.setItem('golfGreenCardV1', JSON.stringify({ counts: { approach: 5 }, completedAt: null }));
+    startDrill('approach');
+    const miss = recordShot({ lie: 'MEDIUM_ROUGH', holed: false, distToFlag: 30 });
+    assert.ok(miss && !miss.drillDone, 'first replay shot must stay an attempt');
+    assert.ok(miss.nextSpot, 'replay miss must set the next drill spot');
+    assert.equal(getActiveDrill(), 'approach', 'drill must stay active on replay');
+    const hit = recordShot({ lie: 'GREEN', holed: false, distToFlag: 5 });
+    assert.ok(hit && !hit.drillDone && hit.nextSpot);
+    assert.ok(/Still got it/.test(hit.statusText), hit.statusText);
+    assert.equal(getProgress().counts.approach, 5, 'replay successes must not inflate the count');
+    assert.equal(getActiveDrill(), 'approach');
+    stopDrill();
+}
+
 console.log('unit-greencard: all assertions passed');
