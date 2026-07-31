@@ -10,6 +10,7 @@ import {
     generatePracticeGreenLayout, showPracticePanel, hidePracticePanel, getDefaultPreset, getActiveChipStyle
 } from './practiceGreen.js'; // Short-game practice area
 import { hasContour } from '../greenContours.js'; // For the slope-arrows hint
+import { getSurfaceTypeAtPoint } from '../utils/gameUtils.js';
 import { recordCompletedRound, getProfile } from '../career/careerStore.js';
 
 // The name shown on the in-game scoreboard: the career profile name once the
@@ -326,8 +327,15 @@ export async function applyPracticePlacement(preset, force = false) {
 
     const groundHeight = visuals.queryTerrainHeight(preset.x, preset.z);
     currentBallPosition = { x: preset.x, y: groundHeight + BALL_RADIUS, z: preset.z };
-    currentLie = preset.lie;
-    practicePlacement = { ...preset };
+    // Preset lies are hand-authored guesses; the ground the ball visibly
+    // sits on wins (a random pitching spot can land on the rough surround).
+    // TEE presets keep their lie — the tee mat isn't a layout polygon.
+    const detected = getSurfaceTypeAtPoint({ x: preset.x, z: preset.z }, currentHoleLayout);
+    currentLie = (preset.lie !== 'TEE' && detected && detected !== 'OUT_OF_BOUNDS' && detected !== 'WATER')
+        ? detected : preset.lie;
+    // Keep the corrected lie in the stored placement — resetSwing's
+    // return-to-spot path re-reads it (prepareForTeeShotAfterHoleOut).
+    practicePlacement = { ...preset, lie: currentLie };
     formerBallPosition = null;
     formerLie = null;
     shotsTaken = 0;
