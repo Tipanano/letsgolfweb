@@ -38,6 +38,14 @@ const RCHIP_SHAPE_MAX_FRAC = 0.45;     // Sidespin effect maxes out here
 const RCHIP_SHAPE_MAX_SIDESPIN = 650;  // RPM of added draw/fade spin
 const RCHIP_SPINNER_BACKSPIN_MULT = 1.30; // On-beat shape tap = extra bite
 
+// Ball forward strikes past the swing's low point, so clean contact gets
+// harder overall; ball back promotes ball-first contact, the safest strike.
+// Shared by the rhythm and legacy chip models. The net tilt must outweigh
+// the side bias ((1+tilt)·(1−bias) > 1) or a back stance ends up riskier
+// than center — the narrowed fat side is where its misses funnel.
+const BALLPOS_CONTACT_TILT = 0.20;      // fwd (-1) = 0.8× both thresholds, back (+1) = 1.2×
+const BALLPOS_CONTACT_SIDE_BIAS = 0.15; // fwd leans thin, back leans fat (which miss you get)
+
 /** Standard normal sample (Box-Muller). */
 function gaussianRandom() {
     let u = 0, v = 0;
@@ -120,9 +128,11 @@ export function calculateRhythmChipImpact(strike, club, ballPositionFactor, curr
 
     const fatForgiveness = surfaceProps?.strikeFactors?.fatForgiveness || 1.0;
     const thinForgiveness = surfaceProps?.strikeFactors?.thinForgiveness || 1.0;
-    // Forward ball (factor < 0) = easier to thin; back ball (factor > 0) = easier to fat
-    const thinThreshold = profile.contactThreshold * thinForgiveness * (1 + ballPositionFactor * 0.3);
-    const fatThreshold = profile.contactThreshold * fatForgiveness * (1 - ballPositionFactor * 0.3);
+    // Forward ball (factor < 0) = easier to thin AND net-riskier contact;
+    // back ball (factor > 0) = easier to fat but net-safer contact
+    const netTilt = 1 + ballPositionFactor * BALLPOS_CONTACT_TILT;
+    const thinThreshold = profile.contactThreshold * thinForgiveness * netTilt * (1 + ballPositionFactor * BALLPOS_CONTACT_SIDE_BIAS);
+    const fatThreshold = profile.contactThreshold * fatForgiveness * netTilt * (1 - ballPositionFactor * BALLPOS_CONTACT_SIDE_BIAS);
 
     // Miss side: an early strike leans thin, a late one leans fat (matches the
     // legacy model); near the beat, ball position decides; ties flip a coin.
@@ -446,10 +456,11 @@ export function calculateChipImpact(backswingDuration, rotationOffset, hitOffset
     const thinForgiveness = surfaceProps?.strikeFactors?.thinForgiveness || 1.0;
 
     // Base thresholds adjusted by ball position
-    // Forward ball = lower thin threshold (easier to thin)
-    // Back ball = lower fat threshold (easier to fat)
-    let thinThreshold = STRIKE_QUALITY_MISMATCH_THRESHOLD * (1.0 - (ballPositionFactor * 0.3));
-    let fatThreshold = STRIKE_QUALITY_MISMATCH_THRESHOLD * (1.0 + (ballPositionFactor * 0.3));
+    // Forward ball = lower thin threshold (easier to thin) and net-riskier
+    // contact; back ball = lower fat threshold (easier to fat) but net-safer
+    const netTilt = 1 + ballPositionFactor * BALLPOS_CONTACT_TILT;
+    let thinThreshold = STRIKE_QUALITY_MISMATCH_THRESHOLD * netTilt * (1.0 + (ballPositionFactor * BALLPOS_CONTACT_SIDE_BIAS));
+    let fatThreshold = STRIKE_QUALITY_MISMATCH_THRESHOLD * netTilt * (1.0 - (ballPositionFactor * BALLPOS_CONTACT_SIDE_BIAS));
 
     // Apply surface forgiveness factors
     // Higher forgiveness = higher threshold = harder to achieve that strike quality

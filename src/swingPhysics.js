@@ -61,6 +61,7 @@ const WRIST_FAT_THIN_THRESHOLD_MS = 100; // ms deviation threshold for Fat/Thin 
 
 // Attack Angle
 const BALLPOS_AOA_SENSITIVITY = 5.0; // Max degrees AoA change from ball position (-1 to +1 factor)
+const BALLPOS_STRIKE_WINDOW_TILT = 0.15; // Ball forward off turf tightens the fat/thin wrist window (max -15%)
 const MAX_NON_TEE_AOA_BONUS = 1.0; // Max degrees positive AoA bonus from ball position when *not* on tee
 // const ARMS_AOA_SENSITIVITY = 0.0; // How much arms timing affects AoA (set to 0 based on new rules?)
 
@@ -313,10 +314,16 @@ function calculateAttackAngle(baseAoA, ballPositionFactor, currentSurface) {
 
 /**
  * Determines the strike quality (Center, Fat, Thin, Flip, Punch) based on
- * extreme wrist timing or large AoA deviations.
+ * extreme wrist timing or large AoA deviations. Ball forward off turf moves
+ * the strike past the swing's low point, so the clean-contact timing window
+ * tightens (up to -15% at full forward); tee shots are exempt — a teed-up
+ * driver is meant to be played forward.
  */
-function calculateStrikeQuality(wristsDev, attackAngle, baseAoA, swingSpeed) {
-    const scaledFatThinThreshold = WRIST_FAT_THIN_THRESHOLD_MS / swingSpeed;
+function calculateStrikeQuality(wristsDev, attackAngle, baseAoA, swingSpeed, ballPositionFactor = 0, currentSurface = 'FAIRWAY') {
+    const posTilt = (currentSurface.toLowerCase() !== 'tee' && ballPositionFactor < 0)
+        ? 1 + ballPositionFactor * BALLPOS_STRIKE_WINDOW_TILT
+        : 1;
+    const scaledFatThinThreshold = (WRIST_FAT_THIN_THRESHOLD_MS / swingSpeed) * posTilt;
     const aoaDev = attackAngle - baseAoA;
     // Define AoA thresholds (could vary by club type later)
     const aoaFatThreshold = -5; // More negative than -5 deg vs base = Fat
@@ -516,7 +523,7 @@ export function calculateImpactPhysics(timingInputs, club, swingSpeed, ballPosit
 
     const attackAngle = calculateAttackAngle(club.baseAoA, ballPositionFactor, currentSurface);
     const dynamicLoft = calculateDynamicLoft(club.loft, wristsDev, attackAngle, swingSpeed);
-    const strikeQuality = calculateStrikeQuality(wristsDev, attackAngle, club.baseAoA, swingSpeed);
+    const strikeQuality = calculateStrikeQuality(wristsDev, attackAngle, club.baseAoA, swingSpeed, ballPositionFactor, currentSurface);
     const smashFactor = calculateSmashFactor(club.baseSmash, strikeQuality, currentSurface);
     let ballSpeed = calculateBallSpeed(actualCHS, smashFactor);
     let launchAngle = calculateLaunchAngle(dynamicLoft, attackAngle);
