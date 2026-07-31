@@ -12,6 +12,8 @@ import { resetSwingArc } from '../swingArcVisualizer.js'; // Clear stale arc on 
 // These might be better placed elsewhere if used by physics too, but keep here for now
 export const DOWNSWING_TIMING_BAR_DURATION_MS = 500; // For full swing
 export const BACKSWING_BAR_MAX_DURATION_MS = 1500; // Max visual duration for bar
+export const IDEAL_BACKSWING_DURATION_MS = 1150; // Match physics (swingPhysics.js)
+export const OVERSWING_WINDOW_MS = 500; // Overswing bonus window beyond bar max (matches swingPhysics)
 export const PUTT_DISTANCE_FACTOR = 1.5; // Yards per mph of ball speed (Needs tuning!)
 
 // --- Game State ---

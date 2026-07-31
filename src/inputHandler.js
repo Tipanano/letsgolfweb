@@ -274,9 +274,10 @@ function handleFullSwingKeyDown(event, gameState) {
             // swingSpeed is already defined at the top of handleFullSwingKeyDown
             markHipInitiationOnBackswingBar(hipPressTimeOffset, swingSpeed);
 
-            // Mark hip initiation on arc visualizer
-            const BACKSWING_MAX_MS = 1500; // Match the constant from animations.js
-            const effectiveMaxDuration = BACKSWING_MAX_MS / swingSpeed;
+            // Mark hip initiation on arc visualizer — same domain as the
+            // arc fill (bar max + overswing window, see animations.js)
+            const BACKSWING_ARC_DOMAIN_MS = 1500 + 500;
+            const effectiveMaxDuration = BACKSWING_ARC_DOMAIN_MS / swingSpeed;
             const hipProgress = Math.min(1.0, hipPressTimeOffset / effectiveMaxDuration);
             SwingArc.markHipInitiationOnArc(hipProgress);
         } else {

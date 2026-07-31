@@ -5,7 +5,7 @@ import {
     setChipDownswingAnimationFrameId, setPuttDownswingAnimationFrameId,
     getBackswingAnimationFrameId, getFullDownswingAnimationFrameId,
     getChipDownswingAnimationFrameId, getPuttDownswingAnimationFrameId,
-    BACKSWING_BAR_MAX_DURATION_MS // <-- Added missing constant import
+    BACKSWING_BAR_MAX_DURATION_MS, IDEAL_BACKSWING_DURATION_MS, OVERSWING_WINDOW_MS
 } from './state.js';
 import {
     updateBackswingBar, updateTimingBars, updateChipTimingBars, updatePuttTimingBar
@@ -31,16 +31,24 @@ function updateBackswingBarAnimation(timestamp) {
     const speedForBar = (shotType === 'full') ? speed : 1.0;
     updateBackswingBar(elapsedTime, speedForBar, shotType); // Call UI update function with shot type
 
-    // Update swing arc visualizer
-    // Use different max duration for chip/putt (2000ms) vs full swing (1500ms)
+    // Update swing arc visualizer.
+    // Full swings show the WHOLE range including the overswing window, so
+    // the arc keeps moving through it and the zone bands mean something;
+    // chips/putts keep their simple 2000ms domain.
     const CHIP_PUTT_MAX_DURATION = 2000;
-    const baseDuration = (shotType === 'chip' || shotType === 'putt') ? CHIP_PUTT_MAX_DURATION : BACKSWING_BAR_MAX_DURATION_MS;
+    const baseDuration = (shotType === 'chip' || shotType === 'putt')
+        ? CHIP_PUTT_MAX_DURATION
+        : BACKSWING_BAR_MAX_DURATION_MS + OVERSWING_WINDOW_MS;
     const maxDuration = baseDuration / speedForBar;
     const progress = Math.min(1.0, elapsedTime / maxDuration);
-    const idealDuration = 1000 / speedForBar; // Ideal backswing duration
+    const idealDuration = IDEAL_BACKSWING_DURATION_MS / speedForBar;
     const isIdeal = elapsedTime <= idealDuration;
     const isLate = elapsedTime > idealDuration;
-    SwingArc.updateBackswingArc(progress, isIdeal, isLate);
+    const zone = (shotType !== 'full') ? null
+        : elapsedTime <= idealDuration ? 'ideal'
+        : elapsedTime <= BACKSWING_BAR_MAX_DURATION_MS / speedForBar ? 'power'
+        : 'overswing';
+    SwingArc.updateBackswingArc(progress, isIdeal, isLate, zone);
 
     setBackswingAnimationFrameId(requestAnimationFrame(updateBackswingBarAnimation));
 }
@@ -148,11 +156,17 @@ export function startBackswingAnimation() {
     const currentId = getBackswingAnimationFrameId();
     if (currentId) cancelAnimationFrame(currentId);
 
-    // Start swing arc visualizer
+    // Start swing arc visualizer. Full swings get zone bands along the arc
+    // (green = to ideal, yellow = extra power, orange-red = overswing) so
+    // the player can SEE where a full swing ends before reaching it.
     const speed = getSwingSpeed();
     const shotType = getCurrentShotType();
     const speedForArc = (shotType === 'full') ? speed : 1.0;
-    SwingArc.startBackswingArc(speedForArc, shotType);
+    const fullDomain = BACKSWING_BAR_MAX_DURATION_MS + OVERSWING_WINDOW_MS;
+    SwingArc.startBackswingArc(speedForArc, shotType, {
+        ideal: IDEAL_BACKSWING_DURATION_MS / fullDomain,
+        max: BACKSWING_BAR_MAX_DURATION_MS / fullDomain,
+    });
 
     setBackswingAnimationFrameId(requestAnimationFrame(updateBackswingBarAnimation));
 }

@@ -148,6 +148,7 @@ const DOWNSWING_TIMING_BAR_DURATION_MS = 500;
 const BACKSWING_BAR_MAX_DURATION_MS = 1500;
 const BACKSWING_BAR_MAX_DURATION_CHIP_PUTT_MS = 2000; // Slower for chips and putts - easier timing
 const IDEAL_BACKSWING_DURATION_MS = 1150; // Match physics (swingPhysics.js)
+const OVERSWING_WINDOW_MS = 500; // Overswing bonus window beyond bar max (matches swingPhysics)
 const CHIP_DOWNSWING_DURATION_MS = 1500; // Match full swing bar duration visually
 
 // --- Ball Position State ---
@@ -255,10 +256,24 @@ export function createClubButtons(gameMode = null) {
 }
 
 export function setupBackswingBar(shotType = 'full') {
-    // Use appropriate max duration based on shot type
-    const baseDuration = (shotType === 'chip' || shotType === 'putt') ? BACKSWING_BAR_MAX_DURATION_CHIP_PUTT_MS : BACKSWING_BAR_MAX_DURATION_MS;
-    const idealPercent = (IDEAL_BACKSWING_DURATION_MS / baseDuration) * 100;
-    idealBackswingMarker.style.left = `${idealPercent}%`;
+    // Full swings show the whole range including the overswing window and
+    // paint the zones on the track: green to ideal, yellow to bar max
+    // (extra power), orange-red beyond (overswing bonus, risky).
+    const bar = progressBackswing?.parentElement;
+    if (shotType === 'chip' || shotType === 'putt') {
+        const idealPercent = (IDEAL_BACKSWING_DURATION_MS / BACKSWING_BAR_MAX_DURATION_CHIP_PUTT_MS) * 100;
+        idealBackswingMarker.style.left = `${idealPercent}%`;
+        if (bar) bar.style.background = '';
+        return;
+    }
+    const domain = BACKSWING_BAR_MAX_DURATION_MS + OVERSWING_WINDOW_MS;
+    const idealPct = (IDEAL_BACKSWING_DURATION_MS / domain) * 100;
+    const maxPct = (BACKSWING_BAR_MAX_DURATION_MS / domain) * 100;
+    idealBackswingMarker.style.left = `${idealPct}%`;
+    if (bar) bar.style.background = `linear-gradient(to right,
+        rgba(76, 175, 80, 0.30) 0 ${idealPct}%,
+        rgba(255, 193, 7, 0.30) ${idealPct}% ${maxPct}%,
+        rgba(255, 87, 34, 0.35) ${maxPct}% 100%)`;
 }
 
 export function setupTimingBarWindows(swingSpeed) {
@@ -281,17 +296,20 @@ export function setupTimingBarWindows(swingSpeed) {
 }
 
 export function updateBackswingBar(elapsedTime, swingSpeed, shotType = 'full') {
-    // Use longer duration for chip/putt (2000ms) to make timing easier
-    const baseDuration = (shotType === 'chip' || shotType === 'putt') ? BACKSWING_BAR_MAX_DURATION_CHIP_PUTT_MS : BACKSWING_BAR_MAX_DURATION_MS;
+    // Chip/putt: simple 2000ms domain. Full: whole range including the
+    // overswing window, so the fill keeps moving through it.
+    const baseDuration = (shotType === 'chip' || shotType === 'putt')
+        ? BACKSWING_BAR_MAX_DURATION_CHIP_PUTT_MS
+        : BACKSWING_BAR_MAX_DURATION_MS + OVERSWING_WINDOW_MS;
     const effectiveBackswingDuration = baseDuration / swingSpeed;
     const progressPercent = Math.min(100, (elapsedTime / effectiveBackswingDuration) * 100);
     progressBackswing.style.width = `${progressPercent}%`;
 
     const idealDurationAdjusted = IDEAL_BACKSWING_DURATION_MS / swingSpeed;
-    const maxDurationAdjusted = baseDuration / swingSpeed;
+    const maxDurationAdjusted = BACKSWING_BAR_MAX_DURATION_MS / swingSpeed;
 
-    if (elapsedTime > maxDurationAdjusted) {
-        progressBackswing.style.backgroundColor = '#FFA500'; // Orange (was Red #dc3545)
+    if (shotType === 'full' && elapsedTime > maxDurationAdjusted) {
+        progressBackswing.style.backgroundColor = '#FF5722'; // Overswing zone
     } else if (elapsedTime > idealDurationAdjusted) {
         progressBackswing.style.backgroundColor = '#ffc107'; // Yellow
     } else {
@@ -303,7 +321,8 @@ export function updateBackswingBar(elapsedTime, swingSpeed, shotType = 'full') {
 export function markHipInitiationOnBackswingBar(hipPressTime, swingSpeed) {
     if (!hipInitiationMarker) return; // Element might not exist
 
-    const effectiveBackswingDuration = BACKSWING_BAR_MAX_DURATION_MS / swingSpeed;
+    // Same domain as the full-swing fill (bar max + overswing window)
+    const effectiveBackswingDuration = (BACKSWING_BAR_MAX_DURATION_MS + OVERSWING_WINDOW_MS) / swingSpeed;
     const markerPercent = Math.min(100, Math.max(0, (hipPressTime / effectiveBackswingDuration) * 100));
 
     hipInitiationMarker.style.left = `${markerPercent}%`;
@@ -908,7 +927,8 @@ export function displayIdealJPressWindowOnBackswing(windowStartMs, windowWidthMs
         return;
     }
 
-    const effectiveBackswingDuration = BACKSWING_BAR_MAX_DURATION_MS / shotSwingSpeed;
+    // Same domain as the full-swing fill (bar max + overswing window)
+    const effectiveBackswingDuration = (BACKSWING_BAR_MAX_DURATION_MS + OVERSWING_WINDOW_MS) / shotSwingSpeed;
     if (effectiveBackswingDuration <= 0) {
         postShotIdealJWindowOnBackswing.style.display = 'none';
         return;

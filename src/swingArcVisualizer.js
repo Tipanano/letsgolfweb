@@ -32,6 +32,12 @@ const ARC_CONFIG = {
 
     markerColor: '#FFD700',         // Gold for press markers
     idealZoneColor: 'rgba(0, 255, 0, 0.3)', // Semi-transparent green
+
+    // Backswing zone underlays (full swing): the player must SEE where the
+    // full swing ends and the overswing gamble begins before reaching it.
+    zoneIdealColor: 'rgba(76, 175, 80, 0.45)',   // up to ideal length
+    zonePowerColor: 'rgba(255, 193, 7, 0.45)',   // ideal → bar max (extra power)
+    zoneOverColor: 'rgba(255, 87, 34, 0.5)',     // overswing (bonus, risky)
 };
 
 // --- State ---
@@ -49,6 +55,8 @@ let hipInitiationProgress = null; // When 'j' was pressed (0-1 of backswing)
 let currentPhase = 'idle';     // 'idle', 'backswing', 'downswing'
 let currentShotType = 'full'; // 'full', 'chip', 'putt'
 let chipBackswingProgress = 0; // Track chip backswing progress for path generation
+let backswingZoneEls = null;   // [ideal, power, overswing] underlay paths
+let backswingZoneFracs = null; // {ideal, max} as fractions of the bar domain
 
 // --- Initialization ---
 
@@ -77,6 +85,21 @@ export function initSwingArcVisualizer() {
     pathElement.setAttribute('stroke-width', '8');
     pathElement.setAttribute('stroke-linecap', 'round');
     svgElement.appendChild(pathElement);
+
+    // Backswing zone underlays: static colored bands along the path showing
+    // where ideal ends, where full power ends, and the overswing zone.
+    // Drawn under the progress stroke, over the faint outline.
+    backswingZoneEls = [ARC_CONFIG.zoneIdealColor, ARC_CONFIG.zonePowerColor, ARC_CONFIG.zoneOverColor]
+        .map((color) => {
+            const el = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            el.setAttribute('fill', 'none');
+            el.setAttribute('stroke', color);
+            el.setAttribute('stroke-width', '12');
+            el.setAttribute('stroke-linecap', 'butt');
+            el.style.display = 'none';
+            svgElement.appendChild(el);
+            return el;
+        });
 
     // Create progress path (fills along the main path)
     progressElement = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -306,13 +329,17 @@ function getPointOnPath(pathData, progress) {
  * Start the backswing visualization.
  * @param {number} swingSpeed - Swing speed factor (0.3 - 1.0)
  * @param {string} shotType - 'full', 'chip', or 'putt'
+ * @param {{ideal: number, max: number}|null} zoneFracs - Zone boundaries as
+ *   fractions of the backswing bar domain (full swings only): green ends at
+ *   `ideal`, yellow at `max`, orange-red runs to 1.0 (overswing).
  */
-export function startBackswingArc(swingSpeed, shotType = 'full') {
+export function startBackswingArc(swingSpeed, shotType = 'full', zoneFracs = null) {
     currentSwingSpeed = swingSpeed;
     currentPhase = 'backswing';
     currentShotType = shotType;
     hipInitiationProgress = null;
     chipBackswingProgress = 0;
+    backswingZoneFracs = (shotType === 'full') ? zoneFracs : null;
 
     // Generate initial path based on shot type
     if (shotType === 'chip') {
@@ -330,6 +357,7 @@ export function startBackswingArc(swingSpeed, shotType = 'full') {
     progressElement.setAttribute('d', currentPathData);
     progressElement.setAttribute('stroke-dasharray', '0 10000'); // Start empty
     progressElement.setAttribute('stroke', ARC_CONFIG.backswingColor);
+    updateBackswingZoneUnderlays();
 
     // Hide downswing elements
     downswingZonesGroup.style.display = 'none';
@@ -340,12 +368,39 @@ export function startBackswingArc(swingSpeed, shotType = 'full') {
 }
 
 /**
+ * Lay the zone bands along the current path: [0..ideal] green,
+ * [ideal..max] yellow, [max..1] orange-red — over the backswing half only.
+ */
+function updateBackswingZoneUnderlays() {
+    if (!backswingZoneEls) return;
+    if (!backswingZoneFracs || currentPhase !== 'backswing') {
+        backswingZoneEls.forEach(el => { el.style.display = 'none'; });
+        return;
+    }
+    const tempPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    tempPath.setAttribute('d', currentPathData);
+    const totalLength = tempPath.getTotalLength();
+    const halfLength = totalLength / 2; // Backswing is the first half
+    const { ideal, max } = backswingZoneFracs;
+    const bands = [[0, ideal], [ideal, max], [max, 1]];
+    backswingZoneEls.forEach((el, i) => {
+        const [from, to] = bands[i];
+        el.setAttribute('d', currentPathData);
+        el.setAttribute('stroke-dasharray',
+            `0 ${from * halfLength} ${(to - from) * halfLength} ${totalLength}`);
+        el.style.display = 'block';
+    });
+}
+
+/**
  * Update backswing progress.
  * @param {number} progress - Progress from 0 to 1
  * @param {boolean} isIdeal - Whether timing is in ideal range
  * @param {boolean} isLate - Whether timing is getting late
+ * @param {string|null} zone - 'ideal' | 'power' | 'overswing' (full swings);
+ *   overrides the legacy isIdeal/isLate coloring when provided.
  */
-export function updateBackswingArc(progress, isIdeal, isLate) {
+export function updateBackswingArc(progress, isIdeal, isLate, zone = null) {
     if (currentPhase !== 'backswing') return;
 
     // Regenerate path based on shot type
@@ -370,9 +425,15 @@ export function updateBackswingArc(progress, isIdeal, isLate) {
 
     progressElement.setAttribute('d', currentPathData);
     progressElement.setAttribute('stroke-dasharray', `${currentLength} ${totalLength}`);
+    updateBackswingZoneUnderlays();
 
-    // Update color based on timing
-    if (!isIdeal && isLate) {
+    // Stroke color follows the zone the swing is currently in
+    if (zone) {
+        progressElement.setAttribute('stroke',
+            zone === 'overswing' ? ARC_CONFIG.backswingOverColor
+            : zone === 'power' ? ARC_CONFIG.backswingLateColor
+            : ARC_CONFIG.backswingColor);
+    } else if (!isIdeal && isLate) {
         progressElement.setAttribute('stroke', ARC_CONFIG.backswingLateColor);
     } else if (progress > 1.0) {
         progressElement.setAttribute('stroke', ARC_CONFIG.backswingOverColor);
@@ -412,6 +473,9 @@ export function endBackswingArc() {
  */
 export function startDownswingArc() {
     currentPhase = 'downswing';
+
+    // Backswing zone bands are done — the downswing has its own zones
+    if (backswingZoneEls) backswingZoneEls.forEach(el => { el.style.display = 'none'; });
 
     // Show downswing zones
     createDownswingZones();
@@ -571,6 +635,7 @@ export function resetSwingArc() {
     downswingZonesGroup.style.display = 'none';
     hipMarkerElement.style.display = 'none';
     idealZoneElement.style.display = 'none';
+    if (backswingZoneEls) backswingZoneEls.forEach(el => { el.style.display = 'none'; });
     clearPressMarkers();
 
 }
