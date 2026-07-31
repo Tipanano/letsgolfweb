@@ -410,11 +410,16 @@ export function handleShotResult(shotData) {
     // Don't update lie immediately - wait for animation to complete to avoid spoilers!
     const finalLie = shotData.surfaceName || 'unknown';
 
+    // Outcome text is computed NOW (state must update immediately) but only
+    // DISPLAYED once the ball has visually stopped — announcing "Fairway
+    // hit 2/5" or "Birdie!" while the ball is mid-air spoils the shot.
+    let outcomeStatus = null;
+
     if (shotData.isHoledOut) {
         holeJustCompleted = true; // Set flag that hole is done, awaiting 'n'
         console.log(`HOLE OUT! Strokes this hole: ${shotsTaken}. Total round score: ${score}`);
         if (practiceMode) {
-            ui.updateStatus(`Holed it! 🎉 Press (n) to replay this spot, or pick a new one.`);
+            outcomeStatus = `Holed it! 🎉 Press (n) to replay this spot, or pick a new one.`;
         } else if (roundCourse) {
             recordRoundHole();
             const par = currentHoleLayout?.par || 4;
@@ -423,11 +428,11 @@ export function handleShotResult(shotData) {
                               diff === 1 ? 'Bogey.' : `+${diff}.`;
             const rel = roundRelativeToPar();
             const relText = rel === 0 ? 'E' : rel > 0 ? '+' + rel : rel;
-            ui.updateStatus(hasNextRoundHole()
+            outcomeStatus = hasNextRoundHole()
                 ? `${scoreName} ${shotsTaken} on hole ${roundHoleIndex + 1} (${relText} thru ${roundHoleIndex + 1}). Press (n) for hole ${roundHoleIndex + 2}.`
-                : `${scoreName} Round complete: ${score} (${relText}). Press (n) for the scorecard.`);
+                : `${scoreName} Round complete: ${score} (${relText}). Press (n) for the scorecard.`;
         } else {
-            ui.updateStatus(`Hole ${currentHoleIndex + 1} complete! Score: ${shotsTaken}. Press (n) to play again.`);
+            outcomeStatus = `Hole ${currentHoleIndex + 1} complete! Score: ${shotsTaken}. Press (n) to play again.`;
         }
         // Ball position remains at the hole for now. It will be reset to tee in prepareForTeeShotAfterHoleOut.
         // shotsTaken for this completed hole is now fixed.
@@ -448,7 +453,7 @@ export function handleShotResult(shotData) {
         if (attempt) {
             holeJustCompleted = true; // attempt over — (n) places the next ball
             if (attempt.nextSpot) practicePlacement = { ...attempt.nextSpot };
-            ui.updateStatus(attempt.statusText);
+            outcomeStatus = attempt.statusText; // shown when the ball stops
         }
     }
 
@@ -484,6 +489,10 @@ export function handleShotResult(shotData) {
     // Update lie and UI after animation completes
     // Note: Animation callbacks are handled in visuals.js
     // We'll use a timeout based on animation duration as a fallback
+    // The outcome text is revealed by the animation-complete callback in
+    // visuals.js — never mid-flight, never overwritten at landing
+    if (outcomeStatus) ui.setPendingOutcomeStatus(outcomeStatus);
+
     const animationDuration = (shotData.timeOfFlight || 3) * 1000; // Convert seconds to ms
     setTimeout(() => {
         console.log(`PlayHole: Updating lie after animation. finalLie from shotData: "${finalLie}"`);

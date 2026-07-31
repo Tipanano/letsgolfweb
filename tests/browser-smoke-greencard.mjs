@@ -89,14 +89,17 @@ const drillInfo = await page.evaluate(async () => {
     };
 });
 
-// Simulate a holed attempt straight through the real shot-result path
+// Simulate a holed attempt straight through the real shot-result path.
+// The drill verdict is held back for the ball animation (spoiler guard) —
+// with no animation here, read it from the pending-outcome slot.
 const afterShot = await page.evaluate(async () => {
     const ph = await import('./src/modes/playHole.js');
     ph.handleShotResult({ finalPosition: { x: 2, y: 0, z: 58 }, isHoledOut: true, surfaceName: 'HOLE' });
     const gc = await import('./src/career/greenCard.js');
+    const ui = await import('./src/ui.js');
     return {
         holingCount: gc.getProgress().counts.holing || 0,
-        status: document.getElementById('status-text-display')?.textContent || '',
+        status: ui.consumePendingOutcomeStatus() || '',
     };
 });
 await page.screenshot({ path: OUT + 'shot-greencard-drill.png' });

@@ -160,6 +160,20 @@ let currentBallPositionIndex = 5; // Start near Center (index 5 for 10 levels, 0
 
 // --- UI Update Functions ---
 
+// Shot-outcome text (drill verdict, hole score) computed at physics time but
+// held back until the ball visibly stops: the animation-complete path
+// consumes it INSTEAD of the generic "Press (n)" line, so the reveal can
+// neither spoil the shot nor be overwritten at landing.
+let pendingOutcomeStatus = null;
+export function setPendingOutcomeStatus(text) {
+    pendingOutcomeStatus = text || null;
+}
+export function consumePendingOutcomeStatus() {
+    const t = pendingOutcomeStatus;
+    pendingOutcomeStatus = null;
+    return t;
+}
+
 export function updateStatus(text) {
     if (statusTextDisplay) {
         if (text.toLowerCase().includes("next shot")) {

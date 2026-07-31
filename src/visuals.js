@@ -344,9 +344,12 @@ export function animateBallFlightWithLanding(shotData, trajectoryColor = 0xffff0
             });
         }
 
-        // Update status to show "Press 'n' for next shot" after ball has stopped
-        // (unless hole was completed, which is handled by mode-specific logic)
-        if (!shotData.isHoledOut) {
+        // Update status now the ball has stopped: a held-back outcome text
+        // (drill verdict, hole score) wins over the generic prompt
+        const pendingOutcome = ui.consumePendingOutcomeStatus();
+        if (pendingOutcome) {
+            ui.updateStatus(pendingOutcome);
+        } else if (!shotData.isHoledOut) {
             ui.updateStatus('Press (n) for next shot');
         }
 
