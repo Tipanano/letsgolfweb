@@ -13,7 +13,7 @@ import { GREEN_CENTER, GREEN_RADIUS, PRACTICE_FLAG, PRACTICE_BUNKERS } from '../
 import { drivingDrillLayout, approachDrillLayout } from './drillHoles.js';
 
 export const DRILLS = [
-    { id: 'driving',  icon: '🏌️', title: 'Driving',     desc: 'Drive 200 m+ and find the fairway',            target: 5 },
+    { id: 'driving',  icon: '🏌️', title: 'Driving',     desc: 'Drive 175 m+ and find the fairway',            target: 5 },
     { id: 'approach', icon: '🎯', title: 'Approach',    desc: 'Hit the green on a short par 3',               target: 5 },
     { id: 'pitching', icon: '🪁', title: 'Pitching',    desc: 'Pitch from 25–45 m and hold the green',        target: 5 },
     { id: 'chipping', icon: '🌱', title: 'Chipping',    desc: 'Chip from 5–10 m off the green and stay on it', target: 5 },
@@ -23,7 +23,7 @@ export const DRILLS = [
 ];
 
 export const LAG_PUTT_TOLERANCE_M = 2.5;
-export const DRIVING_MIN_DISTANCE_M = 200; // A drive must GO somewhere, not just stay in play
+export const DRIVING_MIN_DISTANCE_M = 175; // A drive must GO somewhere, not just stay in play
 
 // --- Attempt evaluation (pure) ---
 
