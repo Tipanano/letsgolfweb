@@ -4,6 +4,7 @@ import { metersToYards, YARDS_TO_METERS } from './utils/unitConversions.js'; // 
 import { getWind, getTemperature, getCurrentShotType } from './gameLogic/state.js'; // Import environment state getters (Corrected Path)
 import { toast } from './ui/toast.js';
 import { swingHintsShown, toggleSwingHints } from './ui/rhythmPuttHud.js';
+import { getCameraYaw } from './visuals/core.js';
 import { modal } from './ui/modal.js';
 import * as playHoleModal from './playHoleModal.js';
 import { DEBUG_MODE } from './config.js'; // Import debug mode setting
@@ -1138,20 +1139,18 @@ export function resetClosestToFlagDisplay() {
 
 // --- Environment Display Update ---
 
-// Helper function to get a wind direction arrow
+// Wind arrow, VIEW-relative: ↑ means the wind pushes the ball away from you,
+// → means it pushes to the right ON YOUR SCREEN — matching what the flag,
+// grass and trees show. Two transforms fold in here: the current camera yaw
+// (the old arrow assumed you always face north), and the horizontal mirror
+// the canvas is displayed with (screen-right = NEGATIVE relative bearing —
+// same convention the point-to-aim raycast corrects for).
+const WIND_ARROWS = ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖'];
 function getWindArrow(direction) {
-    // Normalize direction to 0-359.9 degrees
-    const normalizedDir = ((direction % 360) + 360) % 360;
-    // Determine the arrow based on 8 directions (N, NE, E, SE, S, SW, W, NW)
-    if (normalizedDir >= 337.5 || normalizedDir < 22.5) return '↓'; // North (Down arrow - wind from North)
-    if (normalizedDir >= 22.5 && normalizedDir < 67.5) return '↙'; // Northeast
-    if (normalizedDir >= 67.5 && normalizedDir < 112.5) return '←'; // East
-    if (normalizedDir >= 112.5 && normalizedDir < 157.5) return '↖'; // Southeast
-    if (normalizedDir >= 157.5 && normalizedDir < 202.5) return '↑'; // South
-    if (normalizedDir >= 202.5 && normalizedDir < 247.5) return '↗'; // Southwest
-    if (normalizedDir >= 247.5 && normalizedDir < 292.5) return '→'; // West
-    if (normalizedDir >= 292.5 && normalizedDir < 337.5) return '↘'; // Northwest
-    return '?'; // Should not happen
+    const yawDeg = getCameraYaw() * 180 / Math.PI;
+    const blowHeading = direction + 180; // direction = where wind blows FROM
+    const screenBearing = ((yawDeg - blowHeading) % 360 + 360) % 360;
+    return WIND_ARROWS[Math.round(screenBearing / 45) % 8];
 }
 
 /**

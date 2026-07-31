@@ -582,6 +582,15 @@ const FREECAM_KEYS = new Set(['w', 'a', 's', 'd', 'q', 'e', 'shift', 'arrowup', 
 
 export function isFreeCameraActive() { return freeCamActive; }
 
+// World bearing the camera currently faces (radians, atan2(x, z) convention).
+// Used by the HUD to render view-relative indicators (wind arrow).
+const _camDirScratch = new THREE.Vector3();
+export function getCameraYaw() {
+    if (!camera) return 0;
+    camera.getWorldDirection(_camDirScratch);
+    return Math.atan2(_camDirScratch.x, _camDirScratch.z);
+}
+
 export function toggleFreeCamera() {
     freeCamActive = !freeCamActive;
     freeCamKeys.clear();

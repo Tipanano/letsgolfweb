@@ -202,6 +202,31 @@ await tapZone('tc-address');
 await sleep(200);
 await page.screenshot({ path: OUT + 'shot-touch-full.png' });
 
+// --- Wind arrow is VIEW-relative and mirror-aware ---
+// Known case: camera at aim 0 (facing +z), wind FROM the east (90°) blows
+// toward world −x, which the mirrored display shows moving screen-RIGHT —
+// the flag streams right, so the arrow must say →. Turning the camera 180°
+// must flip it to ←. (The old absolute-north arrow showed ← and never moved.)
+const windCheck = await page.evaluate(async () => {
+    const st = await import('./src/gameLogic/state.js');
+    const core = await import('./src/visuals/core.js');
+    const ui = await import('./src/ui.js');
+    st.setWind(6, 90);
+    st.setShotDirectionAngle(0);
+    core.applyAimAngleToCamera();
+    await new Promise(r => setTimeout(r, 350)); // 200 ms display refresh
+    const facingNorth = document.getElementById('overlay-wind').textContent;
+    st.setShotDirectionAngle(180);
+    core.applyAimAngleToCamera();
+    await new Promise(r => setTimeout(r, 350));
+    const facingSouth = document.getElementById('overlay-wind').textContent;
+    st.setWind(0, 0);
+    return { facingNorth, facingSouth };
+});
+if (!windCheck.facingNorth.includes('→')) fail(`east wind at aim 0 should read →: "${windCheck.facingNorth}"`);
+if (!windCheck.facingSouth.includes('←')) fail(`same wind after 180° turn should read ←: "${windCheck.facingSouth}"`);
+console.log(`wind arrow: view-relative ✓ (${windCheck.facingNorth.trim()} → ${windCheck.facingSouth.trim()} after turning around)`);
+
 // --- Instruction hints: hidden by default, top-bar button toggles them ---
 const hudVisible = () => page.evaluate(() => {
     const el = document.getElementById('rhythm-putt-hud');
