@@ -37,6 +37,7 @@ import { isSlopeOverlayVisible } from './visuals/slopeOverlay.js';
 import { isFreeCameraActive, toggleFreeCamera, freeCamNudge, freeCamLook, camera } from './visuals/core.js';
 import { setDownswingTimingStretch } from './swingPhysics.js';
 import { aimAtScreenPoint } from './aimAtPoint.js';
+import { resetSwingArc } from './swingArcVisualizer.js';
 
 let overlayEl = null;
 let updateTimer = null;
@@ -655,6 +656,22 @@ function updateZones() {
             String(getGameState()).startsWith('calculating') ? 'flex' : 'none';
     }
 
+    // Aim pills only while a shot can still be aimed — mid-swing, in flight
+    // and on the result screen they are dead weight over the scene
+    const aimable = state === 'ready';
+    if (els.aimLeft) els.aimLeft.style.display = aimable ? '' : 'none';
+    if (els.aimRight) els.aimRight.style.display = aimable ? '' : 'none';
+
+    // The swing arc has done its job once the ball is away; the post-shot
+    // report carries the feedback. Left up, it dominates the result view.
+    const shotOver = String(state).startsWith('calculating') || state === 'result';
+    if (shotOver && !els.arcCleared) {
+        els.arcCleared = true;
+        resetSwingArc();
+    } else if (!shotOver) {
+        els.arcCleared = false;
+    }
+
     const full = getCurrentShotType() === 'full';
     if (full !== els.lastFull) {
         els.lastFull = full;
@@ -689,8 +706,8 @@ export function initTouchControls() {
         lastFull: null,
     };
 
-    makeAim('tc-aim-left', '◀', 'ArrowLeft');
-    makeAim('tc-aim-right', '▶', 'ArrowRight');
+    els.aimLeft = makeAim('tc-aim-left', '◀', 'ArrowLeft');
+    els.aimRight = makeAim('tc-aim-right', '▶', 'ArrowRight');
     makeMini('tc-cam', '📷', () => {
         cameraIdx = (cameraIdx + 1) % 4;
         sendKey('keydown', String(cameraIdx + 1));

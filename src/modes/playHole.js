@@ -52,7 +52,10 @@ export async function initializeMode(holeName) { // Made async, added holeName p
         try {
             localStorage.removeItem('previewHoleData');
             roundCourse = null; // Single-hole play, not a round
-            await initializeHoleFromRawLayout(JSON.parse(previewData));
+            const raw = JSON.parse(previewData);
+            // Course holes carry their number so the HUD shows "Hole: 3",
+            // not a generic 1, when a single hole is picked from a course
+            await initializeHoleFromRawLayout(raw, { holeNumber: raw.holeNumber || 1 });
             console.log('Preview hole loaded and ready to play!');
             return;
         } catch (error) {

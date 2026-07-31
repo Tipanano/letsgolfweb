@@ -134,7 +134,7 @@ function createCourseCard(course) {
         btn.addEventListener('mouseenter', () => { btn.style.background = '#e8f5e9'; });
         btn.addEventListener('mouseleave', () => { btn.style.background = 'white'; });
         btn.addEventListener('click', () => {
-            const withCourse = { ...hole, courseName: course.name };
+            const withCourse = { ...hole, courseName: course.name, holeNumber: i + 1 };
             localStorage.setItem('previewHoleData', JSON.stringify(withCourse));
             hideModal();
             if (onHoleSelectedCallback) onHoleSelectedCallback(withCourse);

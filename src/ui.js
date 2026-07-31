@@ -1004,7 +1004,11 @@ export function updateVisualOverlayInfo(mode, { holeNum = 'N/A', par = 'N/A', di
 
     // --- Update Common Elements ---
     if (overlayWindSpan) overlayWindSpan.textContent = wind;
-    if (overlayLieSpan) overlayLieSpan.textContent = lie ? lie.toUpperCase() : '';
+    // 'OUT_OF_BOUNDS' → 'Out of bounds' — the raw enum is not player-facing
+    if (overlayLieSpan) {
+        const pretty = lie ? String(lie).replace(/_/g, ' ').toLowerCase() : '';
+        overlayLieSpan.textContent = pretty ? pretty.charAt(0).toUpperCase() + pretty.slice(1) : '';
+    }
 
     // --- Update Mode-Specific Elements ---
     if (mode === 'play-hole' || mode === 'closest-to-flag') {
