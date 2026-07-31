@@ -149,7 +149,10 @@ const rows = await page.evaluate(async () => {
         const tEnd = t0 + back;
         return phys.calculateImpactPhysics({
             backswingDuration: back,
-            hipInitiationTime: tEnd + (phys.IDEAL_TRANSITION_OFFSET_MS * stretch) / speed,
+            // The ideal transition offset scales with tempo and backswing
+            // length but NOT with the downswing stretch (touch sets 1.5) —
+            // stretching it here cost every reference swing ~7% CHS.
+            hipInitiationTime: tEnd + phys.IDEAL_TRANSITION_OFFSET_MS / speed,
             rotationStartTime: null,
             rotationInitiationTime: tEnd + (phys.IDEAL_ROTATION_OFFSET_MS * stretch) / speed,
             armsStartTime: tEnd + (phys.IDEAL_ARMS_OFFSET_MS * stretch) / speed,
