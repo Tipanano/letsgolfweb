@@ -151,6 +151,25 @@ function injectStyles() {
         .tc-aim.pressed { background: rgba(125, 255, 160, 0.4); border-color: #7dffa0; }
         #tc-aim-left { left: 6px; }
         #tc-aim-right { right: 6px; }
+        /* Read-only shot summary at address: what's in your hands, small.
+           Changing it is what the Setup phase is for. */
+        #tc-shotinfo {
+            position: absolute;
+            top: calc(8px + env(safe-area-inset-top, 0px));
+            left: 10px;
+            padding: 6px 11px;
+            border-radius: 10px;
+            background: rgba(20, 30, 24, 0.72);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            color: #eaf6ec;
+            font-size: 12.5px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+        #tc-shotinfo .tc-si-dim { opacity: 0.6; font-weight: 400; }
+        #touch-controls.setup #tc-shotinfo { display: none; }
         /* Bottom pill (context-aware) and the Setup return button */
         .tc-action {
             position: absolute;
@@ -687,6 +706,19 @@ function updateZones() {
         els.arcCleared = false;
     }
 
+    // Address-phase shot summary mirrors the setup chips (kept current by ui)
+    if (els.shotInfo) {
+        const v = (id) => document.getElementById(id)?.textContent || '';
+        const club = v('fs-club-value');
+        const bits = [club === 'Select Club' ? 'No club' : club, v('fs-shot-type-value')];
+        if (getCurrentShotType() === 'full') bits.push(v('fs-power-value'));
+        bits.push(v('fs-stance-value'));
+        const html = bits
+            .map((b, i) => i === 0 ? `<b>${b}</b>` : `<span class="tc-si-dim">${b}</span>`)
+            .join('<span class="tc-si-dim"> · </span>');
+        if (els.shotInfo.innerHTML !== html) els.shotInfo.innerHTML = html;
+    }
+
     const full = getCurrentShotType() === 'full';
     if (full !== els.lastFull) {
         els.lastFull = full;
@@ -728,6 +760,12 @@ export function initTouchControls() {
         sendKey('keydown', String(cameraIdx + 1));
     });
     els.slope = makeMini('tc-slope', '⛰', () => sendKey('keydown', 'g'));
+
+    // Read-only shot summary shown at address (club · shot · power · stance)
+    const shotInfo = document.createElement('div');
+    shotInfo.id = 'tc-shotinfo';
+    overlayEl.appendChild(shotInfo);
+    els.shotInfo = shotInfo;
 
     // Follow-ball opt-in while the shot is airborne (camera '2'). One-shot:
     // it watches THIS ball land — NEXT restores the normal view, otherwise
