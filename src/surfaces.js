@@ -54,7 +54,9 @@ export const SURFACES = {
     flightModification: {
       spinReduction: 0.0,
       launchAngleChange: 0,
-      velocityReduction: 0.05
+      // A clean fairway strike costs an elite swing almost nothing — the
+      // old 5% made every iron read ~5% low on ball speed vs TrackMan
+      velocityReduction: 0.01
     },
     // Strike quality factors (for chips/pitches) - 1.0 = baseline (fairway)
     strikeFactors: {

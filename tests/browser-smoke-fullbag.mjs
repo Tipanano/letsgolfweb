@@ -124,10 +124,12 @@ const data = await page.evaluate(async () => {
     return { bag, stack };
 });
 
-// PGA Tour average CARRY (yards) — TrackMan published averages.
-// The game's 100%-power target band: "strong amateur": ~92-100% of tour.
+// PGA Tour average CARRY (yards) — TrackMan published averages. H3/H4 are
+// interpolated by loft (TrackMan's hybrid row is a 15-18° club; ours are
+// 20°/22°, sitting between the 7-wood and the long irons). MD interpolated.
+// Sub-PW wedges deliberately sit under tour (game targets ~90-95% there).
 const TOUR_CARRY_YD = {
-    DR: 275, MD: 260, W3: 243, W5: 230, W7: 225, H3: 225, H4: 216,
+    DR: 275, MD: 260, W3: 243, W5: 230, W7: 225, H3: 218, H4: 210,
     I3: 212, I4: 203, I5: 194, I6: 183, I7: 172, I8: 160, I9: 148,
     PW: 136, AW50: 125, GW54: 112, SW58: 100, LW60: 90,
 };

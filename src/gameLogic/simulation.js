@@ -37,17 +37,22 @@ const AIR_VISCOSITY  = 1.81e-5;            // Pa·s, dynamic viscosity of air at
  *                       (dimples keep boundary layer turbulent; unlike a smooth
  *                        sphere which rises again at very high Re, real golf
  *                        balls stay in the trough)
- *   + 0.12·S            spin-induced drag rise. Aoki measured 10-20% Cd rise
- *                       across S = 0–0.5; we're at the upper end. This is the
- *                       term that primarily separates iron behavior (S ~ 0.3)
- *                       from driver behavior (S ~ 0.08) in flight.
+ *   + spin-induced drag rise: saturating in S, mirroring induced drag
+ *                       following the lift curve (which also saturates by
+ *                       S ~ 0.2 in liftCoefficient below). The three
+ *                       constants are calibrated so full-bag carries land
+ *                       on PGA-Tour averages at tour-true launch numbers
+ *                       (tests/browser-smoke-fullbag.mjs): a linear term
+ *                       cannot hold the driver (S ~ 0.065) at 275 yd while
+ *                       pulling the woods (S ~ 0.12) down to theirs.
  */
 function dragCoefficient(reynolds, spinRatio) {
     let cd;
     if (reynolds < 4e4)       cd = 0.50;
     else if (reynolds < 7e4)  cd = 0.50 - 0.29 * (reynolds - 4e4) / 3e4;
     else                       cd = 0.21;
-    return cd + 0.16 * Math.min(spinRatio, 0.5);
+    const s = Math.min(spinRatio, 0.5);
+    return cd + 0.098 * (1 - Math.exp(-Math.max(0, s - 0.075) / 0.10));
 }
 
 /**
