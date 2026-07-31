@@ -76,5 +76,29 @@ for (const f of [-1, 0, 1]) {
     if (quality(0, f, 'FAIRWAY') !== 'Center') fail(`clean full swing not Center at factor ${f}`);
 }
 
+// --- Power slider → clubhead speed: sqrt curve ---
+// Easing off must cost real speed (57% power → ~75.5% CHS), unlike the old
+// linear-0.3 factor where 57% power kept 87% of max speed.
+const chsAt = (speed) => {
+    const back = 1150 / speed;
+    const t0 = 10000, tEnd = t0 + back;
+    return calculateImpactPhysics({
+        backswingDuration: back,
+        hipInitiationTime: tEnd - 150 / speed,
+        rotationStartTime: null,
+        rotationInitiationTime: tEnd + 50 / speed,
+        armsStartTime: tEnd + 100 / speed,
+        wristsStartTime: tEnd + 250 / speed,
+        downswingPhaseStartTime: tEnd,
+        idealBackswingEndTime: tEnd,
+    }, clubs.DR, speed, 0, 'TEE').actualCHS;
+};
+const full = chsAt(1.0);
+for (const s of [0.5, 0.57, 0.8]) {
+    const ratio = chsAt(s) / full;
+    if (Math.abs(ratio - Math.sqrt(s)) > 0.02)
+        fail(`CHS at ${s * 100}% power is ${(ratio * 100).toFixed(1)}% of max — expected ~sqrt = ${(Math.sqrt(s) * 100).toFixed(1)}%`);
+}
+
 Math.random = realRandom;
 console.log('unit-ballpos: all assertions passed');

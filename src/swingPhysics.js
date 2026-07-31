@@ -17,7 +17,13 @@ const BACKSWING_BAR_MAX_DURATION_MS = 1500; // Max duration shown on bar (Added 
 const BACKSWING_POWER_SENSITIVITY = 1.0; // How much duration affects PCHS (linear = 1.0)
 const OVERSWING_PCHS_BONUS_FACTOR = 0.2; // Max % PCHS bonus for reaching max overswing duration
 const OVERSWING_DIFFICULTY_PENALTY = 0.15; // Max % ACHS penalty for reaching max overswing duration
-const SWING_SPEED_REDUCTION_EFFECT_FACTOR = 0.3; // 1.0 = full effect, 0.5 = half effect, 0.0 = no effect
+// Clubhead speed scales with sqrt(power): easing off costs real distance but
+// less than proportionally, like a real smooth swing (57% power → 75% CHS →
+// a ~185 m drive instead of a 250 m bomb). The old linear factor of 0.3 let
+// a 57% swing keep 87% of its speed while every timing window got the full
+// 1/0.57 slow-down — low power made the swing much easier at almost no
+// distance cost.
+const SWING_SPEED_TO_CHS_EXPONENT = 0.5;
 
 // Transition & Speed Efficiency
 export const IDEAL_TRANSITION_OFFSET_MS = -150; // Ideal 'j' press relative to ideal backswing end
@@ -171,7 +177,7 @@ function calculatePotentialCHS(backswingDuration, swingSpeed, clubBaseSpeed) {
     }
 
     // Base PCHS calculation
-    let modifiedSwingSpeedFactor = 1.0 - ((1.0 - swingSpeed) * SWING_SPEED_REDUCTION_EFFECT_FACTOR)
+    let modifiedSwingSpeedFactor = Math.pow(swingSpeed, SWING_SPEED_TO_CHS_EXPONENT);
 
     let potentialCHS = clubBaseSpeed * powerFactor * modifiedSwingSpeedFactor; // Apply slider speed last
 
