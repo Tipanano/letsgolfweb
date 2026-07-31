@@ -656,11 +656,14 @@ function updateZones() {
             String(getGameState()).startsWith('calculating') ? 'flex' : 'none';
     }
 
-    // Aim pills only while a shot can still be aimed — mid-swing, in flight
-    // and on the result screen they are dead weight over the scene
+    // Aim pills, camera and slope minis only while a shot is being prepared —
+    // mid-swing, in flight and on the result screen the moment belongs to
+    // the shot itself (FOLLOW covers the in-flight camera need)
     const aimable = state === 'ready';
     if (els.aimLeft) els.aimLeft.style.display = aimable ? '' : 'none';
     if (els.aimRight) els.aimRight.style.display = aimable ? '' : 'none';
+    if (els.cam) els.cam.style.display = aimable ? '' : 'none';
+    if (els.slope) els.slope.style.display = aimable ? '' : 'none';
 
     // The swing arc has done its job once the ball is away; the post-shot
     // report carries the feedback. Left up, it dominates the result view.
@@ -708,7 +711,7 @@ export function initTouchControls() {
 
     els.aimLeft = makeAim('tc-aim-left', '◀', 'ArrowLeft');
     els.aimRight = makeAim('tc-aim-right', '▶', 'ArrowRight');
-    makeMini('tc-cam', '📷', () => {
+    els.cam = makeMini('tc-cam', '📷', () => {
         cameraIdx = (cameraIdx + 1) % 4;
         sendKey('keydown', String(cameraIdx + 1));
     });

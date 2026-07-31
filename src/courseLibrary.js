@@ -5,8 +5,10 @@
 // difficulty heuristic shared by every course UI.
 
 export const BUNDLED_COURSES = [
+    { file: 'courses/abbey.json' },
     { file: 'courses/asker.json' },
     { file: 'courses/augusta-national.json' },
+    { file: 'courses/blackwater.json' },
     { file: 'courses/bethpage.json' },
     { file: 'courses/byneset.json' },
     { file: 'courses/carnoustie-championship.json' },
@@ -19,6 +21,7 @@ export const BUNDLED_COURSES = [
     { file: 'courses/st-andrews.json' },
     { file: 'courses/stjordal.json' },
     { file: 'courses/stord.json' },
+    { file: 'courses/tikob.json' },
     { file: 'courses/tonsberg.json' },
     { file: 'courses/tpc-sawgrass.json' },
     { file: 'courses/valderrama.json' },
