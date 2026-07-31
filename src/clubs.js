@@ -3,17 +3,18 @@
 // the PGA-Tour AVERAGE club speed for that club (TrackMan averages), so the
 // full-bag carries land on tour-average numbers. Lower power settings scale
 // down from there (sqrt curve in swingPhysics). Wedges below PW sit slightly
-// under tour on purpose, and woods sit a few mph UNDER tour speed because
-// the flight model over-carries woods per mph — carries match tour, which
-// is what the player feels. Guarded by tests/browser-smoke-fullbag.mjs.
+// under tour on purpose. Known issue: at tour speeds the flight model
+// over-carries the WOODS ~8-9% (aero tuning pending — see fullbag suite);
+// speeds stay tour-correct, the fix belongs in the flight model.
+// Guarded by tests/browser-smoke-fullbag.mjs.
 export const clubs = {
     // Driver / Mini Driver - Added liftFactor and type
     'DR': { name: 'Driver',         type: 'driver', loft: 10.5, lengthFactor: 1.0,  baseSmash: 1.50, baseAoA: 2,    spinRateFactor: 0.6, basePotentialSpeed: 113.0, optimalSpin: 2500, defaultBallPositionIndex: 7, liftFactor: 20.0, clBackspinEff: 0.032 }, // Forward+
-    'MD': { name: 'Mini Driver',    type: 'driver', loft: 13,   lengthFactor: 0.97, baseSmash: 1.49, baseAoA: 1,    spinRateFactor: 0.65, basePotentialSpeed: 107.5, optimalSpin: 2800, defaultBallPositionIndex: 7, liftFactor: 15.0, clBackspinEff: 0.027 }, // Forward
+    'MD': { name: 'Mini Driver',    type: 'driver', loft: 13,   lengthFactor: 0.97, baseSmash: 1.49, baseAoA: 1,    spinRateFactor: 0.65, basePotentialSpeed: 110.5, optimalSpin: 2800, defaultBallPositionIndex: 7, liftFactor: 15.0, clBackspinEff: 0.027 }, // Forward
     // Woods - Added liftFactor and type
-    'W3': { name: '3 Wood',         type: 'wood', loft: 15,   lengthFactor: 0.95, baseSmash: 1.48, baseAoA: 0,    spinRateFactor: 0.7, basePotentialSpeed: 100.5, optimalSpin: 3200, defaultBallPositionIndex: 7, liftFactor: 12.0, clBackspinEff: 0.024 }, // Forward
-    'W5': { name: '5 Wood',         type: 'wood', loft: 18,   lengthFactor: 0.93, baseSmash: 1.47, baseAoA: -1,   spinRateFactor: 0.75, basePotentialSpeed: 97.5, optimalSpin: 3700, defaultBallPositionIndex: 7, liftFactor: 11.0, clBackspinEff: 0.023 }, // Forward
-    'W7': { name: '7 Wood',         type: 'wood', loft: 20,   lengthFactor: 0.91, baseSmash: 1.47, baseAoA: -1.5, spinRateFactor: 0.8, basePotentialSpeed: 95.5, optimalSpin: 4200, defaultBallPositionIndex: 6, liftFactor: 9.0, clBackspinEff: 0.021 }, // Forward
+    'W3': { name: '3 Wood',         type: 'wood', loft: 15,   lengthFactor: 0.95, baseSmash: 1.48, baseAoA: 0,    spinRateFactor: 0.7, basePotentialSpeed: 107.0, optimalSpin: 3200, defaultBallPositionIndex: 7, liftFactor: 12.0, clBackspinEff: 0.024 }, // Forward
+    'W5': { name: '5 Wood',         type: 'wood', loft: 18,   lengthFactor: 0.93, baseSmash: 1.47, baseAoA: -1,   spinRateFactor: 0.75, basePotentialSpeed: 103.5, optimalSpin: 3700, defaultBallPositionIndex: 7, liftFactor: 11.0, clBackspinEff: 0.023 }, // Forward
+    'W7': { name: '7 Wood',         type: 'wood', loft: 20,   lengthFactor: 0.91, baseSmash: 1.47, baseAoA: -1.5, spinRateFactor: 0.8, basePotentialSpeed: 101.5, optimalSpin: 4200, defaultBallPositionIndex: 6, liftFactor: 9.0, clBackspinEff: 0.021 }, // Forward
     // Hybrids - Added liftFactor and type
     'H3': { name: '3 Hybrid',       type: 'hybrid', loft: 20,   lengthFactor: 0.89, baseSmash: 1.46, baseAoA: -2,   spinRateFactor: 0.85, basePotentialSpeed: 100.0, optimalSpin: 4000, defaultBallPositionIndex: 6, liftFactor: 8.0, clBackspinEff: 0.021 }, // Center-Forward
     'H4': { name: '4 Hybrid',       type: 'hybrid', loft: 22,   lengthFactor: 0.87, baseSmash: 1.46, baseAoA: -2.5, spinRateFactor: 0.9, basePotentialSpeed: 98.5, optimalSpin: 4500, defaultBallPositionIndex: 6, liftFactor: 8.0, clBackspinEff: 0.020 }, // Center-Forward
