@@ -9,11 +9,11 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.m
 import { scene } from './core.js';
 import { heightAt, gradientAt, hasContour } from '../greenContours.js';
 
-const GRID_SPACING = 1.6;     // m between arrows
+const GRID_SPACING = 1.0;     // m between arrows — tight grid for exact reads
 const MIN_SLOPE = 0.006;      // Hide arrows on effectively flat spots (0.6%)
 const STEEP_SLOPE = 0.06;     // Fully red at 6%
-const ARROW_LEN = 0.55;       // m
-const ARROW_HALF_W = 0.13;    // m
+const ARROW_LEN = 0.38;       // m
+const ARROW_HALF_W = 0.09;    // m
 const LIFT = 0.075;           // Above the green's render layer (0.06)
 
 let overlayMesh = null;

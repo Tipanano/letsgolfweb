@@ -298,10 +298,85 @@ export function processHoleLayout(sourceLayout) {
         // This helps when designers create adjacent polygons with shared edges
         mergeSharedVertices(layout, 0.1);
 
+        // Give un-authored greens a real break field (physics, rendering and
+        // the slope-arrow overlay all read greenContour — without one, putts
+        // roll dead straight and the slope button has nothing to show).
+        synthesizeGreenContour(layout);
+
     } catch (e) {
         console.error("Error processing hole layout. Check JSON format and SURFACES definition.", e);
         return null;
     }
 
     return layout;
+}
+
+// --- Auto green contour ---------------------------------------------------
+// Putts only break where the analytic contour field (greenContours.js) says
+// so — ball roll, the displaced green mesh, and the slope-arrow overlay all
+// read it. Holes that don't author a `greenContour` get a deterministic,
+// gentle one here so course greens putt like greens instead of pool tables.
+// Seeded from the green's own geometry: the same hole always breaks the same
+// way, across sessions and devices.
+
+/** Tiny deterministic PRNG (mulberry32). */
+function mulberry32(seed) {
+    let a = seed >>> 0;
+    return function () {
+        a = (a + 0x6D2B79F5) >>> 0;
+        let t = a;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+}
+
+function synthesizeGreenContour(layout) {
+    if (layout.greenContour || !Array.isArray(layout.greens) || layout.greens.length === 0) return;
+
+    // The green nearest the flag (course holes normally have exactly one)
+    const flag = layout.flagPosition;
+    let best = null, bestD = Infinity;
+    for (const g of layout.greens) {
+        const vs = g.vertices;
+        if (!vs || vs.length < 3) continue;
+        let cx = 0, cz = 0;
+        for (const v of vs) { cx += v.x; cz += v.z; }
+        cx /= vs.length; cz /= vs.length;
+        let r = 0;
+        for (const v of vs) r = Math.max(r, Math.hypot(v.x - cx, v.z - cz));
+        const d = flag ? Math.hypot(cx - flag.x, cz - flag.z) : 0;
+        if (d < bestD) { bestD = d; best = { cx, cz, r }; }
+    }
+    if (!best || best.r < 3) return; // no usable green polygon
+
+    const { cx, cz, r } = best;
+    const rand = mulberry32(
+        (Math.round(cx * 8) * 73856093) ^ (Math.round(cz * 8) * 19349663) ^ Math.round(r * 83492791));
+
+    // Calibrated against the practice green's authored contour (tilt 1.0%,
+    // features 0.14–0.30 m): same family, slightly tamer on average.
+    const tiltMag = 0.006 + rand() * 0.008; // 0.6–1.4% base tilt
+    const tiltDir = rand() * Math.PI * 2;
+    const featureScale = Math.min(1.6, r / 15); // bigger greens carry bigger tiers
+    const bumps = [];
+    const bumpCount = 2 + Math.floor(rand() * 3); // 2–4 crowns/tiers/swales
+    for (let i = 0; i < bumpCount; i++) {
+        const a = rand() * Math.PI * 2;
+        const d = rand() * r * 0.7;
+        bumps.push({
+            x: cx + Math.cos(a) * d,
+            z: cz + Math.sin(a) * d,
+            height: (rand() < 0.4 ? -1 : 1) * (0.08 + rand() * 0.18) * featureScale,
+            radius: r * (0.30 + rand() * 0.25),
+        });
+    }
+
+    layout.greenContour = {
+        center: { x: cx, z: cz },
+        innerRadius: r + 2,          // full strength across green + fringe
+        outerRadius: r + 7,          // feather melts into the surround
+        tilt: { dx: Math.cos(tiltDir) * tiltMag, dz: Math.sin(tiltDir) * tiltMag },
+        bumps,
+    };
 }

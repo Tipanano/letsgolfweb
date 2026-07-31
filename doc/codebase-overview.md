@@ -64,3 +64,6 @@ Point-to-aim shared by touch double-tap and desktop double-click: raycasts the s
 
 ### src/ui/rhythmPuttHud.js
 Bottom-center hint/readout pill: at-address instructions, live rhythm readout (beat dot, tempo, projected distance), post-shot swing/chip reports. Instruction hints are HIDDEN BY DEFAULT (localStorage gih-swing-hints-shown), toggled by the top-bar Hints button (💡 on touch, wired in ui.js); an active Green Card drill always shows them (drills are the tutorial). Live readouts, the swing report, and the pick-a-club prompt are never muted.
+
+### src/holeLoader.js — auto green contour
+processHoleLayout synthesizes a deterministic `greenContour` (gentle tilt 0.6–1.4% + 2–4 crowns/tiers/swales, mulberry32-seeded from the green polygon geometry) for any hole that does not author one. This matters because ball roll physics, the displaced green mesh, and the slope-arrow overlay (visuals/slopeOverlay.js, toggled with g / the ⛰ touch button) ALL read only the analytic contour field (greenContours.js) — without a contour, putts roll dead straight and the slope button shows nothing. Practice green keeps its hand-authored contour.
