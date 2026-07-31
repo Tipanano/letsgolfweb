@@ -1558,3 +1558,33 @@ body:not(.debug-mode) #fs-debug-buttons {
         max-width: 70vw;
     }
 }
+
+/* Default-power chip next to the in-game player name + its mini editor */
+#power-pref-btn {
+    margin-left: 6px;
+    padding: 2px 8px;
+    font-size: 0.85em;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    background: rgba(0, 0, 0, 0.35);
+    color: #fff;
+    cursor: pointer;
+    pointer-events: auto;
+    vertical-align: middle;
+}
+#power-pref-pop {
+    position: fixed;
+    z-index: 10500; /* above the fullscreen game view (9999) */
+    width: min(280px, 86vw);
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: rgba(20, 30, 22, 0.95);
+    color: #fff;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+    font-size: 0.9em;
+}
+#power-pref-pop .ppp-title { font-weight: 600; margin-bottom: 8px; }
+#power-pref-pop .ppp-row { display: flex; align-items: center; gap: 10px; }
+#power-pref-pop .ppp-row input[type="range"] { flex: 1; }
+#power-pref-pop #power-pref-label { min-width: 3em; text-align: right; font-weight: 600; }
+#power-pref-pop .ppp-hint { margin-top: 8px; opacity: 0.75; font-size: 0.85em; line-height: 1.35; }

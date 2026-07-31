@@ -10,17 +10,78 @@ import * as playHoleModal from './playHoleModal.js';
 import { getProfile as getCareerProfile, updateProfile as updateCareerProfile } from './career/careerStore.js';
 import { DEBUG_MODE } from './config.js'; // Import debug mode setting
 
-// The power slider doubles as the profile's default power: the last value a
-// player sets is where every future session starts (debounced — slider
-// 'input' fires continuously while dragging).
-let powerSaveTimer = null;
-function savePowerToProfile(value) {
-    clearTimeout(powerSaveTimer);
-    powerSaveTimer = setTimeout(() => {
-        updateCareerProfile({ defaultPower: value });
-        import('./career/careerSync.js').then(s => s.scheduleCareerSync()).catch(() => {});
-    }, 800);
+// Default power lives on the profile and seeds each session; the in-game
+// slider is deliberately session-only (a punch shot or hero drive must not
+// rewrite the default). The chip next to the player name edits the profile.
+function saveDefaultPower(value) {
+    updateCareerProfile({ defaultPower: value });
+    import('./career/careerSync.js').then(s => s.scheduleCareerSync()).catch(() => {});
 }
+
+// --- Default-power chip: "⚡60%" next to the in-game player name. Tapping
+// it opens a mini editor for the PROFILE default (also applied to the
+// current session so the change is felt immediately).
+function initPowerPrefChip() {
+    const nameSpan = document.getElementById('overlay-player-name');
+    if (!nameSpan || document.getElementById('power-pref-btn')) return;
+
+    const btn = document.createElement('button');
+    btn.id = 'power-pref-btn';
+    btn.type = 'button';
+    btn.title = 'Default swing power (profile setting)';
+    btn.textContent = `⚡${getCareerProfile().defaultPower}%`;
+    nameSpan.parentElement.appendChild(btn);
+
+    const pop = document.createElement('div');
+    pop.id = 'power-pref-pop';
+    pop.innerHTML = `
+        <div class="ppp-title">Default swing power</div>
+        <div class="ppp-row">
+            <input type="range" id="power-pref-range" min="30" max="100" step="5">
+            <span id="power-pref-label"></span>
+        </div>
+        <div class="ppp-hint">Where every round starts. Lower = easier timing,
+        shorter shots. The POWER control still adjusts single shots.</div>`;
+    pop.style.display = 'none';
+    document.body.appendChild(pop);
+
+    const range = pop.querySelector('#power-pref-range');
+    const label = pop.querySelector('#power-pref-label');
+
+    btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const open = pop.style.display !== 'none';
+        if (open) { pop.style.display = 'none'; return; }
+        const current = getCareerProfile().defaultPower;
+        range.value = current;
+        label.textContent = `${current}%`;
+        // Anchor above the chip (the name sits at the bottom of the screen)
+        const r = btn.getBoundingClientRect();
+        pop.style.left = `${Math.max(8, r.left - 10)}px`;
+        pop.style.bottom = `${window.innerHeight - r.top + 8}px`;
+        pop.style.display = 'block';
+    });
+    range.addEventListener('input', () => {
+        const v = parseInt(range.value, 10);
+        label.textContent = `${v}%`;
+        btn.textContent = `⚡${v}%`;
+        saveDefaultPower(v);
+        // Apply to the live session too — changing your baseline should be
+        // felt on the very next swing, not the next visit.
+        const fsPowerSlider = document.getElementById('fs-power-slider');
+        if (fsPowerSlider) {
+            fsPowerSlider.value = v;
+            fsPowerSlider.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    });
+    // Any tap outside closes it
+    document.addEventListener('pointerdown', (e) => {
+        if (pop.style.display !== 'none' && !pop.contains(e.target) && e.target !== btn) {
+            pop.style.display = 'none';
+        }
+    });
+}
+initPowerPrefChip();
 
 // --- Initialize Debug Mode ---
 // Apply debug-mode class to body if DEBUG_MODE is enabled
@@ -1676,7 +1737,7 @@ function initFSPowerSlider() {
     const callback = window._swingSpeedCallback;
 
     if (fsPowerSlider) {
-        // Start at the player's profile power (new players: 65%)
+        // Start at the player's profile power (new players: 60%)
         const startPower = getCareerProfile().defaultPower || 90;
         fsPowerSlider.value = startPower;
         if (fsPowerDisplay) fsPowerDisplay.textContent = `${startPower}%`;
@@ -1691,7 +1752,6 @@ function initFSPowerSlider() {
             const value = parseInt(fsPowerSlider.value, 10);
             if (fsPowerDisplay) fsPowerDisplay.textContent = `${value}%`;
             if (fsPowerValue) fsPowerValue.textContent = `${value}%`;
-            savePowerToProfile(value);
 
             // Call the swing speed callback
             if (callback) {

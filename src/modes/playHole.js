@@ -99,20 +99,11 @@ export async function initializeHoleFromRawLayout(rawLayout, { holeNumber = 1, p
     formerLie = null;
     currentHoleIndex = holeNumber - 1;
 
-    // Per-hole defaults: the player's profile power (new players 65%,
-    // otherwise wherever they last set the slider), center stance, no club
-    const { setSwingSpeed, setGameState } = await import('../gameLogic/state.js');
-    const defaultPower = getProfile().defaultPower || 90;
-    setSwingSpeed(defaultPower);
-    const fsPowerSlider = document.getElementById('fs-power-slider');
-    if (fsPowerSlider) {
-        fsPowerSlider.value = defaultPower;
-        const fsPowerDisplay = document.getElementById('fs-power-display');
-        const fsPowerValue = document.getElementById('fs-power-value');
-        if (fsPowerDisplay) fsPowerDisplay.textContent = `${defaultPower}%`;
-        if (fsPowerValue) fsPowerValue.textContent = `${defaultPower}%`;
-    }
-    const { clearSelectedClub } = await import('../gameLogic/state.js');
+    // Per-hole defaults: center stance, no club. Power deliberately carries
+    // over — the profile default seeds the session at boot, and after that
+    // the slider is the player's session-wide choice (resetting it every
+    // hole would fight "I'm playing at 75 today").
+    const { setGameState, clearSelectedClub } = await import('../gameLogic/state.js');
     clearSelectedClub();
     ui.clearClubSelection();
     ui.setBallPosition(Math.floor(ui.getBallPositionLevels() / 2));

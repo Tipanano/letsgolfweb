@@ -63,7 +63,7 @@ const round = (id, date, total = 90, courseName = 'Sauda Golfklubb') => ({
     assert.equal(merged.profile.name, 'S');
 }
 
-// Profile default power: new players start at 65, values persist clamped to
+// Profile default power: new players start at 60, values persist clamped to
 // [30, 100], and non-numeric input leaves the stored value alone.
 {
     const store = new Map();
@@ -73,7 +73,7 @@ const round = (id, date, total = 90, courseName = 'Sauda Golfklubb') => ({
         removeItem: (k) => store.delete(k),
     };
     const { getProfile, updateProfile } = await import('../src/career/careerStore.js');
-    assert.equal(getProfile().defaultPower, 65, 'new players start at 65% power');
+    assert.equal(getProfile().defaultPower, 60, 'new players start at 60% power');
     updateProfile({ defaultPower: 80 });
     assert.equal(getProfile().defaultPower, 80);
     updateProfile({ defaultPower: 12 });

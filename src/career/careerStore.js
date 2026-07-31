@@ -38,10 +38,11 @@ export function getCareer() {
 // whatever the player types, independent of the multiplayer guest identity.
 
 // defaultPower: the swing-power % each session starts at. New players begin
-// at 65 — easy timing, still clears the Green Card driving drill (175 m
-// needs ~57%+). The power slider persists its last value here, so it acts
-// as "your power" across sessions/devices, adjustable per shot as always.
-const DEFAULT_PROFILE = { name: 'Player', emoji: '🏌️', defaultPower: 65, createdAt: null };
+// at 60 — easy timing, mid-handicap distances (~190 m drives), still clears
+// the Green Card driving drill (175 m needs ~57%+). Deliberately NOT
+// auto-updated by the in-game power slider: one-off punch shots or hero
+// drives are per-shot choices. Edited via the power chip by the player name.
+const DEFAULT_PROFILE = { name: 'Player', emoji: '🏌️', defaultPower: 60, createdAt: null };
 
 export function getProfile() {
     const p = loadCareer().profile;
