@@ -17,7 +17,14 @@ import * as playHoleModal from './playHoleModal.js'; // Import play hole modal
 import { showCourseSelect } from './courseSelectModal.js'; // Course round picker
 import { showCareer } from './careerModal.js'; // Career overview (handicap, rounds, stats)
 import { showGreenCard } from './greenCardModal.js'; // Green Card drill checklist
-import { startDrill, drillLaunchConfig } from './career/greenCard.js';
+import { startDrill, drillLaunchConfig, isCardEarned } from './career/greenCard.js';
+
+// The START HERE tag points brand-new players at the Green Card; it retires
+// once the card is earned
+try {
+    const tag = document.getElementById('greencard-start-tag');
+    if (tag && isCardEarned()) tag.style.display = 'none';
+} catch (e) { /* menu decoration only */ }
 import { initTouchControls } from './touchControls.js'; // On-screen swing zones for touch devices
 import { getGameState } from './gameLogic/state.js';
 import { isViewActive as measurementViewActive } from './visuals/measurementView.js';
@@ -285,10 +292,14 @@ async function checkMultiplayerBeforeSinglePlayer() {
 }
 
 // Practice button toggles the practice submenu (Range / Chipping / Putting)
-document.getElementById('mode-btn-practice')?.addEventListener('click', () => {
+document.getElementById('mode-btn-practice')?.addEventListener('click', (e) => {
     const submenu = document.getElementById('practice-submenu');
     if (submenu) {
-        submenu.style.display = submenu.style.display === 'none' ? 'block' : 'none';
+        const open = submenu.style.display === 'none';
+        submenu.style.display = open ? 'flex' : 'none';
+        e.currentTarget.classList.toggle('expanded', open);
+        // Belt and braces: if the row still lands off-screen, bring it in
+        if (open) submenu.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
 });
 

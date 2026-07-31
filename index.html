@@ -29,30 +29,36 @@
         </div>
 
         <div id="mode-selection" class="menu-cards">
+            <button id="mode-btn-greencard" class="menu-card">
+                <span class="menu-card-tag" id="greencard-start-tag">START HERE</span>
+                <span class="menu-card-icon">🎓</span>
+                <span class="menu-card-title">Green Card</span>
+                <span class="menu-card-desc">Learn the game, drill by drill</span>
+            </button>
             <button id="mode-btn-practice" class="menu-card">
                 <span class="menu-card-icon">🎯</span>
-                <span class="menu-card-title">Practice</span>
+                <span class="menu-card-title">Practice <span class="menu-card-chevron">▾</span></span>
                 <span class="menu-card-desc">Range, chipping & putting greens</span>
             </button>
-            <button id="mode-btn-closest" class="menu-card">
-                <span class="menu-card-icon">📍</span>
-                <span class="menu-card-title">Closest to Flag</span>
-                <span class="menu-card-desc">One shot, stick it tight</span>
-            </button>
+            <div id="practice-submenu" style="display: none;">
+                <button id="mode-btn-range" class="menu-subcard">🏌️ Driving Range</button>
+                <button id="mode-btn-chipping" class="menu-subcard">🌱 Chipping Green</button>
+                <button id="mode-btn-putting" class="menu-subcard">🕳️ Putting Green</button>
+            </div>
             <button id="mode-btn-course" class="menu-card">
                 <span class="menu-card-icon">🏆</span>
                 <span class="menu-card-title">Play Course</span>
-                <span class="menu-card-desc">Full 18-hole rounds, real courses</span>
+                <span class="menu-card-desc">Full rounds on real courses</span>
             </button>
             <button id="mode-btn-hole" class="menu-card">
                 <span class="menu-card-icon">⛳</span>
                 <span class="menu-card-title">Play Hole</span>
                 <span class="menu-card-desc">Tee to cup, count every stroke</span>
             </button>
-            <button id="mode-btn-greencard" class="menu-card">
-                <span class="menu-card-icon">🎓</span>
-                <span class="menu-card-title">Green Card</span>
-                <span class="menu-card-desc">Learn the game, drill by drill</span>
+            <button id="mode-btn-closest" class="menu-card">
+                <span class="menu-card-icon">📍</span>
+                <span class="menu-card-title">Closest to Flag</span>
+                <span class="menu-card-desc">One shot, stick it tight</span>
             </button>
             <button id="mode-btn-career" class="menu-card">
                 <span class="menu-card-icon">📈</span>
@@ -64,11 +70,6 @@
                 <span class="menu-card-title">Hole Maker</span>
                 <span class="menu-card-desc">Design your own holes</span>
             </button>
-            <div id="practice-submenu" style="display: none;">
-                <button id="mode-btn-range" class="menu-subcard">🏌️ Driving Range</button>
-                <button id="mode-btn-chipping" class="menu-subcard">🌱 Chipping Green</button>
-                <button id="mode-btn-putting" class="menu-subcard">🕳️ Putting Green</button>
-            </div>
         </div>
 
         <div id="multiplayer-section" class="menu-panel">
