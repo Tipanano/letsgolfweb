@@ -116,7 +116,7 @@ await browser.close();
 
 const fail = (msg) => { console.error('FAIL:', msg); process.exit(1); };
 if (errors.length) fail('page errors:\n' + errors.join('\n'));
-if (modalInfo.drills !== 6) fail(`expected 6 drills, got ${modalInfo.drills}`);
+if (modalInfo.drills !== 7) fail(`expected 7 drills, got ${modalInfo.drills}`);
 if (!modalInfo.titles.some(t => t.startsWith('Driving'))) fail(`missing Driving drill: ${modalInfo.titles}`);
 if (drillInfo.active !== 'holing') fail(`expected active drill 'holing', got ${drillInfo.active}`);
 if (!drillInfo.hintShown) fail('instruction hint hidden during a Green Card drill (drills are the tutorial)');
@@ -124,4 +124,4 @@ if (afterShot.holingCount !== 1) fail(`expected holing count 1, got ${afterShot.
 if (!/1\/5/.test(afterShot.status)) fail(`status missing 1/5: "${afterShot.status}"`);
 if (!layoutCheck.drive || !layoutCheck.par3) fail(`drill layouts failed processing: ${JSON.stringify(layoutCheck)}`);
 
-console.log('browser-smoke-greencard: PASS — 6 drills, holing drill active, attempt scored 1/5');
+console.log('browser-smoke-greencard: PASS — 7 drills, holing drill active, attempt scored 1/5');

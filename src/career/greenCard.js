@@ -15,6 +15,7 @@ import { drivingDrillLayout, approachDrillLayout } from './drillHoles.js';
 export const DRILLS = [
     { id: 'driving',  icon: '🏌️', title: 'Driving',     desc: 'Find the fairway from the tee',                target: 5 },
     { id: 'approach', icon: '🎯', title: 'Approach',    desc: 'Hit the green on a short par 3',               target: 5 },
+    { id: 'pitching', icon: '🪁', title: 'Pitching',    desc: 'Pitch from 25–45 m and hold the green',        target: 5 },
     { id: 'chipping', icon: '🌱', title: 'Chipping',    desc: 'Chip from 5–10 m off the green and stay on it', target: 5 },
     { id: 'bunker',   icon: '🏖️', title: 'Bunker',      desc: 'Escape a greenside bunker onto the green',     target: 3 },
     { id: 'lagputt',  icon: '📏', title: 'Lag putting', desc: 'Roll long putts to inside 2.5 m',              target: 5 },
@@ -34,6 +35,7 @@ export function evaluateDrillShot(drillId, result) {
     switch (drillId) {
         case 'driving':  return result.lie === 'FAIRWAY';
         case 'approach': return result.holed || result.lie === 'GREEN';
+        case 'pitching': return result.holed || result.lie === 'GREEN';
         case 'chipping': return result.holed || result.lie === 'GREEN';
         case 'bunker':   return result.holed || result.lie === 'GREEN';
         case 'lagputt':  return result.holed ||
@@ -76,7 +78,10 @@ export function getProgress() {
 }
 
 export function isCardEarned() {
-    return getProgress().complete;
+    // completedAt grandfathers: a card earned before a new drill was added
+    // to the checklist stays earned.
+    const p = getProgress();
+    return !!p.completedAt || p.complete;
 }
 
 // --- Drill spot generation ---
@@ -93,6 +98,25 @@ export function nextSpot(drillId, attemptNo = 1) {
             return { id: 'drill', label: label('Driving drill'), x: 0, z: 0.5, lie: 'TEE', club: 'DR', shotType: 'full' };
         case 'approach':
             return { id: 'drill', label: label('Approach drill'), x: 0, z: 0.5, lie: 'TEE', club: 'I7', shotType: 'full' };
+        case 'pitching': {
+            // 25–45 m from the flag, out in front of the green, clear of the
+            // bunkers — a floated wedge that has to carry on and hold
+            for (let i = 0; i < 40; i++) {
+                const d = 25 + Math.random() * 20;
+                const a = (Math.random() - 0.5) * (Math.PI / 2); // ±45° fan in front
+                const x = PRACTICE_FLAG.x + Math.sin(a) * d;
+                const z = PRACTICE_FLAG.z - Math.cos(a) * d;
+                if (Math.abs(x) > 30 || z < 7) continue;
+                if (PRACTICE_BUNKERS.some(b => dist2(x, z, b.x, b.z) < b.r + 1.5)) continue;
+                if (dist2(x, z, GREEN_CENTER.x, GREEN_CENTER.z) < GREEN_RADIUS + 3) continue;
+                return {
+                    id: 'drill', label: label(`Pitching drill · ${dist2(x, z, PRACTICE_FLAG.x, PRACTICE_FLAG.z).toFixed(0)} m`),
+                    x: +x.toFixed(2), z: +z.toFixed(2),
+                    lie: 'FAIRWAY', shotType: 'pitch', club: 'AW50',
+                };
+            }
+            return { id: 'drill', label: label('Pitching drill'), x: 0, z: 25, lie: 'FAIRWAY', shotType: 'pitch', club: 'AW50' };
+        }
         case 'chipping': {
             // 5–10 m outside the green edge, clear of the bunkers
             for (let i = 0; i < 40; i++) {
@@ -106,10 +130,10 @@ export function nextSpot(drillId, attemptNo = 1) {
                 return {
                     id: 'drill', label: label(`Chipping drill · ${dist2(x, z, PRACTICE_FLAG.x, PRACTICE_FLAG.z).toFixed(0)} m`),
                     x: +x.toFixed(2), z: +z.toFixed(2),
-                    lie: onApron ? 'FAIRWAY' : 'LIGHT_ROUGH', shotType: 'chip',
+                    lie: onApron ? 'FAIRWAY' : 'LIGHT_ROUGH', shotType: 'chip', club: 'SW58',
                 };
             }
-            return { id: 'drill', label: label('Chipping drill'), x: 0, z: 34, lie: 'FAIRWAY', shotType: 'chip' };
+            return { id: 'drill', label: label('Chipping drill'), x: 0, z: 34, lie: 'FAIRWAY', shotType: 'chip', club: 'SW58' };
         }
         case 'bunker': {
             const b = PRACTICE_BUNKERS[Math.floor(Math.random() * PRACTICE_BUNKERS.length)];
@@ -119,7 +143,7 @@ export function nextSpot(drillId, attemptNo = 1) {
                 id: 'drill', label: label('Bunker drill'),
                 x: +(b.x + Math.cos(angle) * r).toFixed(2),
                 z: +(b.z + Math.sin(angle) * r).toFixed(2),
-                lie: 'BUNKER', shotType: 'chip',
+                lie: 'BUNKER', shotType: 'chip', club: 'SW58',
             };
         }
         case 'lagputt': {
@@ -160,6 +184,7 @@ export function drillLaunchConfig(drillId) {
             return { type: 'chip', layout: drivingDrillLayout(), placement, hidePanel: true };
         case 'approach':
             return { type: 'chip', layout: approachDrillLayout(), placement, hidePanel: true };
+        case 'pitching':
         case 'chipping':
         case 'bunker':
             return { type: 'chip', layout: null, placement, hidePanel: true };

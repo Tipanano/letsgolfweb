@@ -340,18 +340,19 @@ export async function applyPracticePlacement(preset, force = false) {
     logic.resetSwing();
 
     // Practice presets can override the auto-selected club/shot type.
-    // Chips use the currently active shot style (club + stance recipe).
-    if (preset.shotType === 'chip') {
+    // An explicit preset club always wins (drills pin it: driver off the
+    // tee, sand wedge from the bunker, gap wedge for pitches); otherwise
+    // chips use the currently active shot style (club + stance recipe).
+    if (preset.club) {
+        setSelectedClub(preset.club);
+        ui.setSelectedClubButton(preset.club);
+        if (preset.shotType) setShotType(preset.shotType);
+    } else if (preset.shotType === 'chip') {
         const style = getActiveChipStyle();
         setSelectedClub(style.club);
         ui.setSelectedClubButton(style.club);
         ui.setBallPosition(style.ballPositionIndex);
         setShotType('chip');
-    } else if (preset.club) {
-        // Drill presets pin the club (driver off the tee, iron on the par 3)
-        setSelectedClub(preset.club);
-        ui.setSelectedClubButton(preset.club);
-        if (preset.shotType) setShotType(preset.shotType);
     }
     // Putt presets: green placement auto-selects the putter already.
 

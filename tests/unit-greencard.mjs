@@ -43,6 +43,15 @@ for (let i = 0; i < 200; i++) {
     const bunker = nextSpot('bunker', i);
     assert.ok(PRACTICE_BUNKERS.some(b => d2(bunker.x, bunker.z, b.x, b.z) <= b.r), 'bunker spot outside bunkers');
     assert.equal(bunker.lie, 'BUNKER');
+    assert.equal(bunker.club, 'SW58'); // sand shots get the sand wedge
+
+    const pitch = nextSpot('pitching', i);
+    const pitchDist = d2(pitch.x, pitch.z, PRACTICE_FLAG.x, PRACTICE_FLAG.z);
+    assert.ok(pitchDist >= 24.9 && pitchDist <= 45.1, `pitch dist ${pitchDist}`);
+    assert.ok(d2(pitch.x, pitch.z, GREEN_CENTER.x, GREEN_CENTER.z) > GREEN_RADIUS + 2.9, 'pitch spot on/near green');
+    assert.ok(!PRACTICE_BUNKERS.some(b => d2(pitch.x, pitch.z, b.x, b.z) < b.r), 'pitch in bunker');
+    assert.equal(pitch.shotType, 'pitch');
+    assert.equal(pitch.club, 'AW50');
 
     const lag = nextSpot('lagputt', i);
     const lagDist = d2(lag.x, lag.z, PRACTICE_FLAG.x, PRACTICE_FLAG.z);
@@ -82,7 +91,7 @@ assert.ok(!getProgress().complete);
 
 // Complete every other drill, leaving one attempt on 'bunker'
 {
-    const p = { counts: { driving: 5, approach: 5, chipping: 5, lagputt: 5, holing: 5, bunker: 2 }, completedAt: null };
+    const p = { counts: { driving: 5, approach: 5, pitching: 5, chipping: 5, lagputt: 5, holing: 5, bunker: 2 }, completedAt: null };
     localStorage.setItem('golfGreenCardV1', JSON.stringify(p));
     startDrill('bunker');
     const last = recordShot({ lie: 'GREEN', holed: false, distToFlag: 3 });

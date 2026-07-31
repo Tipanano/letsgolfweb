@@ -149,7 +149,7 @@ const profileBefore = await page.evaluate(() => ({
     meta: document.querySelector('.career-profile-meta')?.textContent || '',
 }));
 if (profileBefore.name !== 'Player') fail(`default profile name wrong: ${JSON.stringify(profileBefore)}`);
-if (!/Playing since/.test(profileBefore.meta) || !/Green Card 0\/6/.test(profileBefore.meta)) {
+if (!/Playing since/.test(profileBefore.meta) || !/Green Card 0\/7/.test(profileBefore.meta)) {
     fail(`profile meta wrong: "${profileBefore.meta}"`);
 }
 await page.click('#career-name');

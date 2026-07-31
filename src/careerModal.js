@@ -262,7 +262,7 @@ function profileHTML(rounds) {
     const since = rounds.length ? rounds[0].date : profile.createdAt;
     const metaBits = [];
     if (since) metaBits.push(`Playing since ${fmtDate(since)}`);
-    metaBits.push(gc.complete
+    metaBits.push(isCardEarned()
         ? '<span class="career-gc-badge">🎓 Green Card</span>'
         : `Green Card ${drillsDone}/${DRILLS.length}`);
     return `
