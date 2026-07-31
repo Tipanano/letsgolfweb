@@ -38,6 +38,7 @@ import { isFreeCameraActive, toggleFreeCamera, freeCamNudge, freeCamLook, camera
 import { setDownswingTimingStretch } from './swingPhysics.js';
 import { aimAtScreenPoint } from './aimAtPoint.js';
 import { resetSwingArc } from './swingArcVisualizer.js';
+import { maybePlayArmedDemo } from './swingDemo.js';
 
 let overlayEl = null;
 let updateTimer = null;
@@ -491,6 +492,9 @@ function setAddressMode(on) {
     if (on && isFreeCameraActive()) toggleFreeCamera();
     document.body.classList.toggle('tc-address', on);
     overlayEl.classList.toggle('setup', !on);
+    // A Green Card full-swing drill may have armed the rhythm demo — the
+    // zones are on screen now, so this is its moment
+    if (on) maybePlayArmedDemo();
 }
 
 

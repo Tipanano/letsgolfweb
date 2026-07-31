@@ -369,6 +369,16 @@ document.getElementById('mode-btn-greencard')?.addEventListener('click', async (
         startDrill(drillId);
         ui.showGameView();
         await setGameMode(GAME_MODES.PLAY_HOLE, null, null, cfg);
+        // Full-swing drills open with a ghost demo of the ideal rhythm.
+        // Touch: it waits for the ADDRESS phase (the zones must be on
+        // screen); desktop plays right away on a key-pill row.
+        if (drillId === 'driving' || drillId === 'approach') {
+            const demo = await import('./swingDemo.js');
+            demo.armSwingDemo();
+            if (!document.body.classList.contains('touch-active')) {
+                demo.maybePlayArmedDemo(900);
+            }
+        }
     });
 });
 
