@@ -120,7 +120,9 @@ const data = await page.evaluate(async () => {
             const impact = impactFor(key, 1.0, mult, surface);
             const f = fly(impact, clubs[key]);
             stack.push({ key, label, chs: +impact.actualCHS.toFixed(1), ball: +impact.ballSpeed.toFixed(1),
-                         carry: +f.carry.toFixed(1), total: +f.total.toFixed(1) });
+                         launch: +impact.launchAngle.toFixed(1), spin: Math.round(impact.backSpin),
+                         carry: +f.carry.toFixed(1), total: +f.total.toFixed(1),
+                         apex: +f.apex.toFixed(1), descent: +f.descent.toFixed(0) });
         }
     }
     return { bag, stack };
@@ -154,7 +156,7 @@ for (const r of data.bag) {
 }
 console.log('\nbackswing power stack (100% power):');
 for (const r of data.stack) {
-    console.log(`  ${r.key.padEnd(4)} ${r.label.padEnd(10)} CHS ${String(r.chs).padStart(6)}  ball ${String(r.ball).padStart(6)}  carry ${String(r.carry).padStart(6)}m  total ${String(r.total).padStart(6)}m (${(r.total * M2YD).toFixed(0)} yd)`);
+    console.log(`  ${r.key.padEnd(4)} ${r.label.padEnd(10)} CHS ${String(r.chs).padStart(6)}  ball ${String(r.ball).padStart(6)}  launch ${String(r.launch).padStart(4)}°  spin ${String(r.spin).padStart(5)}  carry ${String(r.carry).padStart(6)}m  total ${String(r.total).padStart(6)}m (${(r.total * M2YD).toFixed(0)} yd)  apex ${String(r.apex).padStart(5)}m  desc ${String(r.descent).padStart(3)}°`);
 }
 
 // --- Envelope assertions ---
