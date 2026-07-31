@@ -224,10 +224,10 @@ const check = (label, fn, msg) => { const r = get(label); if (!r) errs.push(labe
 // Chips landing on the green with a lofted wedge must CHECK UP: roll well
 // under carry, never 2× carry.
 check('LW60 chip short', r => r.landSurface === 'GREEN' && r.roll <= Math.max(4, r.carry * 0.8), 'lofted chip must not out-roll its carry');
-check('LW60 chip mid', r => r.roll <= Math.max(5, r.carry * 0.9), 'lofted chip rollout too long');
+check('LW60 chip mid', r => r.roll >= 0.7 && r.roll <= Math.max(5, r.carry * 0.9), 'lofted chip release out of band (dead-stop is flop-only)');
 check('SW58 chip mid', r => r.roll <= Math.max(5, r.carry * 1.0), 'SW chip rollout too long');
 // A PW runs out more than a LW — that ordering is the club choice
-check('PW chip mid', r => r.roll > get('LW60 chip mid').roll - 0.5, 'PW should run at least as much as LW');
+check('PW chip mid', r => r.roll >= 3 && r.roll > get('LW60 chip mid').roll, 'a PW bump-and-run must genuinely run');
 check('LW60 pitch', r => r.roll <= Math.max(6, r.carry * 0.8), 'lofted pitch rollout too long');
 // Full swings: sane carries and rollouts
 check('7I full', r => r.carry > 100 && r.carry < 175 && r.roll >= 0 && r.roll < 40, '7I envelope');

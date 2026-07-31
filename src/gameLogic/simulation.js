@@ -335,6 +335,9 @@ const BOUNCE_SPIN_TRANSFER = 0.55;
 // keep = 1 / (1 + DIG_K · softness · |vy| · ramp(steepness))
 const TURF_DIG_K = 2.7;
 const TURF_DIG_STEEP_START = 0.5; // sin(descent) where digging begins (~30°)
+// Digging is a high-energy phenomenon: a floated chip dropping at 5 m/s
+// dents nothing — only the vertical speed beyond this makes a crater.
+const TURF_DIG_MIN_VY = 4.0; // m/s
 
 function turfSoftnessFor(surfaceProps) {
     const sr = surfaceProps?.spinResponse ?? 1.0;
@@ -480,8 +483,8 @@ export function simulateBouncePhase(landingPosition, landingVelocity, landingAng
             {
                 const steep = impactSpeed > 0.01 ? Math.abs(before.y) / impactSpeed : 0;
                 const ramp = Math.max(0, steep - TURF_DIG_STEEP_START) / (1 - TURF_DIG_STEEP_START);
-                const keep = 1 / (1 + TURF_DIG_K * turfSoftnessFor(surfaceProps) *
-                                       Math.abs(before.y) * ramp);
+                const digVy = Math.max(0, Math.abs(before.y) - TURF_DIG_MIN_VY);
+                const keep = 1 / (1 + TURF_DIG_K * turfSoftnessFor(surfaceProps) * digVy * ramp);
                 velocity.x *= keep;
                 velocity.z *= keep;
             }
@@ -618,7 +621,7 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
     // Residual backspin means the ball is still SLIDING against the grass,
     // not rolling — friction is far higher until the spin sheds. This is the
     // bite that checks a spinning wedge up; putts (~100 rpm) barely notice.
-    const BACKSPIN_DRAG_K = 0.0005;  // m/s² added per RPM of |backspin|
+    const BACKSPIN_DRAG_K = 0.00025; // m/s² added per RPM of |backspin|
     const BACKSPIN_DRAG_CAP = 3.0;   // m/s² ceiling for the spin-braking term
 
     // Spin decay during roll: fast on grass, slower on green
