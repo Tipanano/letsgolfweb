@@ -409,11 +409,46 @@ function synthesizeGreenContour(layout) {
         });
     }
 
+    const tilt = { dx: Math.cos(tiltDir) * tiltMag, dz: Math.sin(tiltDir) * tiltMag };
+
+    // Pinnable pin: greenkeepers don't cut holes on slopes. Clamp the total
+    // contour gradient AT the flag to a fair putting grade by shrinking
+    // whichever feature tips it most (tilt alone is 0.6-1.4%, always legal).
+    // Bump field is h·exp(-d²/2σ²), σ = radius/2 — mirror greenContours.js.
+    const MAX_PIN_SLOPE = 0.025; // 2.5%
+    if (flag) {
+        const bumpGrad = (b) => {
+            const sigma = Math.max(0.5, b.radius / 2);
+            const dx = flag.x - b.x, dz = flag.z - b.z;
+            const g = -b.height * Math.exp(-(dx * dx + dz * dz) / (2 * sigma * sigma)) / (sigma * sigma);
+            return { gx: g * dx, gz: g * dz }; // ∇ of the Gaussian at the flag
+        };
+        // Bump gradients are LINEAR in bump height, so the total gradient is
+        // T + s·B (T = tilt, B = summed bump gradients) and the exact scale
+        // s that puts the pin on MAX_PIN_SLOPE is a quadratic root — no
+        // iteration budget to run out of (a pin can start at 7%+).
+        let bx = 0, bz = 0;
+        for (const b of bumps) { const g = bumpGrad(b); bx += g.gx; bz += g.gz; }
+        const tx = tilt.dx, tz = tilt.dz;
+        if (Math.hypot(tx + bx, tz + bz) > MAX_PIN_SLOPE) {
+            const A = bx * bx + bz * bz;
+            const Bc = 2 * (tx * bx + tz * bz);
+            const C = tx * tx + tz * tz - MAX_PIN_SLOPE * MAX_PIN_SLOPE;
+            let s = 0; // C < 0 always (tilt maxes at 1.4%), so a root exists
+            if (A > 1e-12) {
+                const disc = Bc * Bc - 4 * A * C;
+                s = disc >= 0 ? (-Bc + Math.sqrt(disc)) / (2 * A) : 0;
+            }
+            s = Math.max(0, Math.min(1, s));
+            for (const b of bumps) b.height *= s;
+        }
+    }
+
     layout.greenContour = {
         center: { x: cx, z: cz },
         innerRadius: r + 2,          // full strength across green + fringe
         outerRadius: r + 7,          // feather melts into the surround
-        tilt: { dx: Math.cos(tiltDir) * tiltMag, dz: Math.sin(tiltDir) * tiltMag },
+        tilt,
         bumps,
     };
 }

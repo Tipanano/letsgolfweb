@@ -82,6 +82,15 @@ export async function initializeHoleFromRawLayout(rawLayout, { holeNumber = 1, p
     currentModeActive = true;
     holeJustCompleted = false;
 
+    // Outside a course round (single holes, previews) the turf plays the
+    // long-standing neutral standard; rounds roll per-course conditions in
+    // startCourseRound before this runs.
+    if (!roundCourse) {
+        const cond = await import('../courseConditions.js');
+        cond.setNeutralConditions();
+        ui.setConditionsDisplay(null);
+    }
+
     const { processHoleLayout } = await import('../holeLoader.js');
     currentHoleLayout = processHoleLayout(rawLayout);
     if (!currentHoleLayout) throw new Error('Failed to process hole layout');
@@ -163,6 +172,13 @@ export async function startCourseRound(course) {
     roundHoleIndex = 0;
     roundScores = [];
     score = 0;
+    // Today's conditions for this course: stimp + firmness rolled within
+    // bounds set by its difficulty stars (same course + same day = same roll)
+    const { rollConditions, conditionsLabel } = await import('../courseConditions.js');
+    const { difficultyStars } = await import('../courseLibrary.js');
+    const stars = course.stars || difficultyStars(course);
+    rollConditions(course.name || 'course', stars);
+    ui.setConditionsDisplay(conditionsLabel());
     await initializeHoleFromRawLayout(course.holes[0], { holeNumber: 1, preserveScore: true });
 }
 
@@ -254,6 +270,12 @@ export async function initializePracticeMode(type = 'putt', options = {}) {
     practiceMode = true;
     practiceType = type === 'chip' ? 'chip' : 'putt';
     holeJustCompleted = false;
+
+    // Practice and drills always play the neutral standard turf — the
+    // tutorial must teach one consistent ball behavior
+    const cond = await import('../courseConditions.js');
+    cond.setNeutralConditions();
+    ui.setConditionsDisplay(null);
 
     const { processHoleLayout } = await import('../holeLoader.js');
     currentHoleLayout = processHoleLayout(options.layout || generatePracticeGreenLayout());

@@ -7,6 +7,7 @@ import { BALL_RADIUS } from '../visuals/core.js';
 import { getSurfaceTypeAtPoint } from '../utils/gameUtils.js';
 import { queryTerrainHeight } from '../visuals.js';
 import { gradientAt as contourGradientAt } from '../greenContours.js';
+import { greenFrictionScale, turfFrictionScale, turfSoftnessScale } from '../courseConditions.js';
 
 // ============================================================
 // Physical constants (sea level, regulation golf ball)
@@ -346,7 +347,9 @@ const TURF_DIG_MIN_VY = 4.0; // m/s
 
 function turfSoftnessFor(surfaceProps) {
     const sr = surfaceProps?.spinResponse ?? 1.0;
-    return TURF_SOFTNESS_BASE + TURF_SOFTNESS_GRIP * sr;
+    // Course conditions: soft (wet) turf swallows the bounce, firm (baked)
+    // turf skips. Scale is 1.0 at neutral conditions.
+    return (TURF_SOFTNESS_BASE + TURF_SOFTNESS_GRIP * sr) * turfSoftnessScale();
 }
 
 /**
@@ -578,12 +581,14 @@ function rollingFrictionFor(surfaceProps) {
     // with a rollOut-derived 0.2, which made greens roll 2.5× too slow. Use
     // the raw value for the green only — other surfaces keep the derived
     // value so full-swing rollout tuning is unaffected.
+    // Course conditions scale the result: stimp for greens, firmness for
+    // everything else. Both scales are 1.0 at neutral conditions.
     if (surfaceProps?.name === SURFACES.GREEN.name && SURFACES.GREEN.friction !== undefined) {
-        return SURFACES.GREEN.friction;
+        return SURFACES.GREEN.friction * greenFrictionScale();
     }
-    if (surfaceProps?.friction !== undefined) return surfaceProps.friction;
+    if (surfaceProps?.friction !== undefined) return surfaceProps.friction * turfFrictionScale();
     const rollOut = surfaceProps?.rollOut ?? 0.5;
-    return 0.63 * Math.exp(-2.3 * rollOut);
+    return 0.63 * Math.exp(-2.3 * rollOut) * turfFrictionScale();
 }
 
 /**

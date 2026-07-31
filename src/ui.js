@@ -10,6 +10,22 @@ import * as playHoleModal from './playHoleModal.js';
 import { getProfile as getCareerProfile, updateProfile as updateCareerProfile } from './career/careerStore.js';
 import { DEBUG_MODE } from './config.js'; // Import debug mode setting
 
+/**
+ * Shows today's course conditions in the env block ("Stimp 11 · Firm"), or
+ * hides the row when null (practice and single holes play neutral turf).
+ */
+export function setConditionsDisplay(label) {
+    const item = document.getElementById('overlay-conditions-item');
+    const span = document.getElementById('overlay-conditions');
+    if (!item || !span) return;
+    if (label) {
+        span.textContent = label;
+        item.style.display = '';
+    } else {
+        item.style.display = 'none';
+    }
+}
+
 // Default power lives on the profile and seeds each session; the in-game
 // slider is deliberately session-only (a punch shot or hero drive must not
 // rewrite the default). The chip next to the player name edits the profile.
