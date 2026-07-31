@@ -366,9 +366,14 @@ document.getElementById('mode-btn-greencard')?.addEventListener('click', async (
     if (!canProceed) return;
     showGreenCard(async (drillId) => {
         const cfg = drillLaunchConfig(drillId);
-        startDrill(drillId);
         ui.showGameView();
+        // startDrill must come AFTER the mode switch: setGameMode exits any
+        // current play-hole session, and playHole.exitMode() stops the
+        // active drill — starting first meant entering a drill from inside
+        // another play-hole session silently killed it (no attempt
+        // recording, no return to the tee).
         await setGameMode(GAME_MODES.PLAY_HOLE, null, null, cfg);
+        startDrill(drillId);
         // Full-swing drills open with a ghost demo of the ideal rhythm.
         // Touch: it waits for the ADDRESS phase (the zones must be on
         // screen); desktop plays right away on a key-pill row.

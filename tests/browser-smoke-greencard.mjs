@@ -112,6 +112,26 @@ const layoutCheck = await page.evaluate(async () => {
     const par3 = processHoleLayout(approachDrillLayout());
     return { drive: !!(drive && drive.flagPosition), par3: !!(par3 && par3.flagPosition) };
 });
+
+// Drill re-entry: entering a drill FROM an active play-hole session must not
+// kill it (setGameMode exits the old session, and playHole.exitMode stops
+// the active drill — startDrill has to run after the switch). Then a green
+// miss + 'n' must return the ball to the tee, not play on from the rough.
+await page.evaluate(() => (document.getElementById('fs-menu-btn') || document.getElementById('back-to-menu-button')).click());
+await sleep(600);
+await page.evaluate(() => document.getElementById('mode-btn-greencard').click());
+await page.waitForSelector('.gc-drill', { timeout: 5000 });
+await page.evaluate(() => document.querySelectorAll('.gc-drill')[1].click()); // approach
+await sleep(5000);
+const reentry = await page.evaluate(async () => {
+    const gc = await import('./src/career/greenCard.js');
+    const ph = await import('./src/modes/playHole.js');
+    const drillAfterReentry = gc.getActiveDrill();
+    ph.handleShotResult({ finalPosition: { x: -12, y: 0, z: 110 }, isHoledOut: false, surfaceName: 'LIGHT_ROUGH' });
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', bubbles: true, cancelable: true }));
+    await new Promise(r => setTimeout(r, 1200));
+    return { drillAfterReentry, drillAfterMiss: gc.getActiveDrill(), ball: ph.getCurrentBallPosition() };
+});
 await browser.close();
 
 const fail = (msg) => { console.error('FAIL:', msg); process.exit(1); };
@@ -123,5 +143,8 @@ if (!drillInfo.hintShown) fail('instruction hint hidden during a Green Card dril
 if (afterShot.holingCount !== 1) fail(`expected holing count 1, got ${afterShot.holingCount}`);
 if (!/1\/5/.test(afterShot.status)) fail(`status missing 1/5: "${afterShot.status}"`);
 if (!layoutCheck.drive || !layoutCheck.par3) fail(`drill layouts failed processing: ${JSON.stringify(layoutCheck)}`);
+if (reentry.drillAfterReentry !== 'approach') fail(`re-entry killed the drill: getActiveDrill() = ${reentry.drillAfterReentry}`);
+if (reentry.drillAfterMiss !== 'approach') fail('drill stopped after a missed attempt');
+if (Math.hypot(reentry.ball.x, reentry.ball.z - 0.5) > 2) fail(`miss + 'n' did not return to the tee: ${JSON.stringify(reentry.ball)}`);
 
-console.log('browser-smoke-greencard: PASS — 7 drills, holing drill active, attempt scored 1/5');
+console.log('browser-smoke-greencard: PASS — 7 drills, holing drill active, attempt scored 1/5, drill survives re-entry');
