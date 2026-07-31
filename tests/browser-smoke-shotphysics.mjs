@@ -143,8 +143,8 @@ const rows = await page.evaluate(async () => {
     // practice layout (surface detection falls back to FAIRWAY) ---
     const speed = 0.9;
     const stretch = phys.getDownswingTimingStretch();
-    function fullImpact(clubKey) {
-        const back = phys.IDEAL_BACKSWING_DURATION_MS / speed;
+    function fullImpact(clubKey, atSpeed = speed) {
+        const back = phys.IDEAL_BACKSWING_DURATION_MS / atSpeed;
         const t0 = 10000;
         const tEnd = t0 + back;
         return phys.calculateImpactPhysics({
@@ -152,22 +152,25 @@ const rows = await page.evaluate(async () => {
             // The ideal transition offset scales with tempo and backswing
             // length but NOT with the downswing stretch (touch sets 1.5) —
             // stretching it here cost every reference swing ~7% CHS.
-            hipInitiationTime: tEnd + phys.IDEAL_TRANSITION_OFFSET_MS / speed,
+            hipInitiationTime: tEnd + phys.IDEAL_TRANSITION_OFFSET_MS / atSpeed,
             rotationStartTime: null,
-            rotationInitiationTime: tEnd + (phys.IDEAL_ROTATION_OFFSET_MS * stretch) / speed,
-            armsStartTime: tEnd + (phys.IDEAL_ARMS_OFFSET_MS * stretch) / speed,
-            wristsStartTime: tEnd + (phys.IDEAL_WRISTS_OFFSET_MS * stretch) / speed,
+            rotationInitiationTime: tEnd + (phys.IDEAL_ROTATION_OFFSET_MS * stretch) / atSpeed,
+            armsStartTime: tEnd + (phys.IDEAL_ARMS_OFFSET_MS * stretch) / atSpeed,
+            wristsStartTime: tEnd + (phys.IDEAL_WRISTS_OFFSET_MS * stretch) / atSpeed,
             downswingPhaseStartTime: tEnd,
             idealBackswingEndTime: tEnd,
-        }, clubs[clubKey], speed, 0, 'TEE');
+        }, clubs[clubKey], atSpeed, 0, 'TEE');
     }
-    for (const [label, clubKey, surf] of [
-        ['7I full', 'I7', 'FAIRWAY'],
-        ['7I full onto green', 'I7', 'GREEN'],
-        ['Driver full', 'DR', 'FAIRWAY'],
-        ['PW full onto green', 'PW', 'GREEN'],
+    for (const [label, clubKey, surf, atSpeed] of [
+        ['7I full', 'I7', 'FAIRWAY', 0.9],
+        ['7I full onto green', 'I7', 'GREEN', 0.9],
+        // The beginner's flighted-down iron: slower, flatter, less spin —
+        // on flat ground it must RELEASE MORE than the 90% version, not less
+        ['7I easy onto green', 'I7', 'GREEN', 0.7],
+        ['Driver full', 'DR', 'FAIRWAY', 0.9],
+        ['PW full onto green', 'PW', 'GREEN', 0.9],
     ]) {
-        const impact = fullImpact(clubKey);
+        const impact = fullImpact(clubKey, atSpeed);
         out.push({ label, ...fly({ x: 0, y: BALL_R, z: 0 }, impact, clubs[clubKey], null, surf) });
     }
 
@@ -235,6 +238,11 @@ check('LW60 pitch', r => r.roll <= Math.max(6, r.carry * 0.8), 'lofted pitch rol
 // Full swings: sane carries and rollouts
 check('7I full', r => r.carry > 100 && r.carry < 175 && r.roll >= 0 && r.roll < 40, '7I envelope');
 check('7I full onto green', r => r.roll < 15, 'a spinning 7I into a green must bite');
+// Release ordering: the flatter, slower, lower-spin 70% iron must run out
+// MORE than the steep 90% one on the same flat green (landing-speed loss
+// must not dominate descent shallowness).
+check('7I easy onto green', r => r.roll > get('7I full onto green').roll && r.roll < 30,
+    'flighted-down 7I must release more than the full one (and stay sane)');
 check('Driver full', r => r.carry > 180 && r.carry < 280 && r.roll >= 8 && r.roll < 80, 'Driver envelope (a drive must also RUN — dig must not eat shallow landings)');
 check('PW full onto green', r => r.roll < 10, 'a full wedge into a green must bite');
 // Green speed: a 2 m/s putt rolls a few meters, not across the county
