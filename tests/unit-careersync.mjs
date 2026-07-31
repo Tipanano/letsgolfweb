@@ -63,4 +63,27 @@ const round = (id, date, total = 90, courseName = 'Sauda Golfklubb') => ({
     assert.equal(merged.profile.name, 'S');
 }
 
+// Profile default power: new players start at 65, values persist clamped to
+// [30, 100], and non-numeric input leaves the stored value alone.
+{
+    const store = new Map();
+    globalThis.localStorage = {
+        getItem: (k) => (store.has(k) ? store.get(k) : null),
+        setItem: (k, v) => store.set(k, String(v)),
+        removeItem: (k) => store.delete(k),
+    };
+    const { getProfile, updateProfile } = await import('../src/career/careerStore.js');
+    assert.equal(getProfile().defaultPower, 65, 'new players start at 65% power');
+    updateProfile({ defaultPower: 80 });
+    assert.equal(getProfile().defaultPower, 80);
+    updateProfile({ defaultPower: 12 });
+    assert.equal(getProfile().defaultPower, 30, 'clamped to slider minimum');
+    updateProfile({ defaultPower: 250 });
+    assert.equal(getProfile().defaultPower, 100, 'clamped to slider maximum');
+    updateProfile({ name: 'Only name' });
+    assert.equal(getProfile().defaultPower, 100, 'unrelated updates keep power');
+    updateProfile({ defaultPower: NaN });
+    assert.equal(getProfile().defaultPower, 100, 'NaN ignored');
+}
+
 console.log('unit-careersync: all assertions passed');

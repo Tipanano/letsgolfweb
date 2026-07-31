@@ -7,7 +7,20 @@ import { swingHintsShown, toggleSwingHints } from './ui/rhythmPuttHud.js';
 import { getCameraYaw } from './visuals/core.js';
 import { modal } from './ui/modal.js';
 import * as playHoleModal from './playHoleModal.js';
+import { getProfile as getCareerProfile, updateProfile as updateCareerProfile } from './career/careerStore.js';
 import { DEBUG_MODE } from './config.js'; // Import debug mode setting
+
+// The power slider doubles as the profile's default power: the last value a
+// player sets is where every future session starts (debounced — slider
+// 'input' fires continuously while dragging).
+let powerSaveTimer = null;
+function savePowerToProfile(value) {
+    clearTimeout(powerSaveTimer);
+    powerSaveTimer = setTimeout(() => {
+        updateCareerProfile({ defaultPower: value });
+        import('./career/careerSync.js').then(s => s.scheduleCareerSync()).catch(() => {});
+    }, 800);
+}
 
 // --- Initialize Debug Mode ---
 // Apply debug-mode class to body if DEBUG_MODE is enabled
@@ -1663,20 +1676,22 @@ function initFSPowerSlider() {
     const callback = window._swingSpeedCallback;
 
     if (fsPowerSlider) {
-        // Set initial value
-        fsPowerSlider.value = 90;
-        if (fsPowerDisplay) fsPowerDisplay.textContent = '90%';
-        if (fsPowerValue) fsPowerValue.textContent = '90%';
+        // Start at the player's profile power (new players: 65%)
+        const startPower = getCareerProfile().defaultPower || 90;
+        fsPowerSlider.value = startPower;
+        if (fsPowerDisplay) fsPowerDisplay.textContent = `${startPower}%`;
+        if (fsPowerValue) fsPowerValue.textContent = `${startPower}%`;
 
         // Call callback with initial value
         if (callback) {
-            callback(90);
+            callback(startPower);
         }
 
         fsPowerSlider.addEventListener('input', () => {
             const value = parseInt(fsPowerSlider.value, 10);
             if (fsPowerDisplay) fsPowerDisplay.textContent = `${value}%`;
             if (fsPowerValue) fsPowerValue.textContent = `${value}%`;
+            savePowerToProfile(value);
 
             // Call the swing speed callback
             if (callback) {

@@ -37,19 +37,26 @@ export function getCareer() {
 // Server sync for registered users layers on later; until then the name is
 // whatever the player types, independent of the multiplayer guest identity.
 
-const DEFAULT_PROFILE = { name: 'Player', emoji: '🏌️', createdAt: null };
+// defaultPower: the swing-power % each session starts at. New players begin
+// at 65 — easy timing, still clears the Green Card driving drill (175 m
+// needs ~57%+). The power slider persists its last value here, so it acts
+// as "your power" across sessions/devices, adjustable per shot as always.
+const DEFAULT_PROFILE = { name: 'Player', emoji: '🏌️', defaultPower: 65, createdAt: null };
 
 export function getProfile() {
     const p = loadCareer().profile;
     return { ...DEFAULT_PROFILE, ...(p || {}) };
 }
 
-/** Updates name and/or emoji; stamps createdAt on first save. */
-export function updateProfile({ name, emoji } = {}) {
+/** Updates name, emoji and/or default power; stamps createdAt on first save. */
+export function updateProfile({ name, emoji, defaultPower } = {}) {
     const career = loadCareer();
     const profile = { ...DEFAULT_PROFILE, ...(career.profile || {}) };
     if (typeof name === 'string' && name.trim()) profile.name = name.trim().slice(0, 20);
     if (typeof emoji === 'string' && emoji) profile.emoji = emoji;
+    if (Number.isFinite(defaultPower)) {
+        profile.defaultPower = Math.round(Math.min(100, Math.max(30, defaultPower)));
+    }
     if (!profile.createdAt) profile.createdAt = new Date().toISOString();
     profile.updatedAt = new Date().toISOString(); // sync conflict resolution
     career.profile = profile;

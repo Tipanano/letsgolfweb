@@ -18,6 +18,7 @@ import { showCourseSelect } from './courseSelectModal.js'; // Course round picke
 import { showCareer } from './careerModal.js'; // Career overview (handicap, rounds, stats)
 import { showGreenCard } from './greenCardModal.js'; // Green Card drill checklist
 import { startDrill, drillLaunchConfig, isCardEarned } from './career/greenCard.js';
+import { getProfile } from './career/careerStore.js';
 
 // The START HERE tag points brand-new players at the Green Card; it retires
 // once the card is earned
@@ -163,9 +164,11 @@ ui.updatePlayerDisplay(playerManager.getDisplayName(), playerManager.currentPlay
 // Create the club buttons first
 ui.createClubButtons();
 
-// Get initial values from UI (fullscreen power slider and club buttons) and set them in logic
+// Initial power comes from the player's profile (new players: 65%); the
+// slider element still carries a static 90 in the HTML, so seed it here.
 const fsPowerSlider = document.getElementById('fs-power-slider');
-const initialSwingSpeed = fsPowerSlider ? parseInt(fsPowerSlider.value, 10) : 90;
+const initialSwingSpeed = getProfile().defaultPower || 90;
+if (fsPowerSlider) fsPowerSlider.value = initialSwingSpeed;
 logic.setSwingSpeed(initialSwingSpeed);
 
 // The default club is set by createClubButtons, which also triggers the onClubChangeCallback

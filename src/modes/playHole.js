@@ -99,16 +99,18 @@ export async function initializeHoleFromRawLayout(rawLayout, { holeNumber = 1, p
     formerLie = null;
     currentHoleIndex = holeNumber - 1;
 
-    // Per-hole defaults: full power, center stance, no club selected
+    // Per-hole defaults: the player's profile power (new players 65%,
+    // otherwise wherever they last set the slider), center stance, no club
     const { setSwingSpeed, setGameState } = await import('../gameLogic/state.js');
-    setSwingSpeed(90);
+    const defaultPower = getProfile().defaultPower || 90;
+    setSwingSpeed(defaultPower);
     const fsPowerSlider = document.getElementById('fs-power-slider');
     if (fsPowerSlider) {
-        fsPowerSlider.value = 90;
+        fsPowerSlider.value = defaultPower;
         const fsPowerDisplay = document.getElementById('fs-power-display');
         const fsPowerValue = document.getElementById('fs-power-value');
-        if (fsPowerDisplay) fsPowerDisplay.textContent = '90%';
-        if (fsPowerValue) fsPowerValue.textContent = '90%';
+        if (fsPowerDisplay) fsPowerDisplay.textContent = `${defaultPower}%`;
+        if (fsPowerValue) fsPowerValue.textContent = `${defaultPower}%`;
     }
     const { clearSelectedClub } = await import('../gameLogic/state.js');
     clearSelectedClub();
