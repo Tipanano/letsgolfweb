@@ -396,53 +396,93 @@ function synthesizeGreenContour(layout) {
     const tiltMag = 0.006 + rand() * 0.008; // 0.6–1.4% base tilt
     const tiltDir = rand() * Math.PI * 2;
     const featureScale = Math.min(1.6, r / 15); // bigger greens carry bigger tiers
+    // A Gaussian bump's steepest face slope is 0.607·|h|/σ (σ = radius/2).
+    // Cap it: tier faces shed balls toward the flats (that's real), but a
+    // face beyond ~5.5% turns a small green into a funnel.
+    const MAX_BUMP_FACE_SLOPE = 0.055;
     const bumps = [];
     const bumpCount = 2 + Math.floor(rand() * 3); // 2–4 crowns/tiers/swales
     for (let i = 0; i < bumpCount; i++) {
         const a = rand() * Math.PI * 2;
         const d = rand() * r * 0.7;
-        bumps.push({
-            x: cx + Math.cos(a) * d,
-            z: cz + Math.sin(a) * d,
-            height: (rand() < 0.4 ? -1 : 1) * (0.08 + rand() * 0.18) * featureScale,
-            radius: r * (0.30 + rand() * 0.25),
-        });
+        const radius = r * (0.30 + rand() * 0.25);
+        const sigma = Math.max(0.5, radius / 2);
+        let height = (rand() < 0.4 ? -1 : 1) * (0.08 + rand() * 0.18) * featureScale;
+        const maxH = MAX_BUMP_FACE_SLOPE * sigma / 0.607;
+        if (Math.abs(height) > maxH) height = Math.sign(height) * maxH;
+        bumps.push({ x: cx + Math.cos(a) * d, z: cz + Math.sin(a) * d, height, radius });
     }
 
     const tilt = { dx: Math.cos(tiltDir) * tiltMag, dz: Math.sin(tiltDir) * tiltMag };
 
-    // Pinnable pin: greenkeepers don't cut holes on slopes. Clamp the total
-    // contour gradient AT the flag to a fair putting grade by shrinking
-    // whichever feature tips it most (tilt alone is 0.6-1.4%, always legal).
-    // Bump field is h·exp(-d²/2σ²), σ = radius/2 — mirror greenContours.js.
-    const MAX_PIN_SLOPE = 0.025; // 2.5%
-    if (flag) {
-        const bumpGrad = (b) => {
+    // Overlapping bump faces can SUM well past any single face's slope
+    // (9.8% measured on a real green). Cap the total contour gradient
+    // everywhere on the green: sample a grid, and at the steepest point
+    // solve the exact bump scale (gradients are linear in heights) —
+    // repeat a few passes since scaling moves the maximum.
+    const MAX_GREEN_FACE_SLOPE = 0.06;
+    const gradParts = (x, z) => {
+        let bgx = 0, bgz = 0;
+        for (const b of bumps) {
             const sigma = Math.max(0.5, b.radius / 2);
-            const dx = flag.x - b.x, dz = flag.z - b.z;
+            const dx = x - b.x, dz = z - b.z;
             const g = -b.height * Math.exp(-(dx * dx + dz * dz) / (2 * sigma * sigma)) / (sigma * sigma);
-            return { gx: g * dx, gz: g * dz }; // ∇ of the Gaussian at the flag
-        };
-        // Bump gradients are LINEAR in bump height, so the total gradient is
-        // T + s·B (T = tilt, B = summed bump gradients) and the exact scale
-        // s that puts the pin on MAX_PIN_SLOPE is a quadratic root — no
-        // iteration budget to run out of (a pin can start at 7%+).
-        let bx = 0, bz = 0;
-        for (const b of bumps) { const g = bumpGrad(b); bx += g.gx; bz += g.gz; }
-        const tx = tilt.dx, tz = tilt.dz;
-        if (Math.hypot(tx + bx, tz + bz) > MAX_PIN_SLOPE) {
-            const A = bx * bx + bz * bz;
-            const Bc = 2 * (tx * bx + tz * bz);
-            const C = tx * tx + tz * tz - MAX_PIN_SLOPE * MAX_PIN_SLOPE;
-            let s = 0; // C < 0 always (tilt maxes at 1.4%), so a root exists
-            if (A > 1e-12) {
-                const disc = Bc * Bc - 4 * A * C;
-                s = disc >= 0 ? (-Bc + Math.sqrt(disc)) / (2 * A) : 0;
-            }
-            s = Math.max(0, Math.min(1, s));
-            for (const b of bumps) b.height *= s;
+            bgx += g * dx; bgz += g * dz;
         }
+        return { bgx, bgz };
+    };
+    for (let pass = 0; pass < 4; pass++) {
+        let maxMag = 0, at = null;
+        for (let gx = -r; gx <= r; gx += Math.max(1, r / 4)) {
+            for (let gz = -r; gz <= r; gz += Math.max(1, r / 4)) {
+                if (gx * gx + gz * gz > r * r) continue;
+                const { bgx, bgz } = gradParts(cx + gx, cz + gz);
+                const m = Math.hypot(tilt.dx + bgx, tilt.dz + bgz);
+                if (m > maxMag) { maxMag = m; at = { bgx, bgz }; }
+            }
+        }
+        if (maxMag <= MAX_GREEN_FACE_SLOPE || !at) break;
+        const A = at.bgx * at.bgx + at.bgz * at.bgz;
+        const Bq = 2 * (tilt.dx * at.bgx + tilt.dz * at.bgz);
+        const Cq = tilt.dx * tilt.dx + tilt.dz * tilt.dz - MAX_GREEN_FACE_SLOPE * MAX_GREEN_FACE_SLOPE;
+        if (A < 1e-12) break;
+        const disc = Bq * Bq - 4 * A * Cq;
+        const s = Math.max(0, Math.min(1, disc >= 0 ? (-Bq + Math.sqrt(disc)) / (2 * A) : 0));
+        for (const b of bumps) b.height *= s;
     }
+
+    // Clamp the total contour gradient at a specific point by scaling ALL
+    // bump heights: bump gradients are LINEAR in height, so the total is
+    // T + s·B (T = tilt, B = summed bump gradients) and the exact scale s
+    // is a quadratic root — no iteration budget to run out of (a raw pin
+    // can start at 7%+). Tilt alone is 0.6-1.4%, always under any cap.
+    const clampContourAt = (px, pz, maxSlope) => {
+        let bx = 0, bz = 0;
+        for (const b of bumps) {
+            const sigma = Math.max(0.5, b.radius / 2);
+            const dx = px - b.x, dz = pz - b.z;
+            const g = -b.height * Math.exp(-(dx * dx + dz * dz) / (2 * sigma * sigma)) / (sigma * sigma);
+            bx += g * dx; bz += g * dz;
+        }
+        const tx = tilt.dx, tz = tilt.dz;
+        if (Math.hypot(tx + bx, tz + bz) <= maxSlope) return;
+        const A = bx * bx + bz * bz;
+        const Bc = 2 * (tx * bx + tz * bz);
+        const C = tx * tx + tz * tz - maxSlope * maxSlope;
+        let s = 0;
+        if (A > 1e-12) {
+            const disc = Bc * Bc - 4 * A * C;
+            s = disc >= 0 ? (-Bc + Math.sqrt(disc)) / (2 * A) : 0;
+        }
+        s = Math.max(0, Math.min(1, s));
+        for (const b of bumps) b.height *= s;
+    };
+
+    // Pinnable pin (greenkeepers don't cut holes on slopes), and a restable
+    // green center (the default landing target must hold a ball even on
+    // tournament-fast greens, where friction holds only ~6% grades).
+    if (flag) clampContourAt(flag.x, flag.z, 0.025);
+    clampContourAt(cx, cz, 0.035);
 
     layout.greenContour = {
         center: { x: cx, z: cz },
