@@ -15,7 +15,7 @@ import { getSurfaceProperties } from './surfaces.js'; // Import surface properti
 export const IDEAL_BACKSWING_DURATION_MS = 1150; // Base ideal duration
 const BACKSWING_BAR_MAX_DURATION_MS = 1500; // Max duration shown on bar (Added here for calculation)
 const BACKSWING_POWER_SENSITIVITY = 1.0; // How much duration affects PCHS (linear = 1.0)
-const OVERSWING_PCHS_BONUS_FACTOR = 0.2; // Max % PCHS bonus for reaching max overswing duration
+const OVERSWING_PCHS_BONUS_FACTOR = 0.15; // Max % PCHS bonus for reaching max overswing duration
 const OVERSWING_DIFFICULTY_PENALTY = 0.15; // Max % ACHS penalty for reaching max overswing duration
 // Clubhead speed scales with sqrt(power): easing off costs real distance but
 // less than proportionally, like a real smooth swing (57% power → 75% CHS →
@@ -157,10 +157,12 @@ function calculatePotentialCHS(backswingDuration, swingSpeed, clubBaseSpeed) {
         const minPowerFactor = 0.6;
         powerFactor = minPowerFactor + (1.0 - minPowerFactor) * (backswingDuration / scaledIdealDuration);
     } else {
-        // Beyond ideal, increase factor based on sensitivity, capped potentially
+        // Beyond ideal, power keeps growing with backswing length, capped at
+        // +15% — together with the overswing bonus (also 15%) and the 15%
+        // overswing difficulty penalty this tops the stack out at ~+12% CHS
+        // over ideal (it was +19%, which sent perfect drives to 374 yd).
         const overDuration = backswingDuration - scaledIdealDuration;
-        // Example: Increase factor by 0.1 for every 500ms over ideal, capped at 1.2?
-        powerFactor = 1.0 + clamp(overDuration / (500 / swingSpeed), 0, 2.0) * BACKSWING_POWER_SENSITIVITY * 0.1; // Adjust sensitivity scaling
+        powerFactor = 1.0 + clamp(overDuration / (500 / swingSpeed), 0, 1.5) * BACKSWING_POWER_SENSITIVITY * 0.1;
     }
     powerFactor = clamp(powerFactor, 0.6, 1.5); // Clamp overall power factor
 
