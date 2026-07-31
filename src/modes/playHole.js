@@ -10,7 +10,14 @@ import {
     generatePracticeGreenLayout, showPracticePanel, hidePracticePanel, getDefaultPreset, getActiveChipStyle
 } from './practiceGreen.js'; // Short-game practice area
 import { hasContour } from '../greenContours.js'; // For the slope-arrows hint
-import { recordCompletedRound } from '../career/careerStore.js';
+import { recordCompletedRound, getProfile } from '../career/careerStore.js';
+
+// The name shown on the in-game scoreboard: the career profile name once the
+// player has set one, otherwise the session identity (guest/registered).
+function displayPlayerName() {
+    const name = getProfile().name;
+    return (name && name !== 'Player') ? name : playerManager.getDisplayName();
+}
 import { courseRating } from '../career/courseRating.js';
 import * as GreenCard from '../career/greenCard.js';
 
@@ -125,7 +132,7 @@ export async function initializeHoleFromRawLayout(rawLayout, { holeNumber = 1, p
         shotNum: 1,
         lie: currentLie,
         wind: 'Calm',
-        playerName: playerManager.getDisplayName(),
+        playerName: displayPlayerName(),
         totalScore: roundCourse ? roundRelativeToPar() : score,
         position: '1st'
     });
@@ -353,7 +360,7 @@ export async function applyPracticePlacement(preset, force = false) {
         shotNum: 1,
         lie: currentLie,
         wind: 'Calm',
-        playerName: playerManager.getDisplayName(),
+        playerName: displayPlayerName(),
         totalScore: 0,
         position: '–'
     });
@@ -465,7 +472,7 @@ export function handleShotResult(shotData) {
         shotNum: shotsTaken,
         lie: '...', // Hide during animation
         wind: 'Calm', // placeholder
-        playerName: playerManager.getDisplayName(),
+        playerName: displayPlayerName(),
         totalScore: score,
         position: '1st' // placeholder
     });
@@ -495,7 +502,7 @@ export function handleShotResult(shotData) {
             shotNum: displayShotNum,
             lie: displayLie,
             wind: 'Calm',
-            playerName: playerManager.getDisplayName(),
+            playerName: displayPlayerName(),
             totalScore: score,
             position: '1st'
         });

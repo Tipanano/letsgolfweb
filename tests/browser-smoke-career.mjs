@@ -110,6 +110,37 @@ const scorecardOpen = await page.evaluate(() =>
     document.querySelector('.career-scorecard').classList.contains('open') &&
     /Out/.test(document.querySelector('.career-scorecard pre').textContent));
 
+// --- Profile header: default name, inline edit, persistence, avatar cycle ---
+const profileBefore = await page.evaluate(() => ({
+    name: document.getElementById('career-name')?.textContent,
+    avatar: document.getElementById('career-avatar')?.textContent,
+    meta: document.querySelector('.career-profile-meta')?.textContent || '',
+}));
+if (profileBefore.name !== 'Player') fail(`default profile name wrong: ${JSON.stringify(profileBefore)}`);
+if (!/Playing since/.test(profileBefore.meta) || !/Green Card 0\/6/.test(profileBefore.meta)) {
+    fail(`profile meta wrong: "${profileBefore.meta}"`);
+}
+await page.click('#career-name');
+await page.fill('#career-name-edit', 'Anders');
+await page.keyboard.press('Enter');
+await sleep(200);
+await page.click('#career-avatar'); // cycle 🏌️ → 🏌️‍♀️
+await sleep(150);
+// Close, reopen: both edits must persist (they live in the career record)
+await page.click('.career-modal-close');
+await sleep(200);
+await page.click('#mode-btn-career');
+await page.waitForSelector('#career-modal.visible', { timeout: 5000 });
+await sleep(200);
+const profileAfter = await page.evaluate(() => ({
+    name: document.getElementById('career-name')?.textContent,
+    avatar: document.getElementById('career-avatar')?.textContent,
+    stored: JSON.parse(localStorage.getItem('golfCareerV1')).profile,
+}));
+if (profileAfter.name !== 'Anders') fail(`edited name did not persist: ${JSON.stringify(profileAfter)}`);
+if (profileAfter.avatar === '🏌️') fail('avatar did not cycle');
+if (profileAfter.stored?.name !== 'Anders') fail(`profile not in stored career: ${JSON.stringify(profileAfter.stored)}`);
+
 await page.screenshot({ path: OUT + 'shot-career-modal.png' });
 await browser.close();
 
@@ -124,4 +155,4 @@ if (info.bestRows !== 2) fail(`expected 2 course-best rows, got ${info.bestRows}
 if (info.roundRows !== 3) fail(`expected 3 history rows, got ${info.roundRows}`);
 if (!scorecardOpen) fail('scorecard did not expand');
 
-console.log('browser-smoke-career: PASS — index 6.7, sparkline, 3 rounds, scorecard expands');
+console.log('browser-smoke-career: PASS — index 6.7, sparkline, 3 rounds, scorecard expands, profile edits persist');

@@ -67,3 +67,6 @@ Bottom-center hint/readout pill: at-address instructions, live rhythm readout (b
 
 ### src/holeLoader.js — auto green contour
 processHoleLayout synthesizes a deterministic `greenContour` (gentle tilt 0.6–1.4% + 2–4 crowns/tiers/swales, mulberry32-seeded from the green polygon geometry) for any hole that does not author one. This matters because ball roll physics, the displaced green mesh, and the slope-arrow overlay (visuals/slopeOverlay.js, toggled with g / the ⛰ touch button) ALL read only the analytic contour field (greenContours.js) — without a contour, putts roll dead straight and the slope button shows nothing. Practice green keeps its hand-authored contour.
+
+### Player profile (careerStore.getProfile / updateProfile)
+Identity lives in the career record: `{ name, emoji, createdAt }` under `golfCareerV1.profile`, edited from the Career modal header (tap name → inline input, tap avatar → cycle emoji). playHole shows the profile name on the in-game scoreboard (falls back to the multiplayer guest/registered identity while the name is unset). Server sync for registered users layers on later. Verified by `tests/browser-smoke-career.mjs`.

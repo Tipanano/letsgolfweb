@@ -5,8 +5,8 @@
 // local-first career record (career/careerStore.js) so it works for guests
 // and registered users alike.
 
-import { getCareer } from './career/careerStore.js';
-import { isCardEarned } from './career/greenCard.js';
+import { getCareer, getProfile, updateProfile } from './career/careerStore.js';
+import { isCardEarned, getProgress, DRILLS } from './career/greenCard.js';
 import { differentialsFromRounds, handicapIndex, indexSeriesFromRounds } from './career/handicap.js';
 
 let modalEl = null;
@@ -40,6 +40,62 @@ function injectStyles() {
         }
         .career-modal-box h2 { margin: 0 0 4px; border: none; color: #fff; font-size: 1.5em; }
         .career-sub { margin: 0 0 18px; color: rgba(234, 246, 236, 0.6); font-size: 0.9em; }
+        .career-profile {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px 16px;
+            margin-bottom: 12px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .career-avatar {
+            width: 54px;
+            height: 54px;
+            border-radius: 50%;
+            border: 1px solid rgba(125, 255, 160, 0.4);
+            background: rgba(125, 255, 160, 0.1);
+            font-size: 1.7em;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            flex: 0 0 auto;
+        }
+        .career-profile-main { flex: 1; min-width: 0; }
+        .career-name-row { display: flex; align-items: baseline; gap: 8px; }
+        .career-name {
+            font-size: 1.25em;
+            font-weight: 700;
+            color: #fff;
+            background: none;
+            border: none;
+            padding: 2px 4px;
+            margin: -2px -4px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-family: inherit;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .career-name:hover { background: rgba(125, 255, 160, 0.12); }
+        .career-name-edit {
+            font-size: 1.25em;
+            font-weight: 700;
+            color: #fff;
+            font-family: inherit;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(125, 255, 160, 0.5);
+            border-radius: 6px;
+            padding: 2px 8px;
+            width: min(240px, 60vw);
+        }
+        .career-name-hint { font-size: 0.68em; color: rgba(234, 246, 236, 0.4); }
+        .career-profile-meta { font-size: 0.78em; color: rgba(234, 246, 236, 0.6); margin-top: 3px; }
+        .career-gc-badge { color: #ffd76a; }
         .career-hero {
             display: flex;
             align-items: center;
@@ -196,12 +252,68 @@ function scorecardHTML(round) {
     `;
 }
 
+const AVATAR_EMOJIS = ['🏌️', '🏌️‍♀️', '⛳', '🦅', '🐦', '🎯', '🔥', '🥇'];
+
+/** Profile header: avatar, editable name, playing-since + Green Card badge. */
+function profileHTML(rounds) {
+    const profile = getProfile();
+    const gc = getProgress();
+    const drillsDone = DRILLS.filter(d => (gc.counts[d.id] || 0) >= d.target).length;
+    const since = rounds.length ? rounds[0].date : profile.createdAt;
+    const metaBits = [];
+    if (since) metaBits.push(`Playing since ${fmtDate(since)}`);
+    metaBits.push(gc.complete
+        ? '<span class="career-gc-badge">🎓 Green Card</span>'
+        : `Green Card ${drillsDone}/${DRILLS.length}`);
+    return `
+        <div class="career-profile">
+            <button class="career-avatar" id="career-avatar" title="Change avatar">${profile.emoji}</button>
+            <div class="career-profile-main">
+                <div class="career-name-row">
+                    <button class="career-name" id="career-name" title="Edit name">${profile.name}</button>
+                    <span class="career-name-hint">tap to edit</span>
+                </div>
+                <div class="career-profile-meta">${metaBits.join(' · ')}</div>
+            </div>
+        </div>
+    `;
+}
+
+function bindProfileEvents(content, rerender) {
+    content.querySelector('#career-avatar')?.addEventListener('click', () => {
+        const cur = getProfile().emoji;
+        const next = AVATAR_EMOJIS[(AVATAR_EMOJIS.indexOf(cur) + 1) % AVATAR_EMOJIS.length];
+        updateProfile({ emoji: next });
+        content.querySelector('#career-avatar').textContent = next;
+    });
+    content.querySelector('#career-name')?.addEventListener('click', (e) => {
+        const btn = e.currentTarget;
+        const input = document.createElement('input');
+        input.className = 'career-name-edit';
+        input.id = 'career-name-edit';
+        input.maxLength = 20;
+        input.value = getProfile().name;
+        btn.replaceWith(input);
+        input.focus();
+        input.select();
+        const commit = () => {
+            updateProfile({ name: input.value });
+            rerender();
+        };
+        input.addEventListener('blur', commit);
+        input.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter') input.blur();
+            if (ev.key === 'Escape') { input.removeEventListener('blur', commit); rerender(); }
+        });
+    });
+}
+
 function render() {
     const content = modalEl.querySelector('#career-content');
     const rounds = getCareer().rounds;
 
     if (!rounds.length) {
-        content.innerHTML = `
+        content.innerHTML = profileHTML(rounds) + `
             <div class="career-empty">
                 No rounds posted yet.<br><br>
                 ${isCardEarned()
@@ -209,6 +321,7 @@ function render() {
                     : 'New here? Start with the <strong>🎓 Green Card</strong> drills to learn every shot, then play a full round in <strong>Play Course</strong> to earn your first handicap.'}
             </div>
         `;
+        bindProfileEvents(content, render);
         return;
     }
 
@@ -240,7 +353,7 @@ function render() {
         if (!prev || rel < prev.rel) bests.set(r.courseName, { rel, total: r.total, holeCount: r.holeCount });
     }
 
-    content.innerHTML = `
+    content.innerHTML = profileHTML(rounds) + `
         <div class="career-hero">
             <div>
                 <div class="career-hcp-num">${index === null ? '—' : index.toFixed(1)}</div>
@@ -284,12 +397,15 @@ function render() {
         history.appendChild(row);
         history.appendChild(card);
     });
+
+    bindProfileEvents(content, render);
 }
 
 export function showCareer() {
     ensureCreated();
     render();
     modalEl.classList.add('visible');
+    modalEl.querySelector('.career-modal-box').scrollTop = 0; // fresh open starts at the profile
 }
 
 export function hideCareer() {
