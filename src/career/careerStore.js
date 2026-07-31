@@ -51,9 +51,63 @@ export function updateProfile({ name, emoji } = {}) {
     if (typeof name === 'string' && name.trim()) profile.name = name.trim().slice(0, 20);
     if (typeof emoji === 'string' && emoji) profile.emoji = emoji;
     if (!profile.createdAt) profile.createdAt = new Date().toISOString();
+    profile.updatedAt = new Date().toISOString(); // sync conflict resolution
     career.profile = profile;
     saveCareer(career);
     return profile;
+}
+
+// --- Server sync support --------------------------------------------------
+
+function newRoundId() {
+    return (globalThis.crypto?.randomUUID?.()) ||
+        'r-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+}
+
+/** Merge identity: client id when present, content fingerprint otherwise. */
+function roundKey(r) {
+    return r.id || `${r.date}|${r.courseName}|${r.total}`;
+}
+
+/**
+ * Pure merge of a local and a server career record (either side may be
+ * partial). Rounds are append-only and union by id/fingerprint; the profile
+ * with the newest updatedAt wins. Exported for unit testing.
+ */
+export function mergeCareerRecords(local, server) {
+    const rounds = [...(local?.rounds || [])];
+    const seen = new Set(rounds.map(roundKey));
+    let added = 0;
+    for (const r of (server?.rounds || [])) {
+        if (seen.has(roundKey(r))) continue;
+        seen.add(roundKey(r));
+        rounds.push(r);
+        added++;
+    }
+    rounds.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+
+    const lp = local?.profile || null;
+    const sp = server?.profile || null;
+    let profile = lp;
+    let profileFromServer = false;
+    if (sp && (!lp || String(sp.updatedAt || '') > String(lp.updatedAt || ''))) {
+        profile = sp;
+        profileFromServer = true;
+    }
+
+    const merged = { ...(local || {}), rounds };
+    if (profile) merged.profile = profile;
+    return { merged, added, profileFromServer };
+}
+
+/** Applies a pulled server record onto the local store (local-first union). */
+export function mergeServerCareer(serverRecord) {
+    const career = loadCareer();
+    // Backfill ids on legacy local rounds so future merges are stable
+    for (const r of career.rounds) if (!r.id) r.id = newRoundId();
+    const { merged, added, profileFromServer } = mergeCareerRecords(career, serverRecord);
+    saveCareer(merged);
+    return { added, profileFromServer };
 }
 
 /** Current handicap index, or null before any round has posted. */
@@ -78,6 +132,7 @@ export function recordCompletedRound({ courseName, ratingInfo, holes }) {
         { holes, rating: ratingInfo.rating, slope: ratingInfo.slope, par: ratingInfo.par },
         prevIndex);
     career.rounds.push({
+        id: newRoundId(),
         date: new Date().toISOString(),
         courseName,
         par: ratingInfo.par,

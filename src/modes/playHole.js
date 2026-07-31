@@ -212,6 +212,7 @@ export function endRound() {
                 ? `\n\nFirst round posted — provisional handicap ${posted.index.toFixed(1)}`
                 : `\n\nHandicap: ${posted.prevIndex.toFixed(1)} → ${posted.index.toFixed(1)}` +
                   ` (differential ${posted.differential.toFixed(1)})`;
+            import('../career/careerSync.js').then(s => s.scheduleCareerSync()).catch(() => {});
         } catch (e) {
             console.error('Career: failed to post round.', e);
         }

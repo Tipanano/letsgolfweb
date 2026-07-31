@@ -280,11 +280,15 @@ function profileHTML(rounds) {
 }
 
 function bindProfileEvents(content, rerender) {
+    // Profile edits reconcile to the server for registered players
+    const queueSync = () =>
+        import('./career/careerSync.js').then(s => s.scheduleCareerSync()).catch(() => {});
     content.querySelector('#career-avatar')?.addEventListener('click', () => {
         const cur = getProfile().emoji;
         const next = AVATAR_EMOJIS[(AVATAR_EMOJIS.indexOf(cur) + 1) % AVATAR_EMOJIS.length];
         updateProfile({ emoji: next });
         content.querySelector('#career-avatar').textContent = next;
+        queueSync();
     });
     content.querySelector('#career-name')?.addEventListener('click', (e) => {
         const btn = e.currentTarget;
@@ -298,6 +302,7 @@ function bindProfileEvents(content, rerender) {
         input.select();
         const commit = () => {
             updateProfile({ name: input.value });
+            queueSync();
             rerender();
         };
         input.addEventListener('blur', commit);

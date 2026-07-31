@@ -67,8 +67,40 @@ page.on('console', msg => {
     if (msg.type() === 'error' && !EXPECTED.test(msg.text())) errors.push('CONSOLE: ' + msg.text());
 });
 
+// Mock the career-sync server: GET returns a server-only round and a newer
+// profile; PUT captures what the client pushes. Registered via a fake
+// session (auth/verify accepts). Registered AFTER the general abort-all
+// route so it takes precedence for these URLs.
+let putBody = null;
+await page.route(/api\.gih\.golf\/api\/(career|auth\/verify)/, async (route) => {
+    const req = route.request();
+    if (req.url().endsWith('/auth/verify')) {
+        return route.fulfill({ contentType: 'application/json', body: '{"userId":"u1"}' });
+    }
+    if (req.method() === 'GET') {
+        return route.fulfill({
+            contentType: 'application/json',
+            body: JSON.stringify({
+                profile: { name: 'ServerPro', emoji: '🦅', createdAt: '2026-01-01T00:00:00Z', updatedAt: '2099-01-01T00:00:00Z' },
+                rounds: [{ id: 'srv-1', date: '2026-07-20T10:00:00Z', courseName: 'Sauda Golfklubb',
+                    par: 30, rating: 55.3, slope: 82, holeCount: 9, total: 40, differential: 13.4,
+                    holes: [{ hole: 1, par: 3, strokes: 4 }] }],
+            }),
+        });
+    }
+    if (req.method() === 'PUT') {
+        putBody = JSON.parse(req.postData());
+        return route.fulfill({ contentType: 'application/json', body: '{"success":true}' });
+    }
+    return route.abort();
+});
+
 // Seed a three-round career before the app loads.
 await page.addInitScript(() => {
+    localStorage.setItem('golfGamePlayer', JSON.stringify({
+        playerType: 'registered', username: 'TestPro', userId: 'u1',
+        sessionToken: 'test-token', tokenExpiry: Date.now() + 86400000,
+    }));
     const mkHoles = (strokesList) => strokesList.map((s, i) => ({
         hole: i + 1, par: [4,4,3,5,4,4,3,5,4, 4,4,3,5,4,4,3,5,4][i], strokes: s, lengthMeters: 320 + i * 5,
     }));
@@ -140,6 +172,34 @@ const profileAfter = await page.evaluate(() => ({
 if (profileAfter.name !== 'Anders') fail(`edited name did not persist: ${JSON.stringify(profileAfter)}`);
 if (profileAfter.avatar === '🏌️') fail('avatar did not cycle');
 if (profileAfter.stored?.name !== 'Anders') fail(`profile not in stored career: ${JSON.stringify(profileAfter.stored)}`);
+
+// --- Server sync: pull-merge-push against the mocked endpoints ---
+const syncResult = await page.evaluate(async () => {
+    const s = await import('./src/career/careerSync.js');
+    const r = await s.syncCareerNow();
+    const stored = JSON.parse(localStorage.getItem('golfCareerV1'));
+    return {
+        result: r,
+        roundCount: stored.rounds.length,
+        hasServerRound: stored.rounds.some(x => x.id === 'srv-1'),
+        allHaveIds: stored.rounds.every(x => !!x.id),
+        profileName: stored.profile?.name,
+    };
+});
+if (!syncResult.result) fail('syncCareerNow returned null for a registered session');
+if (syncResult.result.added !== 1) fail(`expected 1 merged server round, got ${syncResult.result.added}`);
+if (!syncResult.hasServerRound || syncResult.roundCount !== 4) {
+    fail(`server round not merged: ${JSON.stringify(syncResult)}`);
+}
+if (!syncResult.allHaveIds) fail('legacy local rounds were not backfilled with ids');
+if (syncResult.profileName !== 'ServerPro') {
+    fail(`newer server profile should win, got "${syncResult.profileName}"`);
+}
+if (!putBody) fail('client never pushed the merged record');
+if (putBody.rounds.length !== 4 || putBody.profile.name !== 'ServerPro') {
+    fail(`pushed record wrong: ${putBody.rounds.length} rounds, profile "${putBody.profile.name}"`);
+}
+console.log(`career sync: pulled+merged 1 server round (${syncResult.roundCount} total), server profile won, pushed 4 rounds back`);
 
 await page.screenshot({ path: OUT + 'shot-career-modal.png' });
 await browser.close();

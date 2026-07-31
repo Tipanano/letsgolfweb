@@ -70,3 +70,6 @@ processHoleLayout synthesizes a deterministic `greenContour` (gentle tilt 0.6–
 
 ### Player profile (careerStore.getProfile / updateProfile)
 Identity lives in the career record: `{ name, emoji, createdAt }` under `golfCareerV1.profile`, edited from the Career modal header (tap name → inline input, tap avatar → cycle emoji). playHole shows the profile name on the in-game scoreboard (falls back to the multiplayer guest/registered identity while the name is unset). Server sync for registered users layers on later. Verified by `tests/browser-smoke-career.mjs`.
+
+### src/career/careerSync.js
+Server reconcile for the career record, registered users only: GET /api/career → mergeServerCareer (rounds union by client-generated id with content-fingerprint fallback for legacy rounds; profile by newest updatedAt) → PUT the merged record back. Local-first: localStorage stays what the UI reads; offline failures are swallowed and the next sync catches up. Triggered debounced (scheduleCareerSync) at startup, after a round posts, and after profile edits. Guests no-op; upgrading pushes full local history. Endpoint contract in golf-game-server-requirements.md → Career Sync. Pure merge unit-tested in tests/unit-careersync.mjs; full loop mocked in browser-smoke-career.mjs.

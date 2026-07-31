@@ -146,6 +146,10 @@ export function getCurrentGameMode() {
 // Initialize player manager first (auto-creates guest if needed)
 await playerManager.init();
 
+// Registered players: reconcile the local career record with the server
+// (no-op for guests, silent when offline)
+import('./career/careerSync.js').then(s => s.scheduleCareerSync()).catch(() => {});
+
 // Update UI with player info
 ui.updatePlayerDisplay(playerManager.getDisplayName(), playerManager.currentPlayer.playerType);
 

@@ -42,6 +42,56 @@ This document outlines the server-side implementation needed for the multiplayer
 - `GET /api/player/:playerId/history` - Get player history
   - Response: `{ gamesPlayed: number, averageScore: number, bestScore: number }`
 
+### Career Sync (registered users)
+
+The client keeps the career record (player profile + completed rounds +
+derived handicap) local-first in `localStorage`; these endpoints are a
+background reconcile, not the source the UI reads. The user is identified by
+the session JWT — no player id in the path. Guests have no server career;
+when a guest upgrades to registered, the client pushes its full local record
+on the next sync.
+
+- `GET /api/career` — fetch the stored career record
+  - Headers: `Authorization: Bearer <sessionToken>`
+  - Response: `{ profile: Profile | null, rounds: Round[] }`
+  - `404` when nothing has been stored yet (client treats as empty)
+
+- `PUT /api/career` — push the client's merged record
+  - Headers: `Authorization: Bearer <sessionToken>`, `Content-Type: application/json`
+  - Request: `{ profile: Profile, rounds: Round[] }`
+  - Server merge semantics (MUST, so devices can sync independently):
+    - Rounds are append-only. Union by `id` (client-generated UUID);
+      NEVER delete server rounds missing from the request.
+    - Profile: overwrite only if the request's `profile.updatedAt` is newer
+      than the stored one (ISO-8601 string compare is fine).
+  - Response: `{ success: boolean }`
+
+```javascript
+Profile = {
+  name: string,        // <= 20 chars, client-trimmed; sanitize server-side
+  emoji: string,       // avatar emoji
+  createdAt: string,   // ISO-8601, set on first profile save
+  updatedAt: string    // ISO-8601, conflict resolution key
+}
+
+Round = {
+  id: string,          // client-generated UUID — merge identity
+  date: string,        // ISO-8601 completion time
+  courseName: string,
+  par: number,
+  rating: number,      // course rating used for the differential
+  slope: number,
+  holeCount: number,   // 9 or 18
+  total: number,       // strokes
+  differential: number,// stored immutably as posted
+  holes: [{ hole: number, par: number, strokes: number, lengthMeters?: number }]
+}
+```
+
+Size guidance: a career is small (a round is ~1 KB); a whole-record PUT is
+acceptable. Cap `rounds` at a few thousand per user and reject oversized
+bodies.
+
 ## WebSocket Events
 
 ### Client -> Server Events
