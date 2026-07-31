@@ -13,7 +13,7 @@ import { GREEN_CENTER, GREEN_RADIUS, PRACTICE_FLAG, PRACTICE_BUNKERS } from '../
 import { drivingDrillLayout, approachDrillLayout } from './drillHoles.js';
 
 export const DRILLS = [
-    { id: 'driving',  icon: '🏌️', title: 'Driving',     desc: 'Find the fairway from the tee',                target: 5 },
+    { id: 'driving',  icon: '🏌️', title: 'Driving',     desc: 'Drive 200 m+ and find the fairway',            target: 5 },
     { id: 'approach', icon: '🎯', title: 'Approach',    desc: 'Hit the green on a short par 3',               target: 5 },
     { id: 'pitching', icon: '🪁', title: 'Pitching',    desc: 'Pitch from 25–45 m and hold the green',        target: 5 },
     { id: 'chipping', icon: '🌱', title: 'Chipping',    desc: 'Chip from 5–10 m off the green and stay on it', target: 5 },
@@ -23,17 +23,19 @@ export const DRILLS = [
 ];
 
 export const LAG_PUTT_TOLERANCE_M = 2.5;
+export const DRIVING_MIN_DISTANCE_M = 200; // A drive must GO somewhere, not just stay in play
 
 // --- Attempt evaluation (pure) ---
 
 /**
  * Scores one drill attempt from end-of-shot facts.
  * @param {string} drillId
- * @param {{lie: string, holed: boolean, distToFlag: number}} result
+ * @param {{lie: string, holed: boolean, distToFlag: number, shotDistance?: number}} result
  */
 export function evaluateDrillShot(drillId, result) {
     switch (drillId) {
-        case 'driving':  return result.lie === 'FAIRWAY';
+        case 'driving':  return result.lie === 'FAIRWAY' &&
+            (result.shotDistance || 0) >= DRIVING_MIN_DISTANCE_M;
         case 'approach': return result.holed || result.lie === 'GREEN';
         case 'pitching': return result.holed || result.lie === 'GREEN';
         case 'chipping': return result.holed || result.lie === 'GREEN';
@@ -255,14 +257,20 @@ export function recordShot(result) {
     }
 
     attemptNo++;
+    // The near-miss that needs explaining: a drive that found the fairway
+    // but came up short of the distance requirement.
+    const shortDrive = !success && activeDrillId === 'driving' && result.lie === 'FAIRWAY';
+    const missText = shortDrive
+        ? `❌ Fairway, but ${Math.round(result.shotDistance || 0)} m — needs ${DRIVING_MIN_DISTANCE_M} m+`
+        : `❌ Not this time`;
     return {
         statusText: success
             ? (alreadyComplete
                 ? `✅ Still got it — drill already complete. Press (n) for another ball.`
                 : `✅ ${count}/${drill.target} — press (n) for the next ball`)
             : (alreadyComplete
-                ? `❌ Not this time — press (n) to try again`
-                : `❌ Not this time (${count}/${drill.target}) — press (n) to try again`),
+                ? `${missText} — press (n) to try again`
+                : `${missText} (${count}/${drill.target}) — press (n) to try again`),
         nextSpot: nextSpot(activeDrillId, attemptNo),
         drillDone: false,
     };

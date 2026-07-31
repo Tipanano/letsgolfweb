@@ -458,6 +458,10 @@ export function handleShotResult(shotData) {
             lie: finalLie,
             holed: !!shotData.isHoledOut,
             distToFlag: endDist,
+            shotDistance: formerBallPosition
+                ? Math.hypot(currentBallPosition.x - formerBallPosition.x,
+                             currentBallPosition.z - formerBallPosition.z)
+                : 0,
         });
         if (attempt) {
             holeJustCompleted = true; // attempt over — (n) places the next ball

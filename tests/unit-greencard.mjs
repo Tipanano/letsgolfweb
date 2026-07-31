@@ -10,7 +10,7 @@ globalThis.localStorage = {
 };
 
 const {
-    DRILLS, LAG_PUTT_TOLERANCE_M,
+    DRILLS, LAG_PUTT_TOLERANCE_M, DRIVING_MIN_DISTANCE_M,
     evaluateDrillShot, nextSpot, drillLaunchConfig, getProgress,
     startDrill, stopDrill, getActiveDrill, recordShot,
 } = await import('../src/career/greenCard.js');
@@ -20,8 +20,10 @@ const { GREEN_CENTER, GREEN_RADIUS, PRACTICE_FLAG, PRACTICE_BUNKERS } =
 const d2 = (x1, z1, x2, z2) => Math.hypot(x1 - x2, z1 - z2);
 
 // --- evaluateDrillShot ---
-assert.ok(evaluateDrillShot('driving', { lie: 'FAIRWAY', holed: false, distToFlag: 150 }));
-assert.ok(!evaluateDrillShot('driving', { lie: 'LIGHT_ROUGH', holed: false, distToFlag: 150 }));
+assert.ok(evaluateDrillShot('driving', { lie: 'FAIRWAY', holed: false, distToFlag: 80, shotDistance: DRIVING_MIN_DISTANCE_M + 10 }));
+assert.ok(!evaluateDrillShot('driving', { lie: 'FAIRWAY', holed: false, distToFlag: 130, shotDistance: DRIVING_MIN_DISTANCE_M - 40 })); // fairway but short
+assert.ok(!evaluateDrillShot('driving', { lie: 'FAIRWAY', holed: false, distToFlag: 150 })); // no distance reported = short
+assert.ok(!evaluateDrillShot('driving', { lie: 'LIGHT_ROUGH', holed: false, distToFlag: 80, shotDistance: 240 })); // long but crooked
 assert.ok(evaluateDrillShot('approach', { lie: 'GREEN', holed: false, distToFlag: 8 }));
 assert.ok(evaluateDrillShot('approach', { lie: 'HOLE', holed: true, distToFlag: 0 })); // ace counts
 assert.ok(!evaluateDrillShot('chipping', { lie: 'BUNKER', holed: false, distToFlag: 4 }));
@@ -105,8 +107,19 @@ assert.ok(!getProgress().complete);
 {
     store.clear();
     startDrill('driving');
-    recordShot({ lie: 'LIGHT_ROUGH', holed: false, distToFlag: 120 });
-    recordShot({ lie: 'BUNKER', holed: false, distToFlag: 90 });
+    recordShot({ lie: 'LIGHT_ROUGH', holed: false, distToFlag: 120, shotDistance: 230 });
+    recordShot({ lie: 'BUNKER', holed: false, distToFlag: 90, shotDistance: 210 });
+    assert.equal(getProgress().counts.driving || 0, 0);
+    stopDrill();
+}
+
+// A drive that finds the fairway but comes up short explains the miss
+{
+    store.clear();
+    startDrill('driving');
+    const short = recordShot({ lie: 'FAIRWAY', holed: false, distToFlag: 140, shotDistance: 148 });
+    assert.ok(/Fairway, but 148 m/.test(short.statusText), short.statusText);
+    assert.ok(new RegExp(`${DRIVING_MIN_DISTANCE_M} m\\+`).test(short.statusText), short.statusText);
     assert.equal(getProgress().counts.driving || 0, 0);
     stopDrill();
 }
