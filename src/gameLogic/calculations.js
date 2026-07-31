@@ -38,7 +38,10 @@ function buildSwingReport(r) {
         : face > 6 ? 'slice' : face > 0 ? 'fade'
         : face < -6 ? 'hook' : 'draw';
     const start = Math.abs(path) < 2.5 ? '' : path > 0 ? ' push' : ' pull';
-    const power = (r.potentialCHS > 0)
+    // Efficiency = delivered / potential clubhead speed (timing losses).
+    // NOT the speed setting and NOT backswing size — don't call it "power",
+    // the setup control used to share that word and it read as the setting.
+    const efficiency = (r.potentialCHS > 0)
         ? Math.round((r.actualCHS / r.potentialCHS) * 100) : null;
 
     const beats = [
@@ -51,7 +54,7 @@ function buildSwingReport(r) {
     }).filter(Boolean);
 
     const line1 = `${r.strikeQuality} strike · ${curve}${start}` +
-        (power !== null ? ` · power ${power}%` : '');
+        (efficiency !== null ? ` · efficiency ${efficiency}%` : '');
     const line2 = beats.length ? beats.join(' · ') : 'timing pure — great swing';
     return `${line1}\n${line2}`;
 }

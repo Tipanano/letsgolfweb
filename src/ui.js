@@ -28,20 +28,20 @@ function initPowerPrefChip() {
     const btn = document.createElement('button');
     btn.id = 'power-pref-btn';
     btn.type = 'button';
-    btn.title = 'Default swing power (profile setting)';
+    btn.title = 'Default swing speed (profile setting)';
     btn.textContent = `⚡${getCareerProfile().defaultPower}%`;
     nameSpan.parentElement.appendChild(btn);
 
     const pop = document.createElement('div');
     pop.id = 'power-pref-pop';
     pop.innerHTML = `
-        <div class="ppp-title">Default swing power</div>
+        <div class="ppp-title">Default swing speed</div>
         <div class="ppp-row">
             <input type="range" id="power-pref-range" min="30" max="100" step="5">
             <span id="power-pref-label"></span>
         </div>
         <div class="ppp-hint">Where every round starts. Lower = easier timing,
-        shorter shots. The POWER control still adjusts single shots.</div>`;
+        shorter shots. The SPEED control still adjusts single shots.</div>`;
     pop.style.display = 'none';
     document.body.appendChild(pop);
 
