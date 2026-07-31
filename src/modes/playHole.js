@@ -277,6 +277,11 @@ export async function initializePracticeMode(type = 'putt', options = {}) {
     cond.setNeutralConditions();
     ui.setConditionsDisplay(null);
 
+    // Green Card drill: activate NOW — the previous mode's exit (which stops
+    // any drill) has already run, and the placement below must see the
+    // active drill (hint visibility, attempt recording).
+    if (options.drillId) GreenCard.startDrill(options.drillId);
+
     const { processHoleLayout } = await import('../holeLoader.js');
     currentHoleLayout = processHoleLayout(options.layout || generatePracticeGreenLayout());
     if (!currentHoleLayout) {
@@ -359,6 +364,10 @@ export async function applyPracticePlacement(preset, force = false) {
     // Move the ball visually, then run the standard next-shot preparation
     // (camera behind ball, aim at flag, auto club selection).
     visuals.resetVisuals(currentBallPosition, currentLie);
+    // Flag out when the ball is placed ON the green (matching the post-shot
+    // flow) — with the stick pulled the cup halo marks the hole.
+    const { setFlagstickVisibility } = await import('../visuals/holeView.js');
+    setFlagstickVisibility(currentLie !== 'GREEN');
     const logic = await import('../gameLogic.js');
     logic.resetSwing();
 
@@ -398,8 +407,10 @@ export async function applyPracticePlacement(preset, force = false) {
 
     // Assert the at-address prompt after mode-entry churn (fullscreen toggle,
     // control rebuilds) settles — the last writer wins on the shared pill.
+    // During a drill the hint IS the tutorial: assert it even if the state
+    // machine hasn't settled to 'ready' yet (mode-entry under load).
     setTimeout(() => {
-        if (getGameState() === 'ready') {
+        if (getGameState() === 'ready' || GreenCard.getActiveDrill()) {
             showAddressHint(getCurrentShotType(), { hasClub: !!getSelectedClub() });
         }
     }, 600);

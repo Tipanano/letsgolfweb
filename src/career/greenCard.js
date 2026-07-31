@@ -178,20 +178,24 @@ export function nextSpot(drillId, attemptNo = 1) {
     }
 }
 
-/** Everything main.js needs to launch a drill via play-hole practice mode. */
+/** Everything main.js needs to launch a drill via play-hole practice mode.
+ *  Carries drillId so practice-mode init can startDrill() at the right
+ *  moment: AFTER the previous mode's exit (which stops any active drill),
+ *  BEFORE the placement and its hint timer run — ordering it from main.js
+ *  around the awaited setGameMode was a race. */
 export function drillLaunchConfig(drillId) {
     const placement = nextSpot(drillId, 1);
     switch (drillId) {
         case 'driving':
-            return { type: 'chip', layout: drivingDrillLayout(), placement, hidePanel: true };
+            return { type: 'chip', layout: drivingDrillLayout(), placement, hidePanel: true, drillId };
         case 'approach':
-            return { type: 'chip', layout: approachDrillLayout(), placement, hidePanel: true };
+            return { type: 'chip', layout: approachDrillLayout(), placement, hidePanel: true, drillId };
         case 'pitching':
         case 'chipping':
         case 'bunker':
-            return { type: 'chip', layout: null, placement, hidePanel: true };
+            return { type: 'chip', layout: null, placement, hidePanel: true, drillId };
         default:
-            return { type: 'putt', layout: null, placement, hidePanel: true };
+            return { type: 'putt', layout: null, placement, hidePanel: true, drillId };
     }
 }
 

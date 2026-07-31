@@ -17,7 +17,7 @@ import * as playHoleModal from './playHoleModal.js'; // Import play hole modal
 import { showCourseSelect } from './courseSelectModal.js'; // Course round picker
 import { showCareer } from './careerModal.js'; // Career overview (handicap, rounds, stats)
 import { showGreenCard } from './greenCardModal.js'; // Green Card drill checklist
-import { startDrill, drillLaunchConfig, isCardEarned } from './career/greenCard.js';
+import { drillLaunchConfig, isCardEarned } from './career/greenCard.js';
 import { getProfile } from './career/careerStore.js';
 
 // The START HERE tag points brand-new players at the Green Card; it retires
@@ -368,15 +368,14 @@ document.getElementById('mode-btn-greencard')?.addEventListener('click', async (
     const canProceed = await checkMultiplayerBeforeSinglePlayer();
     if (!canProceed) return;
     showGreenCard(async (drillId) => {
+        // The drill is started INSIDE practice-mode init (cfg.drillId):
+        // after the previous mode's exit (which stops any active drill),
+        // before the placement runs. Starting it out here raced the
+        // placement's hint timer on one side or the exit's stopDrill on
+        // the other.
         const cfg = drillLaunchConfig(drillId);
         ui.showGameView();
-        // startDrill must come AFTER the mode switch: setGameMode exits any
-        // current play-hole session, and playHole.exitMode() stops the
-        // active drill — starting first meant entering a drill from inside
-        // another play-hole session silently killed it (no attempt
-        // recording, no return to the tee).
         await setGameMode(GAME_MODES.PLAY_HOLE, null, null, cfg);
-        startDrill(drillId);
         // Full-swing drills open with a ghost demo of the ideal rhythm.
         // Touch: it waits for the ADDRESS phase (the zones must be on
         // screen); desktop plays right away on a key-pill row.

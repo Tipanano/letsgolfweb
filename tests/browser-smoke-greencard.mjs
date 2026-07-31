@@ -76,7 +76,12 @@ await page.screenshot({ path: OUT + 'shot-greencard-modal.png' });
 
 // Launch the holing-out drill (putting green — cheapest layout)
 await page.click('.gc-drill:last-child');
-await sleep(5000); // layout draw + placement
+// Wait for the drill to be READY, not for a stopwatch: layout draw +
+// placement can take 5s+ under load, and the address hint asserts on a
+// 600ms timer after placement — a fixed sleep raced it.
+await page.waitForFunction(
+    () => document.getElementById('rhythm-putt-hud')?.classList.contains('visible'),
+    { timeout: 20000 });
 
 const drillInfo = await page.evaluate(async () => {
     const gc = await import('./src/career/greenCard.js');

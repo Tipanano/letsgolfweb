@@ -89,6 +89,7 @@ let poleMesh = null;
 let finialMesh = null;
 let clothMesh = null;
 let cupGroup = null;
+let haloMesh = null; // hole marker ring, shown while the flagstick is pulled
 let clothBasePositions = null;
 
 /**
@@ -189,6 +190,23 @@ function buildCup(x, groundY, z) {
     floor.position.y = 0.003 - CUP_DEPTH;
     group.add(floor);
 
+    // Hole halo: a wide white ring shown while the flagstick is PULLED (ball
+    // on the green) — a 10.8 cm cup is invisible from 15 m, especially under
+    // the slope-arrow overlay. Rendered above the arrows (their renderOrder
+    // is 6) and lifted past their 0.075 m float so it always reads.
+    haloMesh = new THREE.Mesh(
+        new THREE.RingGeometry(HOLE_RADIUS * 2.6, HOLE_RADIUS * 4.4, 40),
+        new THREE.MeshBasicMaterial({
+            color: 0xffffff, transparent: true, opacity: 0.8,
+            side: THREE.DoubleSide, depthWrite: false,
+        })
+    );
+    haloMesh.rotation.x = -Math.PI / 2;
+    haloMesh.position.y = 0.08;
+    haloMesh.renderOrder = 7;
+    haloMesh.visible = false; // flag starts in the cup
+    group.add(haloMesh);
+
     // GREEN surface layer height from surfaces.js, plus clearance
     group.position.set(x, groundY + 0.061, z);
 
@@ -259,6 +277,8 @@ export function setFlagstickVisible(visible) {
     if (poleMesh) poleMesh.visible = visible;
     if (finialMesh) finialMesh.visible = visible;
     if (clothMesh) clothMesh.visible = visible;
+    // Flag out = halo on: the cup must stay findable without the stick
+    if (haloMesh) haloMesh.visible = !visible;
 }
 
 /** Drops module references; the caller disposes the objects it was handed. */
@@ -267,5 +287,6 @@ export function resetFlagstick() {
     finialMesh = null;
     clothMesh = null;
     cupGroup = null;
+    haloMesh = null;
     clothBasePositions = null;
 }
