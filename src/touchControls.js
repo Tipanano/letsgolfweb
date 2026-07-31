@@ -34,7 +34,7 @@ import {
     getRotationStartTime, getArmsStartTime, getWristsStartTime,
 } from './gameLogic/state.js';
 import { isSlopeOverlayVisible } from './visuals/slopeOverlay.js';
-import { isFreeCameraActive, toggleFreeCamera, freeCamNudge, freeCamLook, camera } from './visuals/core.js';
+import { isFreeCameraActive, toggleFreeCamera, freeCamNudge, freeCamLook, camera, adjustStaticCameraDistance } from './visuals/core.js';
 import { setDownswingTimingStretch } from './swingPhysics.js';
 import { aimAtScreenPoint } from './aimAtPoint.js';
 import { resetSwingArc } from './swingArcVisualizer.js';
@@ -547,7 +547,9 @@ function initCameraGestures() {
             oneFinger = { x: t.clientX, y: t.clientY, dragging: false };
             return; // no preventDefault: plain taps stay clickable
         }
-        if (e.touches.length === 2 && inSetup()) {
+        if (e.touches.length === 2) {
+            // Setup: two fingers fly over the hole. Address: pinch zooms the
+            // locked-on-ball camera in and out.
             e.preventDefault();
             endOneFinger();
             twoFinger = true;
@@ -558,9 +560,15 @@ function initCameraGestures() {
     canvas.addEventListener('touchmove', (e) => {
         if (twoFinger && e.touches.length === 2) {
             e.preventDefault();
-            if (!inSetup()) return;
-            if (!isFreeCameraActive()) toggleFreeCamera();
             const { cx, cy, dist } = measure(e);
+            if (!inSetup()) {
+                // Address: the view is locked on the ball — pinch moves the
+                // camera closer/farther (pinch out = step in for a look)
+                adjustStaticCameraDistance(-(dist - lastDist) * 0.003);
+                lastCx = cx; lastCy = cy; lastDist = dist;
+                return;
+            }
+            if (!isFreeCameraActive()) toggleFreeCamera();
             // Pan speed grows with altitude so the map-drag feel stays constant
             const perPx = Math.min(1.5, Math.max(0.08, (camera?.position.y || 10) * 0.01));
             freeCamNudge(

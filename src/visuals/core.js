@@ -1598,9 +1598,15 @@ export function setCameraBehindBall(targetPosition, viewType = 'range') { // Kee
     // Determine base offset based on view type (relative to pivot, assuming 0 degrees)
     switch (viewType) {
         case 'chip':
+            // Close enough to read the lie and the first bounce
+            baseCamPosOffset.set(0, 3, -6);
+            baseLookAtOffset.set(0, 0, 14);
+            currentStaticView = viewType;
+            break;
         case 'putt':
-            baseCamPosOffset.set(0, 4, -8);
-            baseLookAtOffset.set(0, 0, 12); // Look a bit further than the ball
+            // Putting is played from just behind the ball
+            baseCamPosOffset.set(0, 2.2, -4.5);
+            baseLookAtOffset.set(0, 0, 10);
             currentStaticView = viewType;
             break;
         case 'range':
@@ -1687,9 +1693,12 @@ function updateStaticCameraView() {
             baseLookAtOffset.set(0, 0, targetZ / 1.5); // Look toward target
             break;
         case 'chip':
+            baseCamPosOffset.set(0, 3, -6);
+            baseLookAtOffset.set(0, 0, 14);
+            break;
         case 'putt':
-            baseCamPosOffset.set(0, 4, -8);
-            baseLookAtOffset.set(0, 0, 20);
+            baseCamPosOffset.set(0, 2.2, -4.5);
+            baseLookAtOffset.set(0, 0, 10);
             break;
         case 'tee':
             // Need hole length if available, otherwise default
