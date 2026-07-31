@@ -9,7 +9,7 @@
 // Guarded by tests/browser-smoke-fullbag.mjs.
 export const clubs = {
     // Driver / Mini Driver - Added liftFactor and type
-    'DR': { name: 'Driver',         type: 'driver', loft: 10.5, lengthFactor: 1.0,  baseSmash: 1.50, baseAoA: 2,    spinRateFactor: 0.6, basePotentialSpeed: 113.0, optimalSpin: 2500, defaultBallPositionIndex: 7, liftFactor: 20.0, clBackspinEff: 0.032 }, // Forward+
+    'DR': { name: 'Driver',         type: 'driver', loft: 11.5, lengthFactor: 1.0,  baseSmash: 1.50, baseAoA: 2,    spinRateFactor: 0.6, basePotentialSpeed: 113.0, optimalSpin: 2500, defaultBallPositionIndex: 7, liftFactor: 20.0, clBackspinEff: 0.032 }, // Forward+
     'MD': { name: 'Mini Driver',    type: 'driver', loft: 13,   lengthFactor: 0.97, baseSmash: 1.49, baseAoA: 1,    spinRateFactor: 0.65, basePotentialSpeed: 110.5, optimalSpin: 2800, defaultBallPositionIndex: 7, liftFactor: 15.0, clBackspinEff: 0.027 }, // Forward
     // Woods - Added liftFactor and type
     'W3': { name: '3 Wood',         type: 'wood', loft: 15,   lengthFactor: 0.95, baseSmash: 1.48, baseAoA: 0,    spinRateFactor: 0.7, basePotentialSpeed: 107.0, optimalSpin: 3200, defaultBallPositionIndex: 7, liftFactor: 12.0, clBackspinEff: 0.024 }, // Forward
