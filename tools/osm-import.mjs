@@ -34,7 +34,20 @@ if (ei !== -1) { ELEV.dataset = argvAll[ei + 1]; argvAll.splice(ei, 2); }
 const argv = argvAll;
 const courseMode = argv[1] === '--course';
 
-async function fetchElevations(locs, dataset) {
+/**
+ * Preferred DEM for a location. Datasets are regional: asking eudem25m for a
+ * Californian course returns nulls for every point, which used to be mapped
+ * straight to 0 m and silently produced a perfectly flat Pebble Beach with
+ * the sea pinned at tee level. aster30m is the global backstop (SRTM is not:
+ * it stops at 60 deg, which would exclude Lofoten at 68 deg N).
+ */
+function datasetFor(lat, lon) {
+    if (lat >= 34 && lat <= 72 && lon >= -25 && lon <= 45) return 'eudem25m';   // Europe
+    if (lat >= 18 && lat <= 72 && lon >= -170 && lon <= -66) return 'ned10m';   // USA
+    return 'aster30m';                                                          // global
+}
+
+async function fetchElevationsFrom(locs, dataset) {
     const out = [];
     for (let i = 0; i < locs.length; i += 100) {
         const q = locs.slice(i, i + 100).map(p => p.lat.toFixed(6) + ',' + p.lon.toFixed(6)).join('|');
@@ -45,6 +58,32 @@ async function fetchElevations(locs, dataset) {
         await new Promise(r => setTimeout(r, 1100)); // Free-tier rate limit
     }
     return out;
+}
+
+/**
+ * Elevations with coverage checking. 'auto' picks by location; any dataset
+ * that comes back mostly empty falls through to the global one, and if that
+ * is empty too we throw rather than write a flat course.
+ */
+async function fetchElevations(locs, dataset) {
+    const chain = [];
+    if (!dataset || dataset === 'auto') chain.push(datasetFor(locs[0].lat, locs[0].lon));
+    else chain.push(dataset);
+    if (!chain.includes('aster30m')) chain.push('aster30m');
+
+    let lastEmpty = null;
+    for (const ds of chain) {
+        const out = await fetchElevationsFrom(locs, ds);
+        const nulls = out.filter(e => e == null).length;
+        if (nulls <= out.length * 0.5) {
+            if (ds !== chain[0]) console.error(`  elevation: ${chain[0]} had no coverage here, used ${ds}`);
+            ELEV.used = ds;
+            return out;
+        }
+        lastEmpty = `${ds} returned ${nulls}/${out.length} empty points`;
+        console.error(`  elevation: ${lastEmpty}, trying the next dataset`);
+    }
+    throw new Error(`no elevation coverage (${lastEmpty})`);
 }
 
 const data = JSON.parse(readFileSync(argv[0], 'utf8'));
@@ -559,6 +598,10 @@ const layout = {
     // All mapped tee boxes, back tee first (future tee selector)
     tees: teeCandidates,
     obstacles,
+    // Where this hole came from. Local coordinates are metres from here,
+    // so without it a re-import means re-deriving the course's position by
+    // hand — the raw Overpass files are throwaway.
+    origin: { lat: +lat0.toFixed(6), lon: +lon0.toFixed(6) },
 };
 
 // Real elevation: sample a DEM grid over the hole corridor and store it as a
@@ -586,6 +629,7 @@ if (ELEV.dataset) {
         // -teeElevation locally. The sea plane needs it; without elevation
         // data the renderer falls back to the polygon's own bank level.
         if (seaPolygon) layout.seaLevelY = +(-teeE).toFixed(2);
+        layout.elevationSource = ELEV.used || ELEV.dataset;
         console.log(`  elevation ${cols}x${rows}: ${Math.min(...heights).toFixed(0)}..${Math.max(...heights).toFixed(0)}m vs tee`);
     } catch (e) {
         console.error('  elevation failed:', e.message);
@@ -655,11 +699,18 @@ if (courseMode) {
         holes.push(hole);
     }
     if (warnings) console.error(`⚠ ${warnings} warnings`);
+    // Course-level origin: the mean of the hole origins, so a re-fetch can
+    // be centred without opening the holes.
+    const org = holes.map(h => h.origin).filter(Boolean);
     const course = {
         formatVersion: 1,
         name: courseName,
         attribution: 'Course data © OpenStreetMap contributors (ODbL)',
         par: holes.reduce((s, h) => s + (h.par || 4), 0),
+        ...(org.length ? { origin: {
+            lat: +(org.reduce((s, o) => s + o.lat, 0) / org.length).toFixed(6),
+            lon: +(org.reduce((s, o) => s + o.lon, 0) / org.length).toFixed(6),
+        } } : {}),
         holes,
     };
     writeFileSync(outPath, JSON.stringify(course));
