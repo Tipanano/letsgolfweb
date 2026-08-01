@@ -19,6 +19,10 @@ function injectStyles() {
     style.textContent = `
         #rhythm-putt-hud {
             position: absolute;
+            /* border-box so max-width is the REAL footprint — the touch
+               layout sizes this pill to fit the strip between the thumb
+               zones, and content-box padding overflowed it past them. */
+            box-sizing: border-box;
             bottom: 26px;
             left: 50%;
             transform: translateX(-50%);

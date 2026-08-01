@@ -329,9 +329,11 @@ function injectStyles() {
             bottom: calc(132px + env(safe-area-inset-bottom, 0px));
         }
         body.touch-active .overlay-bottom .overlay-text-item { font-size: 11px; }
-        /* Rhythm hint: compact. In setup it docks under the status line
-           (a subtitle, not a floating box over the scene); at address it
-           sits by the zones where the guidance is acted on. */
+        /* Rhythm hint: compact, and never over the shot. It docks under the
+           status line — high ground that shows sky or terrain well past the
+           target, never the near green a chip or putt is aimed at. It used
+           to drop just above the thumb zones at address, which in portrait
+           is exactly the landing area. */
         body.touch-active #rhythm-putt-hud {
             max-width: min(380px, 94vw);
             padding: 6px 12px;
@@ -340,19 +342,29 @@ function injectStyles() {
             top: calc(196px + env(safe-area-inset-top, 0px));
             bottom: auto;
         }
+        /* Address: tighter still — this is live tempo feedback, read at a
+           glance while the eyes are on the ball. */
         body.tc-address #rhythm-putt-hud {
-            top: auto;
-            bottom: calc(238px + env(safe-area-inset-bottom, 0px));
+            max-width: min(320px, 92vw);
+            padding: 5px 10px;
+            gap: 8px;
         }
+        body.tc-address #rhythm-putt-distance { font-size: 19px; min-width: 66px; }
+        body.tc-address #rhythm-putt-tempo { min-width: 92px; }
         body.touch-active #rhythm-putt-hint {
             font-size: 11px;
             line-height: 1.35;
             min-width: 104px;
         }
         @media (orientation: landscape) {
-            /* Landscape: the strip between the thumb zones is free */
+            /* Landscape has a genuine free strip BETWEEN the thumb zones
+               (each min(42vw, 240px) wide with a 10px margin), so the pill
+               can sit low where the eyes already are — kept inside that gap
+               so it never reaches over a zone or the line to the hole. */
             body.tc-address #rhythm-putt-hud {
+                top: auto;
                 bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+                max-width: clamp(180px, calc(100vw - 2 * min(42vw, 240px) - 40px), 320px);
             }
         }
 
