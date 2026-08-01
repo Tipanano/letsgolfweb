@@ -272,11 +272,51 @@ function makeGridFeature(f) {
  * collar — which reads as the terraced pad real construction leaves.
  * The putting break itself comes from the green contour on top.
  */
-const MAX_GREEN_PAD_TILT = 0.015; // 1.5% residual base tilt across the green
+// How much of the hillside's own tilt the pad keeps. At 1.5% the pad was
+// essentially DEAD LEVEL, and a level disc gets no hillshade while the
+// sloping ground around it does — so even a perfect edge blend left the pad
+// reading as a differently-toned circle. 3% keeps the green sitting on its
+// hillside instead of stamped into it, and is still far short of what a ball
+// cannot rest on (unit-greenrest guards that end).
+const MAX_GREEN_PAD_TILT = 0.015;
+// The pad replaces the natural hillside under a green with a near-level
+// platform, and every centimetre it removes has to be handed back at the
+// rim. Feathered over the contour's own collar that reconciliation was
+// brutally steep — Asker's 2nd absorbed 0.93 m over about 7 m, which spiked
+// to a 27% wall in a ring around the green while the hillside either side
+// ran at 4-7%. Hillshade is exaggerated 5x to make contours readable, so
+// that wall painted a dark ring on the grass; it also kicked anything
+// pitching just short. The collar is now sized to the drop it has to
+// absorb, for a target maximum steepness.
+const MAX_PAD_COLLAR_SLOPE = 0.10;  // 10%: at the top of what the natural ground does
+const MAX_PAD_COLLAR_M = 30;        // but never grade half the hole to achieve it
+// Peak derivative of smootherstep(t) = 6t^5 - 15t^4 + 10t^3, at t = 0.5.
+const SMOOTHERSTEP_PEAK_SLOPE = 1.875;
 
-function makeGreenPadFeature(contour, baseFeatures) {
+// Held at full grade this far outside the green's own edge, before the
+// blend starts — the fringe and first step of apron.
+const PAD_FRINGE_M = 2;
+
+function makeGreenPadFeature(contour, baseFeatures, greenPolys) {
     const cx = contour.center.x, cz = contour.center.z;
     const inner = contour.innerRadius, outer = contour.outerRadius;
+    // The pad follows the GREEN, not a radius. Keyed off distance from the
+    // centre it drew a perfect circle whatever shape the green was, and on a
+    // hillside that circle is a cut on one side and a fill on the other — so
+    // it read as a drawn-on disc, far wider than the green and obviously not
+    // the same shape. Distance to the green outline instead.
+    const polys = (greenPolys || []).filter(v => Array.isArray(v) && v.length >= 3);
+    const usePoly = polys.length > 0;
+    // Signed: negative inside the green, positive outside.
+    const edgeDist = (x, z) => {
+        if (!usePoly) return Math.hypot(x - cx, z - cz) - inner;
+        let best = Infinity;
+        for (const v of polys) {
+            const d = distanceToPolygonEdge(x, z, v);
+            best = Math.min(best, pointInPolygon(x, z, v) ? -d : d);
+        }
+        return best;
+    };
     const baseAt = (x, z) => {
         let h = 0;
         for (const f of baseFeatures) {
@@ -295,15 +335,81 @@ function makeGreenPadFeature(contour, baseFeatures) {
         gx *= MAX_GREEN_PAD_TILT / gMag;
         gz *= MAX_GREEN_PAD_TILT / gMag;
     }
+    const planeAt = (x, z) => h0 + gx * (x - cx) + gz * (z - cz);
+
+    // How much height the collar has to absorb. The correction grows with
+    // radius — the level plane diverges further from a rising hillside the
+    // further out you go — so a longer collar has more to absorb, and sizing
+    // it from the value at `inner` alone lands well short. Iterate.
+    // Probe points marching outward from the green outline, so the collar is
+    // sized against the ground it will actually blend into.
+    const outward = [];
+    if (usePoly) {
+        for (const v of polys)
+            for (let i = 0; i < v.length; i++) {
+                const a = v[i], b = v[(i + 1) % v.length];
+                const mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2;
+                let nx = mx - cx, nz = mz - cz;
+                const L = Math.hypot(nx, nz) || 1;
+                outward.push({ x: mx, z: mz, nx: nx / L, nz: nz / L });
+            }
+    } else {
+        for (let a = 0; a < Math.PI * 2; a += Math.PI / 16)
+            outward.push({ x: cx + Math.cos(a) * inner, z: cz + Math.sin(a) * inner,
+                           nx: Math.cos(a), nz: Math.sin(a) });
+    }
+    const worstCorrectionWithin = (span) => {
+        let m = 0;
+        for (let t = 0; t <= span + 1e-6; t += Math.max(1, span / 8))
+            for (const p of outward) {
+                const x = p.x + p.nx * t, z = p.z + p.nz * t;
+                m = Math.max(m, Math.abs(planeAt(x, z) - baseAt(x, z)));
+            }
+        return m;
+    };
+    // The collar may not reach past the ground it is grading against. Outside
+    // the base features' extent baseAt() returns 0, so the pad would be
+    // levelling against nothing and drop a cliff wherever the real terrain
+    // was not at zero — which is exactly what a longer collar started doing
+    // at the DEM grid edge.
+    let reach = Infinity;
+    for (const f of baseFeatures) {
+        const b = f.bbox;
+        reach = Math.min(reach,
+            cx - b.minX, b.maxX - cx, cz - b.minZ, b.maxZ - cz);
+    }
+    const maxCollar = Math.min(MAX_PAD_COLLAR_M, Math.max(0, reach - inner));
+    const minCollar = Math.max(1, outer - inner);
+
+    let collar = minCollar;
+    for (let iter = 0; iter < 4; iter++) {
+        const needed = SMOOTHERSTEP_PEAK_SLOPE * worstCorrectionWithin(PAD_FRINGE_M + collar) / MAX_PAD_COLLAR_SLOPE;
+        const next = Math.min(Math.max(maxCollar, minCollar), Math.max(minCollar, needed));
+        if (Math.abs(next - collar) < 0.5) { collar = next; break; }
+        collar = next;
+    }
+    const reachOut = PAD_FRINGE_M + collar;
+
+    // Bounding box of the green outline, grown by everything the pad touches.
+    let bMinX = Infinity, bMaxX = -Infinity, bMinZ = Infinity, bMaxZ = -Infinity;
+    if (usePoly) {
+        for (const v of polys) for (const p of v) {
+            bMinX = Math.min(bMinX, p.x); bMaxX = Math.max(bMaxX, p.x);
+            bMinZ = Math.min(bMinZ, p.z); bMaxZ = Math.max(bMaxZ, p.z);
+        }
+    } else {
+        bMinX = cx - inner; bMaxX = cx + inner; bMinZ = cz - inner; bMaxZ = cz + inner;
+    }
+
     return {
-        bbox: { minX: cx - outer, maxX: cx + outer, minZ: cz - outer, maxZ: cz + outer },
+        bbox: { minX: bMinX - reachOut, maxX: bMaxX + reachOut,
+                minZ: bMinZ - reachOut, maxZ: bMaxZ + reachOut },
         evalAt(x, z) {
-            const d = Math.hypot(x - cx, z - cz);
-            if (d >= outer) return 0;
-            const plane = h0 + gx * (x - cx) + gz * (z - cz);
-            const correction = plane - baseAt(x, z);
-            if (d <= inner) return correction;
-            return correction * smootherstep(1 - (d - inner) / (outer - inner));
+            const t = edgeDist(x, z);          // <0 on the green, >0 outside
+            if (t >= reachOut) return 0;
+            const correction = planeAt(x, z) - baseAt(x, z);
+            if (t <= PAD_FRINGE_M) return correction;
+            return correction * smootherstep(1 - (t - PAD_FRINGE_M) / collar);
         },
     };
 }
@@ -313,7 +419,7 @@ function makeGreenPadFeature(contour, baseFeatures) {
  * hole-wide terrain features, plus automatic bunker bowls and water
  * depressions. Pass null to clear (flat).
  */
-export function setTerrainFromLayout(layout) {
+export function setTerrainFromLayout(layout, { skipGreenPad = false } = {}) {
     features = [];
     waterSheets = [];
     if (!layout) return;
@@ -342,9 +448,15 @@ export function setTerrainFromLayout(layout) {
         }
     }
 
-    // Grade the green into the base terrain (see makeGreenPadFeature)
-    if (baseFeatures.length && layout.greenContour?.center && layout.greenContour.outerRadius > 0) {
-        features.push(makeGreenPadFeature(layout.greenContour, baseFeatures));
+    // Grade the green into the base terrain (see makeGreenPadFeature).
+    // skipGreenPad builds the same field WITHOUT that grading, so a test can
+    // measure what the pad itself adds rather than what the hillside was
+    // already doing.
+    if (!skipGreenPad && baseFeatures.length && layout.greenContour?.center && layout.greenContour.outerRadius > 0) {
+        const greenPolys = (layout.greens || [])
+            .map(g => g.vertices || g.controlPoints)
+            .filter(v => Array.isArray(v) && v.length >= 3);
+        features.push(makeGreenPadFeature(layout.greenContour, baseFeatures, greenPolys));
     }
 
     // Bunkers: depth scales gently with size (small pots stay shallow)
