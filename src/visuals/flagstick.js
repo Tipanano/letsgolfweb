@@ -14,6 +14,7 @@
 
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
 import { gradientAt as contourGradientAt } from '../greenContours.js';
+import { requestShadowUpdate } from './core.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
 // Vertex colours are consumed as linear, so convert once from the sRGB value
@@ -279,6 +280,10 @@ export function setFlagstickVisible(visible) {
     if (clothMesh) clothMesh.visible = visible;
     // Flag out = halo on: the cup must stay findable without the stick
     if (haloMesh) haloMesh.visible = !visible;
+    // The pole and cloth cast shadows, and shadowMap.autoUpdate is off — with
+    // no refresh the pulled flag left its shadow painted on the green as a
+    // dark blob beside the cup.
+    requestShadowUpdate();
 }
 
 /** Drops module references; the caller disposes the objects it was handed. */
