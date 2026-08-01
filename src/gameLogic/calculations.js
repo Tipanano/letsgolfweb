@@ -95,9 +95,25 @@ function buildChipReport(r, label) {
 }
 import { getCurrentBallPosition as getPlayHoleBallPosition } from '../modes/playHole.js'; // Import position getter
 import { BALL_RADIUS } from '../visuals/core.js'; // Import BALL_RADIUS
+import { queryTerrainHeight } from '../visuals.js'; // Ground under the ball (DEM courses sit at real elevations)
+
 import { getFlagPosition, getGreenCenter, getGreenRadius, getObstacles as getHoleObstacles } from '../visuals/holeView.js'; // For hole/green checks
 import { getObstacles as getCTFObstacles } from '../visuals/targetView.js'; // Import obstacles getter for CTF mode
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js'; // For Vector3
+
+/**
+ * Floor for a shot's starting height: the ground under the ball, never an
+ * absolute number. This used to be Math.max(BALL_RADIUS, y), which reads as
+ * "don't start underground" but only holds on a flat course sitting at y=0.
+ * Imported DEM courses sit at their real elevation — Bethpage's green is at
+ * y ≈ −12 m — so the clamp yanked the ball up to sea level and the shot flew
+ * from twelve metres in the air. Chips showed it worst: the whole shot is
+ * shorter than the error.
+ */
+export function groundedStartY(pos) {
+    const groundY = queryTerrainHeight(pos.x, pos.z) + BALL_RADIUS;
+    return Math.max(groundY, pos.y);
+}
 
 // --- Calculation Functions ---
 
@@ -156,7 +172,7 @@ export function calculateFullSwingShot() {
 
     if (currentMode === 'play-hole' && currentHoleLayout) {
         initialPositionObj = getPlayHoleBallPosition();
-        initialPositionObj.y = Math.max(BALL_RADIUS, initialPositionObj.y);
+        initialPositionObj.y = groundedStartY(initialPositionObj);
         // Determine surface type at the starting position
         currentSurface = getSurfaceTypeAtPoint(initialPositionObj, currentHoleLayout);
     } else {
@@ -447,7 +463,7 @@ export function calculateChipShot() {
 
     if (currentMode === 'play-hole' && currentHoleLayout) {
         initialPositionObj = getPlayHoleBallPosition();
-        initialPositionObj.y = Math.max(BALL_RADIUS, initialPositionObj.y);
+        initialPositionObj.y = groundedStartY(initialPositionObj);
         // Determine surface type at the starting position
         currentSurface = getSurfaceTypeAtPoint(initialPositionObj, currentHoleLayout);
     } else {
@@ -719,7 +735,7 @@ export function calculatePuttShot() {
     const currentMode = getCurrentGameMode();
     if (currentMode === 'play-hole') {
         initialPositionObj = getPlayHoleBallPosition();
-        initialPositionObj.y = Math.max(BALL_RADIUS, initialPositionObj.y);
+        initialPositionObj.y = groundedStartY(initialPositionObj);
     } else {
         initialPositionObj = { x: 0, y: BALL_RADIUS, z: 0 };
     }

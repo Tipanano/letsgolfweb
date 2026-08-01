@@ -664,11 +664,16 @@ export function getCurrentBallPosition() {
             return { x: practicePlacement.x, y: groundHeight + BALL_RADIUS, z: practicePlacement.z };
         }
         if (currentHoleLayout?.tee?.center) {
-            // If hole was just completed, the "next" shot is from the tee
+            // If hole was just completed, the "next" shot is from the tee.
+            // The tee sits at its real elevation on DEM courses — a bare
+            // BALL_RADIUS here means "sea level", which is metres off the
+            // ground on any imported course.
+            const teeX = currentHoleLayout.tee.center.x;
+            const teeZ = currentHoleLayout.tee.center.z;
             return {
-                x: currentHoleLayout.tee.center.x,
-                y: BALL_RADIUS,
-                z: currentHoleLayout.tee.center.z
+                x: teeX,
+                y: visuals.queryTerrainHeight(teeX, teeZ) + BALL_RADIUS,
+                z: teeZ
             };
         }
     }
