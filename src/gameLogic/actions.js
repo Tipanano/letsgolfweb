@@ -106,6 +106,13 @@ export function startBackswing() {
     startBackswingAnimation();
 }
 
+// A backswing is a HOLD. Below this, the press was a fumble — a thumb
+// brushing the swing zone, a stray keypress — and turning it into a shot
+// costs a stroke for something the player never meant to do. The shortest
+// deliberate backswing anyone plays is several hundred ms (the bar barely
+// leaves the peg by 250), so nothing real is thrown away here.
+const MIN_BACKSWING_MS = 250;
+
 export function endBackswing() {
     const state = getGameState();
     if (state !== 'backswing') return;
@@ -116,6 +123,11 @@ export function endBackswing() {
 
     // Stop backswing bar animation
     stopBackswingAnimation();
+
+    if (duration < MIN_BACKSWING_MS) {
+        abortAccidentalBackswing(duration);
+        return;
+    }
 
     // --- Transition logic based on shot type ---
     if (shotType === 'full') {
@@ -144,6 +156,22 @@ export function endBackswing() {
         // Start putt downswing timing bar animation
         startPuttDownswingAnimation(); // Animation module handles duration check
     }
+}
+
+/**
+ * Unwinds a backswing that was never meant to start: back to address, no
+ * stroke, no penalty. The player keeps their club, their aim and their
+ * shot clock — the only thing they lose is the half second they were
+ * holding the button by mistake.
+ */
+function abortAccidentalBackswing(duration) {
+    console.log(`Swing aborted: ${Math.round(duration)} ms press, under the ${MIN_BACKSWING_MS} ms hold`);
+    resetSwingVariablesOnly();
+    setGameState('ready');
+    resetUIForNewShot();
+    multiplayerManager.onShotAborted();
+    updateStatus('Hold to swing — that was just a tap.');
+    showAddressHint(getCurrentShotType(), { hasClub: !!getSelectedClub() });
 }
 
 export function recordRotationInitiation() {

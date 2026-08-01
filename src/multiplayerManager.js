@@ -1414,6 +1414,15 @@ export function onShotStarted() {
     shotTimer.setStatusMessage('Shot in progress...');
 }
 
+/**
+ * The player started a swing and it was thrown away as an accidental tap.
+ * onShotStarted stopped their shot clock; give it back.
+ */
+export function onShotAborted() {
+    if (!currentSessionId) return;
+    startShotTimer('Your shot, {time} seconds left');
+}
+
 // Called when ball has finished animating/stopped moving
 export function onBallStopped(shotData) {
     // Only handle multiplayer logic if we're in a multiplayer session
