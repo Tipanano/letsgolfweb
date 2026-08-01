@@ -82,15 +82,30 @@ const BUNKER_FAT_STRIKE_SMASH_PENALTY = 0.10; // Reduced penalty for fat shots f
 //
 // Total spin (RPM) ≈ k(loft) · BallSpeed(mph) · sin(SpinLoft)
 //   where SpinLoft = DynamicLoft − AttackAngle.
-// k(loft) rises super-linearly with loft because wedge friction/groove
-// engagement is much higher than driver face friction. A quadratic fit
-// matches PGA Tour data better than a linear coefficient:
-//   Driver  10.5° → k ≈ 87    →  ~2700 rpm
-//   7-iron  32°   → k ≈ 105   →  ~7400 rpm
-//   PW      45°   → k ≈ 125   →  ~9700 rpm
-//   LW      60°   → k ≈ 157   → ~10800 rpm
-const SPIN_LOFT_K_BASE = 85;        // coefficient at 0° loft
-const SPIN_LOFT_K_QUAD = 0.020;     // adds k(loft) = base + quad·loft²
+//
+// k(loft) is the spin the face actually imparts per unit of ball speed and
+// spin loft. Solving it backwards from TrackMan tour averages across the bag
+// (tests/browser-smoke-bagmatrix.mjs prints the same table) shows it is
+// U-SHAPED, not monotonic:
+//   Driver 11.5° → 96   (low spin loft, but the face still spins the ball —
+//                        gear effect and a hot, high-COR face)
+//   3-iron 20°   → 85   |  5-iron 25° → 86   (the trough: long/mid irons are
+//   4-iron 22°   → 84   |                     the least spin-efficient clubs)
+//   7-iron 32°   → 100  |  PW 45° → 119
+//   SW 58°       → 150  |  LW 60° → 159      (grooves + steep, clean strike)
+// A rising quadratic cannot represent a trough, which is why the mid irons
+// used to over-spin by 8-14% and the driver under-spun by 9%. This cubic is
+// a least-squares fit over the whole bag (mean |error| 3.0% vs 7.0%), and is
+// monotonic and well-behaved from 0° through 70°.
+const SPIN_K_C0 = 130.5;
+const SPIN_K_C1 = -4.8852;
+const SPIN_K_C2 = 0.15295;
+const SPIN_K_C3 = -0.0010813;
+
+/** Spin coefficient for a club's static loft (deg). */
+function spinCoefficientForLoft(loft) {
+    return SPIN_K_C0 + SPIN_K_C1 * loft + SPIN_K_C2 * loft * loft + SPIN_K_C3 * loft * loft * loft;
+}
 
 // Strike quality multipliers on spin loft engagement (not on final spin —
 // these scale the effective spin loft to model groove/contact deterioration).
@@ -443,7 +458,7 @@ function calculateSpinComponents({
 
     const effectiveSpinLoft = spinLoft * strikeMod;
     const slRad = effectiveSpinLoft * Math.PI / 180;
-    const k = SPIN_LOFT_K_BASE + SPIN_LOFT_K_QUAD * staticLoft * staticLoft;
+    const k = spinCoefficientForLoft(staticLoft);
     const totalSpin = Math.max(0, k * ballSpeed * Math.sin(Math.max(0, slRad)));
 
     const tiltDeg = calculateSpinAxisTilt(faceAngleRelPath, spinLoft);
