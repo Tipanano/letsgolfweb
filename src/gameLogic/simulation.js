@@ -320,8 +320,11 @@ const MIN_ROLL_SPEED     = 0.05;
  * firmer / higher-spin-response surfaces grip more during contact.
  */
 function impactFrictionFor(surfaceProps) {
+    // An explicit impactGrip wins; turf falls back to the spinResponse curve,
+    // which is a fair proxy for grass but not for sand (see surfaces.js).
+    if (typeof surfaceProps?.impactGrip === 'number') return surfaceProps.impactGrip;
     const sr = surfaceProps?.spinResponse ?? 1.0;
-    return 0.35 + 0.20 * sr; // GREEN(1.5)=0.65, FAIRWAY(1.0)=0.55, ROUGH(0.5)=0.45, BUNKER(0.4)=0.43
+    return 0.35 + 0.20 * sr; // GREEN(1.5)=0.65, FAIRWAY(1.0)=0.55, ROUGH(0.5)=0.45
 }
 
 // Turf gives under a fast, steep impact (the ball pitches a mark instead of
@@ -346,9 +349,11 @@ const TURF_DIG_STEEP_START = 0.5; // sin(descent) where digging begins (~30°)
 const TURF_DIG_MIN_VY = 4.0; // m/s
 
 function turfSoftnessFor(surfaceProps) {
-    const sr = surfaceProps?.spinResponse ?? 1.0;
     // Course conditions: soft (wet) turf swallows the bounce, firm (baked)
     // turf skips. Scale is 1.0 at neutral conditions.
+    if (typeof surfaceProps?.impactSoftness === 'number')
+        return surfaceProps.impactSoftness * turfSoftnessScale();
+    const sr = surfaceProps?.spinResponse ?? 1.0;
     return (TURF_SOFTNESS_BASE + TURF_SOFTNESS_GRIP * sr) * turfSoftnessScale();
 }
 
@@ -450,6 +455,8 @@ export function simulateBouncePhase(landingPosition, landingVelocity, landingAng
 
     const bouncePoints = [];
     let bounceCount = 0;
+    // Deepest crater any bounce dug, and where. Reported, not yet acted on.
+    let deepestDig = 0, digSurface = null, digVertical = 0;
     let inAir = false;
     let airTime = 0;
     let time = startTime;
@@ -490,11 +497,24 @@ export function simulateBouncePhase(landingPosition, landingVelocity, landingAng
             // Crater damping: bury horizontal speed on steep, fast impacts
             {
                 const steep = impactSpeed > 0.01 ? Math.abs(before.y) / impactSpeed : 0;
-                const ramp = Math.max(0, steep - TURF_DIG_STEEP_START) / (1 - TURF_DIG_STEEP_START);
+                // Turf needs a genuinely steep descent before it craters; sand
+                // ploughs from a much shallower angle (see surfaces.js).
+                const digStart = surfaceProps?.impactDigStart ?? TURF_DIG_STEEP_START;
+                const ramp = Math.max(0, steep - digStart) / (1 - digStart);
                 const digVy = Math.max(0, Math.abs(before.y) - TURF_DIG_MIN_VY);
                 const keep = 1 / (1 + TURF_DIG_K * turfSoftnessFor(surfaceProps) * digVy * ramp);
                 velocity.x *= keep;
                 velocity.z *= keep;
+                // How hard this landing buried itself, 0 (skipped off) to 1
+                // (stopped in its own pitch mark). Nothing consumes this yet —
+                // it is the measurement a plugged-lie rule would be built on,
+                // recorded now so the rule can be written against real shots
+                // rather than invented numbers.
+                if (1 - keep > deepestDig) {
+                    deepestDig = 1 - keep;
+                    digSurface = currentSurfaceType;
+                    digVertical = Math.abs(before.y);
+                }
             }
 
             const newHSpeed = Math.sqrt(velocity.x ** 2 + velocity.z ** 2);
@@ -555,6 +575,13 @@ export function simulateBouncePhase(landingPosition, landingVelocity, landingAng
         bouncePoints,
         bounceCount,
         endTime: time,
+        // Impact severity, for a future plugged/buried-lie rule.
+        impact: { dig: +deepestDig.toFixed(3), surface: digSurface, verticalSpeed: +digVertical.toFixed(2) },
+        // Where the ball actually finished bouncing. The roll used to start
+        // with the LANDING surface, so a ball that pitched on the fairway and
+        // hopped into a bunker kept rolling on fairway friction until the next
+        // periodic surface check.
+        endSurface: currentSurfaceType,
     };
 }
 

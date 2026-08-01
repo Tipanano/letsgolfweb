@@ -155,6 +155,16 @@ export const SURFACES = {
     bounce: 0.06, // Sand absorbs almost all energy
     rollOut: 0.10, // Sand kills roll very quickly
     spinResponse: 0.4, // Sand has some grip but inconsistent
+    // Impact behaviour is NOT the same thing as spinResponse. spinResponse
+    // describes how a rolling ball's spin bites the surface; these two
+    // describe what happens in the instant of a landing. Derived from
+    // spinResponse (the default elsewhere) sand came out as the slipperiest,
+    // least-yielding surface on the course — a ball pitching into a bunker
+    // squirted out FASTER than off a fairway. Sand is the opposite of both:
+    // it grabs, and it gives.
+    impactGrip: 0.90,      // mu at impact (fairway 0.55, green 0.65)
+    impactSoftness: 0.35,  // crater depth per m/s (fairway 0.10, green 0.125)
+    impactDigStart: 0.25,  // sin(descent) where ploughing begins (~14 deg; turf needs 30)
     flightModification: {
       spinReduction: [0.50, 0.75], // Range for spin reduction
       launchAngleChange: 1.5, // Tends to increase launch angle

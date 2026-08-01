@@ -258,6 +258,7 @@ export function calculateFullSwingShot() {
 
     // --- Run Bounce/Ground Simulation (if not holed out) ---
     let landingSurfaceType = 'OUT_OF_BOUNDS'; // Default to OOB - declare outside block for scope
+    let shotImpact = null; // deepest crater this shot dug (see simulateBouncePhase)
     if (!isHoledOut) {
         if ((currentMode === 'play-hole' || currentMode === 'closest-to-flag') && currentHoleLayout) {
             // Use the utility function to determine surface type at landing position (meters)
@@ -303,9 +304,10 @@ export function calculateFullSwingShot() {
         rollStartSidespinRPM = bounceResult.spin.y * (60 / (2 * Math.PI));
         bounceTrajectory = bounceResult.bouncePoints || [];
         bounceEndTime = bounceResult.endTime; // Get end time from bounce phase
+        shotImpact = bounceResult.impact || null;
 
         // --- Run Ground Roll Simulation (pass bounce end time and holeLayout) ---
-        const groundRollResult = simulateGroundRoll(rollStartPosition, rollStartVelocity, landingSurfaceType, rollStartBackspinRPM, rollStartSidespinRPM, bounceEndTime, currentHoleLayout);
+        const groundRollResult = simulateGroundRoll(rollStartPosition, rollStartVelocity, bounceResult.endSurface || landingSurfaceType, rollStartBackspinRPM, rollStartSidespinRPM, bounceEndTime, currentHoleLayout);
         finalPosition = groundRollResult.finalPosition; // Vector3
         isHoledOut = groundRollResult.isHoledOut;
 
@@ -380,7 +382,11 @@ export function calculateFullSwingShot() {
         sideDistance: sideDistance,
         finalPosition: { x: finalPosition.x, y: finalPosition.y, z: finalPosition.z }, // Convert final Vector3 back to object
         isHoledOut: isHoledOut,
-        surfaceName: getSurfaceTypeAtPoint({ x: finalPosition.x, z: finalPosition.z }, currentHoleLayout) || landingSurfaceType // Use final position surface, not landing surface
+        surfaceName: getSurfaceTypeAtPoint({ x: finalPosition.x, z: finalPosition.z }, currentHoleLayout) || landingSurfaceType, // Use final position surface, not landing surface
+        // How hard the ball buried itself on its deepest impact: 0 skipped
+        // off, 1 stopped in its own pitch mark. Nothing reads this yet — it is
+        // the measurement a plugged-lie rule would be written against.
+        impact: shotImpact
     };
 
     // Update internal state - set to 'calculating' during animation, will be set to 'result' after animation completes
@@ -553,6 +559,7 @@ export function calculateChipShot() {
 
     // --- Run Bounce/Ground Simulation (if not holed out) ---
     let landingSurfaceType = 'OUT_OF_BOUNDS'; // Default to OOB - declare outside block for scope
+    let shotImpact = null; // deepest crater this shot dug (see simulateBouncePhase)
     if (!isHoledOut) {
         if ((currentMode === 'play-hole' || currentMode === 'closest-to-flag') && currentHoleLayout) {
              // Use the utility function to determine surface type at landing position (meters)
@@ -598,9 +605,10 @@ export function calculateChipShot() {
         rollStartSidespinRPM = bounceResult.spin.y * (60 / (2 * Math.PI));
         bounceTrajectory = bounceResult.bouncePoints || [];
         bounceEndTime = bounceResult.endTime; // Get end time from bounce phase
+        shotImpact = bounceResult.impact || null;
 
         // --- Run Ground Roll Simulation (pass bounce end time and holeLayout) ---
-        const groundRollResult = simulateGroundRoll(rollStartPosition, rollStartVelocity, landingSurfaceType, rollStartBackspinRPM, rollStartSidespinRPM, bounceEndTime, currentHoleLayout);
+        const groundRollResult = simulateGroundRoll(rollStartPosition, rollStartVelocity, bounceResult.endSurface || landingSurfaceType, rollStartBackspinRPM, rollStartSidespinRPM, bounceEndTime, currentHoleLayout);
         finalPosition = groundRollResult.finalPosition;
         isHoledOut = groundRollResult.isHoledOut;
 
@@ -665,7 +673,11 @@ export function calculateChipShot() {
         sideDistance: sideDistance,
         finalPosition: { x: finalPosition.x, y: finalPosition.y, z: finalPosition.z },
         isHoledOut: isHoledOut,
-        surfaceName: getSurfaceTypeAtPoint({ x: finalPosition.x, z: finalPosition.z }, currentHoleLayout) || landingSurfaceType // Use final position surface, not landing surface
+        surfaceName: getSurfaceTypeAtPoint({ x: finalPosition.x, z: finalPosition.z }, currentHoleLayout) || landingSurfaceType, // Use final position surface, not landing surface
+        // How hard the ball buried itself on its deepest impact: 0 skipped
+        // off, 1 stopped in its own pitch mark. Nothing reads this yet — it is
+        // the measurement a plugged-lie rule would be written against.
+        impact: shotImpact
     };
 
     // Update internal state - set to 'calculating' during animation, will be set to 'result' after animation completes
