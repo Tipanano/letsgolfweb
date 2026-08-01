@@ -199,6 +199,141 @@ for (const el of elements) {
     }
 }
 
+// --- The sea -------------------------------------------------------------
+// OSM does not map the ocean as an area: it maps `natural=coastline` LINES,
+// with the convention that land lies to the LEFT of the way's direction.
+// Renderers fill the seaward side themselves, and so must we — otherwise a
+// links course imports with no water at all (Lofoten's 1st green is 19 m
+// from the shore and came in bone dry).
+//
+// Method: clip the coastline into a generous box around the hole, take the
+// longest run, then close it along the box edge on whichever side is sea.
+// One crossing is the case that matters for a golf hole; islands and inlets
+// beyond that are ignored rather than guessed at.
+const SEA_BOX_MARGIN = 220;   // m of ocean to carry past the hole
+function buildSeaPolygon() {
+    const coast = elements.filter(el =>
+        el.type === 'way' && el.tags?.natural === 'coastline' && (el.geometry?.length ?? 0) >= 2);
+    if (!coast.length) return null;
+
+    const xs = linePts.map(p => p.x), zs = linePts.map(p => p.z);
+    const box = {
+        minX: Math.min(...xs) - SEA_BOX_MARGIN, maxX: Math.max(...xs) + SEA_BOX_MARGIN,
+        minZ: Math.min(...zs) - SEA_BOX_MARGIN, maxZ: Math.max(...zs) + SEA_BOX_MARGIN,
+    };
+    const inBox = (p) => p.x >= box.minX && p.x <= box.maxX && p.z >= box.minZ && p.z <= box.maxZ;
+
+    // Clip each way into runs of consecutive in-box points, keeping one point
+    // beyond each end so the run reaches the boundary when we snap it.
+    const runs = [];
+    for (const way of coast) {
+        const pts = way.geometry.map(project);
+        let cur = null;
+        for (let i = 0; i < pts.length; i++) {
+            if (inBox(pts[i])) {
+                if (!cur) { cur = []; if (i > 0) cur.push(pts[i - 1]); }
+                cur.push(pts[i]);
+            } else if (cur) { cur.push(pts[i]); runs.push(cur); cur = null; }
+        }
+        if (cur) runs.push(cur);
+    }
+    if (!runs.length) return null;
+    const len = (r) => r.reduce((s, p, i) => i ? s + Math.hypot(p.x - r[i - 1].x, p.z - r[i - 1].z) : 0, 0);
+    const run = runs.sort((a, b) => len(b) - len(a))[0];
+    if (run.length < 2 || len(run) < 40) return null;
+
+    // Push the two ends out to the box edge along their own direction, then
+    // clamp: both endpoints must sit ON the boundary to close against it.
+    const extend = (from, to) => {
+        const dx = to.x - from.x, dz = to.z - from.z;
+        const m = Math.hypot(dx, dz) || 1;
+        return { x: to.x + (dx / m) * 4 * SEA_BOX_MARGIN, z: to.z + (dz / m) * 4 * SEA_BOX_MARGIN };
+    };
+    const clampToBox = (p) => ({
+        x: Math.max(box.minX, Math.min(box.maxX, p.x)),
+        z: Math.max(box.minZ, Math.min(box.maxZ, p.z)),
+    });
+    const shore = run.map(p => ({ ...p }));
+    shore[0] = clampToBox(extend(shore[1], shore[0]));
+    shore[shore.length - 1] = clampToBox(extend(shore[shore.length - 2], shore[shore.length - 1]));
+
+    // Perimeter parameter of a point on the box edge, clockwise from minX/minZ
+    const W = box.maxX - box.minX, H = box.maxZ - box.minZ;
+    const perim = (p) => {
+        const dLeft = Math.abs(p.x - box.minX), dRight = Math.abs(p.x - box.maxX);
+        const dBot = Math.abs(p.z - box.minZ), dTop = Math.abs(p.z - box.maxZ);
+        const m = Math.min(dLeft, dRight, dBot, dTop);
+        if (m === dBot) return (p.x - box.minX);                       // bottom, →
+        if (m === dRight) return W + (p.z - box.minZ);                 // right, ↑
+        if (m === dTop) return W + H + (box.maxX - p.x);               // top, ←
+        return 2 * W + H + (box.maxZ - p.z);                           // left, ↓
+    };
+    const corners = [
+        { t: 0, p: { x: box.minX, z: box.minZ } },
+        { t: W, p: { x: box.maxX, z: box.minZ } },
+        { t: W + H, p: { x: box.maxX, z: box.maxZ } },
+        { t: 2 * W + H, p: { x: box.minX, z: box.maxZ } },
+    ];
+    const P = 2 * (W + H);
+    const walk = (fromT, toT) => {
+        const out = [];
+        let t = fromT;
+        for (let guard = 0; guard < 8; guard++) {
+            const next = corners
+                .map(c => ({ ...c, d: ((c.t - t) % P + P) % P }))
+                .filter(c => c.d > 1e-6)
+                .sort((a, b) => a.d - b.d)[0];
+            const dEnd = ((toT - t) % P + P) % P;
+            if (!next || next.d >= dEnd) break;
+            out.push(next.p); t = next.t;
+        }
+        return out;
+    };
+
+    const walkBack = (fromT, toT) => {
+        const out = [];
+        let t = fromT;
+        for (let guard = 0; guard < 8; guard++) {
+            const prev = corners
+                .map(c => ({ ...c, d: ((t - c.t) % P + P) % P }))
+                .filter(c => c.d > 1e-6)
+                .sort((a, b) => a.d - b.d)[0];
+            const dEnd = ((t - toT) % P + P) % P;
+            if (!prev || prev.d >= dEnd) break;
+            out.push(prev.p); t = prev.t;
+        }
+        return out;
+    };
+
+    // Which side is sea? The OSM convention (land on the LEFT of the way
+    // direction) is the intent, but a single hole often sees a spit, an
+    // inlet or a reversed way and the convention alone flips the ocean onto
+    // the fairway — Lofoten's 17th drowned its own green. So decide from
+    // data we trust instead: the tee, the green and the hole line are LAND
+    // by definition. Take whichever closure keeps them dry.
+    const landProbes = [
+        { x: tee.center.x, z: tee.center.z },
+        ...lineSamples,
+        ...byType.green.map(centroid),
+    ];
+    const wetCount = (poly) => landProbes.reduce((n, p) => n + (pointInPoly(p, poly) ? 1 : 0), 0);
+
+    const tStart = perim(shore[0]), tEnd = perim(shore[shore.length - 1]);
+    const forward = [...shore, ...walk(tEnd, tStart)];
+    const backward = [...shore, ...walkBack(tEnd, tStart)];
+    const wetF = wetCount(forward), wetB = wetCount(backward);
+    const chosen = wetF <= wetB ? forward : backward;
+    const wet = Math.min(wetF, wetB);
+    // If neither closure keeps the hole dry the coastline here is not a
+    // simple shore (island, lagoon, way ends mid-box). Emit nothing rather
+    // than flood the hole.
+    if (wet > landProbes.length * 0.05) {
+        console.error(`  sea: skipped — no closure keeps the hole dry (${wet}/${landProbes.length} land probes wet)`);
+        return null;
+    }
+    if (chosen.length < 3) return null;
+    return chosen.map(p => ({ x: +p.x.toFixed(2), z: +p.z.toFixed(2) }));
+}
 console.log('Associated:', Object.fromEntries(Object.entries(byType).map(([k, v]) => [k, v.length])));
 
 // --- Tees: all boxes near the hole's start; play from the back tee ---
@@ -259,6 +394,10 @@ function corridorPolygon(line, halfWidth, cap) {
 }
 // The corridor must cover the walk from the BACK tee: hole lines usually
 // start at the forward tee, leaving back tee boxes stranded in OOB scrub.
+// The sea needs the resolved tee as a known-land probe, so build it here.
+const seaPolygon = buildSeaPolygon();
+if (seaPolygon) console.log(`  sea: coastline closed into a ${seaPolygon.length}-point polygon`);
+
 const teeGap = Math.hypot(tee.center.x - linePts[0].x, tee.center.z - linePts[0].z);
 const corridorLine = teeGap > 10
     ? [{ x: tee.center.x, z: tee.center.z }, ...linePts]
@@ -405,7 +544,13 @@ const layout = {
     fairways: byType.fairway.map(pts => ({ controlPoints: pts, surface: 'FAIRWAY' })),
     greens: byType.green.map(pts => ({ controlPoints: pts, surface: 'GREEN' })),
     bunkers: byType.bunker.map(pts => ({ controlPoints: pts, surface: 'BUNKER' })),
-    waterHazards: byType.water_hazard.map(pts => ({ controlPoints: pts, surface: 'WATER' })),
+    waterHazards: [
+        ...byType.water_hazard.map(pts => ({ controlPoints: pts, surface: 'WATER' })),
+        // The sea is flagged so the renderer keeps it level: its "banks" span
+        // the whole hole, which would otherwise pick the draped-creek mode
+        // and tilt the ocean down the hillside.
+        ...(seaPolygon ? [{ controlPoints: seaPolygon, surface: 'WATER', sea: true }] : []),
+    ],
     lightRough: [
         { vertices: roughCorridor, surface: 'LIGHT_ROUGH' },
         ...byType.rough.map(pts => ({ vertices: pts, surface: 'LIGHT_ROUGH' })),
@@ -437,6 +582,10 @@ if (ELEV.dataset) {
         const heights = elevs.slice(1).map(e =>
             e == null ? 0 : Math.max(-45, Math.min(45, +(e - teeE).toFixed(1))));
         layout.terrainFeatures = [{ type: 'grid', x0, z0, cell, cols, rows, heights }];
+        // Grid heights are relative to the tee, so mean sea level sits at
+        // -teeElevation locally. The sea plane needs it; without elevation
+        // data the renderer falls back to the polygon's own bank level.
+        if (seaPolygon) layout.seaLevelY = +(-teeE).toFixed(2);
         console.log(`  elevation ${cols}x${rows}: ${Math.min(...heights).toFixed(0)}..${Math.max(...heights).toFixed(0)}m vs tee`);
     } catch (e) {
         console.error('  elevation failed:', e.message);

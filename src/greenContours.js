@@ -347,6 +347,19 @@ export function setTerrainFromLayout(layout) {
         for (const w of layout.waterHazards) {
             const verts = w?.vertices;
             if (!verts || verts.length < 3) { waterSheets.push(null); continue; }
+            // The sea is always level, at mean sea level. It spans the whole
+            // hole, so the bank-spread test below would call it a creek and
+            // drape it down the hillside. Imported coastal holes carry the
+            // local y of absolute 0 m; without it, fall back to the lowest
+            // bank so the ocean still sits at the bottom of the land.
+            if (w.sea) {
+                let lowest = Infinity;
+                for (const v of verts) lowest = Math.min(lowest, bankLevelAt(v.x, v.z));
+                const level = Number.isFinite(layout.seaLevelY) ? layout.seaLevelY : lowest;
+                features.push(makeLevelWaterFeature(verts, level - WATER_DEPTH, POND_RIM));
+                waterSheets.push({ mode: 'flat', y: level + WATER_SURFACE_Y });
+                continue;
+            }
             let minBank = Infinity, maxBank = -Infinity;
             for (const v of verts) {
                 const b = bankLevelAt(v.x, v.z);
