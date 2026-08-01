@@ -606,18 +606,63 @@ if (!byType.green.some(g => pointInPoly(flag, g))) {
 const inferredPar = length < 230 ? 3 : length < 430 ? 4 : 5;
 const par = parseInt(holeLine.tags.par || String(inferredPar), 10);
 
-// Sparse OSM data fallback: par 4/5 with no mapped fairway (common on
-// aerial-only mappings like Augusta) → synthesize a ribbon along the hole
-// line, from past the tee shot's start to the front of the green.
-if (byType.fairway.length === 0 && par >= 4 && length > 230) {
+// Sparse OSM data fallback: par 4/5 whose mapped fairway does not actually
+// cover the hole (common on aerial-only mappings like Augusta) → synthesize a
+// ribbon along the hole line, from past the tee shot's start to the front of
+// the green.
+//
+// This used to trigger only when NOTHING was mapped, which let a single scrap
+// suppress it: Augusta's 15th carried one 475 m2 fragment sitting 26 m off the
+// line of a 517 m par 5, so the hole was built with a fairway in name only and
+// played as rough from tee to green. Measure the coverage instead of counting
+// the polygons — across the library 69% of par-4/5 holes over 230 m had less
+// than half their driving line on mapped fairway.
+if (par >= 4 && length > 230) {
     const ribbon = lineSamples.filter(p => {
         const fromTee = Math.hypot(p.x - linePts[0].x, p.z - linePts[0].z);
         const toFlag = Math.hypot(p.x - flag.x, p.z - flag.z);
         return fromTee > 40 && toFlag > 18;
     });
-    if (ribbon.length >= 2) {
-        byType.fairway.push(corridorPolygon(ribbon, 20, 6).map(p => ({ x: +p.x.toFixed(1), z: +p.z.toFixed(1) })));
-        console.error('  (synthesized fairway ribbon — none mapped)');
+    const covered = ribbon.filter(p =>
+        byType.fairway.some(v => pointInPoly(p, v))).length;
+    const coverage = ribbon.length ? covered / ribbon.length : 0;
+    if (ribbon.length >= 2 && coverage < 0.5) {
+        // Never lay fairway over water. Lofoten's 14th and 16th play across
+        // an inlet, and a ribbon drawn straight down the hole line paved it.
+        // Test the ribbon's full WIDTH, not just its centreline: the corridor
+        // is 20 m each side, so a dry centre still paves the water beside it.
+        const wet = (p) => byType.water_hazard.some(v => pointInPoly(p, v)) ||
+            (seaPolygon && pointInPoly(p, seaPolygon));
+        const wetAcross = (idx) => {
+            const p = ribbon[idx];
+            const a = ribbon[Math.max(0, idx - 1)], b = ribbon[Math.min(ribbon.length - 1, idx + 1)];
+            const dx = b.x - a.x, dz = b.z - a.z, L2 = Math.hypot(dx, dz) || 1;
+            const nx = -dz / L2, nz = dx / L2;
+            for (const s of [0, 20, -20, 12, -12])
+                if (wet({ x: p.x + nx * s, z: p.z + nz * s })) return true;
+            return false;
+        };
+        const runs = [];
+        let run = [];
+        for (let n = 0; n < ribbon.length; n++) {
+            if (wetAcross(n)) { if (run.length >= 2) runs.push(run); run = []; }
+            else run.push(ribbon[n]);
+        }
+        if (run.length >= 2) runs.push(run);
+        // The end cap extends past the last dry sample, so a run that stops
+        // right at a shoreline still pokes into it. Retry without the cap,
+        // and drop the run if even that is wet.
+        let added = 0;
+        for (const r of runs) {
+            for (const cap of [6, 0]) {
+                const poly = corridorPolygon(r, 20, cap).map(p => ({ x: +p.x.toFixed(1), z: +p.z.toFixed(1) }));
+                if (poly.some(p => wet(p))) continue;
+                byType.fairway.push(poly); added++;
+                break;
+            }
+        }
+        if (added)
+            console.error(`  (synthesized fairway ribbon${added > 1 ? ` in ${added} parts` : ''} — mapped fairway covers ${(coverage * 100).toFixed(0)}% of the line)`);
     }
 }
 const layout = {
