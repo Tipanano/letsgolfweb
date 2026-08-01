@@ -98,6 +98,41 @@ async function fetchElevations(locs, dataset) {
     throw new Error(`no elevation coverage (${lastEmpty})`);
 }
 
+/**
+ * Where to float the ocean, in tee-relative metres. Mean sea level is
+ * -teeElevation, but a coastal DEM is only accurate to a metre or two and at
+ * St Andrews it put the 1st tee 0.2 m above the water — close enough that the
+ * sea would lap at the teeing ground. Never let the surface come within
+ * MIN_FREEBOARD of the lowest ground in the play corridor; the DEM is not
+ * precise enough to be trusted over the geometry of a golf hole.
+ */
+const MIN_FREEBOARD = 1.0;
+function seaLevelFor(mslLocal, heights, cols, rows, x0, z0, cell, sea) {
+    // Only DRY corridor ground counts. Pebble's 8th plays over the bay and
+    // the 18th bends around it, so the lowest ground under the corridor
+    // there IS the sea floor — measuring against that would push the ocean a
+    // metre deeper for no reason.
+    const wet = (x, z) => {
+        let inside = false;
+        for (let i = 0, j = sea.length - 1; i < sea.length; j = i++) {
+            const a = sea[i], b = sea[j];
+            if ((a.z > z) !== (b.z > z) && x < (b.x - a.x) * (z - a.z) / (b.z - a.z) + a.x) inside = !inside;
+        }
+        return inside;
+    };
+    let corridorLow = Infinity;
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            const x = x0 + c * cell, z = z0 + r * cell;
+            if (Math.abs(x) > 30) continue;         // the played corridor only
+            if (wet(x, z)) continue;
+            corridorLow = Math.min(corridorLow, heights[r * cols + c]);
+        }
+    }
+    if (!Number.isFinite(corridorLow)) return +mslLocal.toFixed(2);
+    return +Math.min(mslLocal, corridorLow - MIN_FREEBOARD).toFixed(2);
+}
+
 const data = JSON.parse(readFileSync(argv[0], 'utf8'));
 const elements = data.elements || [];
 
@@ -640,7 +675,7 @@ if (ELEV.dataset) {
         // Grid heights are relative to the tee, so mean sea level sits at
         // -teeElevation locally. The sea plane needs it; without elevation
         // data the renderer falls back to the polygon's own bank level.
-        if (seaPolygon) layout.seaLevelY = +(-teeE).toFixed(2);
+        if (seaPolygon) layout.seaLevelY = seaLevelFor(-teeE, heights, cols, rows, x0, z0, cell, seaPolygon);
         layout.elevationSource = ELEV.used || ELEV.dataset;
         console.log(`  elevation ${cols}x${rows}: ${Math.min(...heights).toFixed(0)}..${Math.max(...heights).toFixed(0)}m vs tee`);
     } catch (e) {
