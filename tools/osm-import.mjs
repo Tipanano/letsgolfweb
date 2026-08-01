@@ -31,6 +31,18 @@ const argvAll = process.argv.slice(2);
 const ELEV = { dataset: null };
 const ei = argvAll.indexOf('--elevation');
 if (ei !== -1) { ELEV.dataset = argvAll[ei + 1]; argvAll.splice(ei, 2); }
+// --near lat,lon,radiusM restricts which golf=hole ways can be picked. An
+// Overpass fetch wide enough to include the coastline also drags in the
+// neighbouring courses — at Muirfield the bbox holds Gullane, Luffness and
+// the Renaissance Club, all with ref=1..18 — and routing continuity alone
+// will happily walk from one course onto another mid-round.
+const NEAR = { lat: null, lon: null, r: 0 };
+const ni = argvAll.indexOf('--near');
+if (ni !== -1) {
+    const [la, lo, r] = argvAll[ni + 1].split(',').map(Number);
+    NEAR.lat = la; NEAR.lon = lo; NEAR.r = r;
+    argvAll.splice(ni, 2);
+}
 const argv = argvAll;
 const courseMode = argv[1] === '--course';
 
@@ -647,19 +659,32 @@ return layout;
  * ref tag (the common convention); anything else is a name regex with {n}
  * already substituted. When several courses share the bbox, the candidate
  * whose start lies closest to the previous hole's green wins (routing
- * continuity).
+ * continuity) — but only among the ways --near admits, if it was given.
  */
+function nearEnough(way) {
+    if (NEAR.lat === null) return true;
+    return way.geometry.some(p => Math.hypot(
+        (p.lat - NEAR.lat) * M_PER_DEG_LAT,
+        (p.lon - NEAR.lon) * M_PER_DEG_LON_EQ * Math.cos(NEAR.lat * Math.PI / 180)) <= NEAR.r);
+}
+
+const usedLines = new Set();
+
 function findHoleLine(pattern, n, prevEnd) {
+    const holeWays = elements.filter(e =>
+        e.type === 'way' && e.tags?.golf === 'hole' && (e.geometry?.length ?? 0) >= 2 &&
+        !usedLines.has(e.id) && nearEnough(e));
     let candidates;
     if (pattern === 'ref') {
-        candidates = elements.filter(e =>
-            e.type === 'way' && e.tags?.golf === 'hole' &&
-            String(e.tags.ref) === String(n) && (e.geometry?.length ?? 0) >= 2);
+        candidates = holeWays.filter(e => String(e.tags.ref) === String(n));
+        // Stord's 4th is tagged ref=3, name=4 — a mistag that leaves hole 4
+        // with no ref match at all. Fall back to a name that is just the
+        // number before giving up on the hole.
+        if (!candidates.length)
+            candidates = holeWays.filter(e => String(e.tags.name).trim() === String(n));
     } else {
         const re = new RegExp(pattern);
-        candidates = elements.filter(e =>
-            e.type === 'way' && e.tags?.golf === 'hole' &&
-            re.test(e.tags.name || '') && (e.geometry?.length ?? 0) >= 2);
+        candidates = holeWays.filter(e => re.test(e.tags.name || ''));
     }
     if (candidates.length === 0) return null;
     if (candidates.length === 1 || !prevEnd) return candidates[0];
@@ -692,6 +717,7 @@ if (courseMode) {
             warnings++;
             continue;
         }
+        usedLines.add(line.id);
         prevEnd = line.geometry[line.geometry.length - 1];
         const hole = await convertHole(line);
         if (hole.greens.length === 0) { console.error(`Hole ${n}: NO GREEN`); warnings++; }
