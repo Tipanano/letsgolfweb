@@ -44,6 +44,11 @@ export async function loadCourse(file) {
         const res = await fetch(file);
         if (!res.ok) throw new Error(`Failed to fetch ${file}: ${res.status}`);
         course = await res.json();
+        // Holes are processed on their own, away from the course they came
+        // from, but a few things are properties of the COURSE — the character
+        // of its rough, for one. Stamp it once here rather than threading the
+        // name through every call site.
+        for (const h of course.holes || []) if (!h.courseName) h.courseName = course.name;
         cache.set(file, course);
     }
     return course;

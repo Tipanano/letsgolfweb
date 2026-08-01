@@ -2,6 +2,7 @@
 // Processes hole layout data from the Hole Maker tool
 // Converts control points to vertices and maps surface types
 
+import { outerRoughFor } from './courseRough.js';
 import { SURFACES } from './surfaces.js';
 
 /**
@@ -139,6 +140,14 @@ export function processHoleLayout(sourceLayout) {
     // Map surface strings from JSON to actual SURFACES enum values
     try {
         if (layout.background) {
+            // Every imported hole declares OUT_OF_BOUNDS out here, which made
+            // a 55 m miss a penalty stroke on all 486 holes in the library —
+            // on ground the elevation data still describes. Real courses put
+            // heavy rough, fescue and trees there and save the white stakes
+            // for the property line, which is still what you get beyond the
+            // background polygon itself.
+            if (layout.background.surface === 'OUT_OF_BOUNDS')
+                layout.background.surface = outerRoughFor(layout.courseName);
             layout.background.surface = SURFACES[layout.background.surface];
             layout.background.type = 'polygon';
         }
