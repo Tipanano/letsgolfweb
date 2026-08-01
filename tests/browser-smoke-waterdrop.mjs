@@ -41,37 +41,45 @@ await page.goto(BASE + '/index.html', { waitUntil: 'domcontentloaded' });
 await page.waitForSelector('#mode-btn-course', { timeout: 15000 });
 await sleep(1000);
 
-// Load a hole with water across the line of play.
+// A minimal synthetic hole with a pond across the fairway.
+//
+// Deliberately NOT a real course. This suite is about the WIRING — shot
+// result to resetSwing to modal to playHole state — and a real hole only
+// adds render cost: Sawgrass' 1st builds 741 K vertices and the suite spent
+// over three minutes doing it. The geometry of finding the crossing is
+// covered exhaustively in unit-waterdrop.
 const setup = await page.evaluate(async () => {
     const main = await import('./src/main.js');
     const ui = await import('./src/ui.js');
-    const lib = await import('./src/courseLibrary.js');
     const ph = await import('./src/modes/playHole.js');
     const { getSurfaceTypeAtPoint } = await import('./src/utils/gameUtils.js');
-    const course = await lib.loadCourse('courses/tpc-sawgrass.json');
-    ui.showGameView();
-    await main.setGameMode(main.GAME_MODES.PLAY_HOLE, null, null, null, course);
-    await new Promise(r => setTimeout(r, 2000));
-    // Rendering a hole is expensive (Sawgrass' water polygons especially), so
-    // check the hole setGameMode already built before loading any others.
-    const wetCount = (L) => {
-        const t = L.tee.center, f = L.flagPosition;
-        let wet = 0;
-        for (let s = 0.05; s < 1; s += 0.02)
-            if (getSurfaceTypeAtPoint({ x: t.x + (f.x - t.x) * s, z: t.z + (f.z - t.z) * s }, L) === 'WATER') wet++;
-        return wet;
+    const box = (x0, z0, x1, z1) => [
+        { x: x0, z: z0 }, { x: x1, z: z0 }, { x: x1, z: z1 }, { x: x0, z: z1 }];
+    const HOLE = {
+        name: 'Drop Test', par: 4, lengthMeters: 200,
+        background: { surface: 'LIGHT_ROUGH', vertices: box(-100, -20, 100, 240) },
+        tee: { type: 'polygon', center: { x: 0, z: 0 }, vertices: box(-4, -4, 4, 4) },
+        fairways: [{ surface: 'FAIRWAY', vertices: box(-20, 5, 20, 190) }],
+        greens: [{ surface: 'GREEN', vertices: box(-14, 190, 14, 215) }],
+        bunkers: [],
+        // The pond: straight across the line, 60 m out, 30 m deep
+        waterHazards: [{ surface: 'WATER', vertices: box(-40, 60, 40, 90) }],
+        lightRough: [],
+        flagPositions: [{ number: 1, x: 0, y: 0, z: 202 }],
+        obstacles: [], terrainFeatures: [],
     };
-    let wet = wetCount(ph.getCurrentHoleLayout());
-    if (wet > 3) return { hole: 1, wetSamples: wet };
-    for (let i = 1; i < course.holes.length; i++) {
-        await ph.initializeHoleFromRawLayout(course.holes[i], { holeNumber: i + 1 });
-        await new Promise(r => setTimeout(r, 700));
-        wet = wetCount(ph.getCurrentHoleLayout());
-        if (wet > 3) return { hole: i + 1, wetSamples: wet };
-    }
-    return null;
+    ui.showGameView();
+    await main.setGameMode(main.GAME_MODES.PLAY_HOLE, null, null, null,
+        { name: 'Drop Test Course', par: 4, holes: [HOLE] });
+    await new Promise(r => setTimeout(r, 1500));
+    const L = ph.getCurrentHoleLayout();
+    const t = L.tee.center, f = L.flagPosition;
+    let wet = 0;
+    for (let s = 0.05; s < 1; s += 0.02)
+        if (getSurfaceTypeAtPoint({ x: t.x + (f.x - t.x) * s, z: t.z + (f.z - t.z) * s }, L) === 'WATER') wet++;
+    return wet > 3 ? { hole: 1, wetSamples: wet } : null;
 });
-if (!setup) fail('no hole with water on the line of play — cannot test the drop');
+if (!setup) fail('the synthetic hole has no water on the line of play — the fixture is wrong');
 
 // Hit it in the water, via the real shot handler.
 async function splashIt() {
@@ -167,5 +175,5 @@ if (replayed.strokes !== wet2.strokesBeforeChoice + 1)
 
 await browser.close();
 if (errors.length) fail('page errors:\n  ' + errors.slice(0, 5).join('\n  '));
-console.log(`browser-smoke-waterdrop: PASS — hole ${setup.hole}: splash offers both options; ` +
+console.log(`browser-smoke-waterdrop: PASS — splash offers both options; ` +
     `drop lands on ${dropped.surfaceAtBall} with the penalty stroke, replay restores the previous spot and lie`);
