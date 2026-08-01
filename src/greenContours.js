@@ -112,14 +112,39 @@ function distanceToPolygonEdge(x, z, verts) {
  * Sunken bowl inside a polygon: 0 at the edge, -depth at rim-width inside,
  * feathered so slope is zero at both rim and floor.
  */
+/**
+ * Where a polygon feature actually needs sub-metre mesh detail: the RIM, a
+ * band either side of the polygon edge. Everything deeper inside is a flat
+ * floor and everything outside is untouched, and both tessellate perfectly
+ * well at the coarse budget.
+ *
+ * The renderer used to answer this question with the feature's BOUNDING BOX.
+ * That is the same thing for a 12 m bunker and catastrophically wrong for a
+ * sea polygon: the ocean's bbox covers the entire hole, so every triangle of
+ * rough on a coastal hole was built to a 0.65 m edge instead of 4 m. Lofoten's
+ * 1st came out at 3.5 MILLION vertices, 3.2 M of them rough, and took 78
+ * seconds to load.
+ */
+function makeRimProximity(verts, rimWidth, bbox) {
+    return (x, z, margin = 0) => {
+        // Cheap reject first — most triangles are nowhere near the polygon.
+        const reach = rimWidth + margin;
+        if (x < bbox.minX - reach || x > bbox.maxX + reach ||
+            z < bbox.minZ - reach || z > bbox.maxZ + reach) return false;
+        return distanceToPolygonEdge(x, z, verts) <= reach;
+    };
+}
+
 function makeDepressionFeature(verts, depth, rimWidth) {
     let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
     for (const v of verts) {
         minX = Math.min(minX, v.x); maxX = Math.max(maxX, v.x);
         minZ = Math.min(minZ, v.z); maxZ = Math.max(maxZ, v.z);
     }
+    const bbox = { minX, maxX, minZ, maxZ };
     return {
-        bbox: { minX, maxX, minZ, maxZ },
+        bbox,
+        fineNear: makeRimProximity(verts, rimWidth, bbox),
         evalAt(x, z) {
             if (!pointInPolygon(x, z, verts)) return 0;
             const d = distanceToPolygonEdge(x, z, verts);
@@ -396,9 +421,11 @@ function makeLevelWaterFeature(verts, level, rimWidth) {
         minX = Math.min(minX, v.x); maxX = Math.max(maxX, v.x);
         minZ = Math.min(minZ, v.z); maxZ = Math.max(maxZ, v.z);
     }
+    const bbox = { minX, maxX, minZ, maxZ };
     return {
         isWater: true,
-        bbox: { minX, maxX, minZ, maxZ },
+        bbox,
+        fineNear: makeRimProximity(verts, rimWidth, bbox),
         evalAt(x, z) {
             if (!pointInPolygon(x, z, verts)) return 0;
             const bank = bankLevelAt(x, z);
@@ -482,6 +509,9 @@ export function isNearContour(x, z, margin = 0) {
 export function isNearFineFeature(x, z, margin = 0) {
     for (const f of features) {
         if (f.isGrid) continue;
+        // A feature that knows where it actually needs detail says so. Only
+        // the ones that cannot (green contours, mounds) fall back to the box.
+        if (f.fineNear) { if (f.fineNear(x, z, margin)) return true; continue; }
         const b = f.bbox;
         if (x >= b.minX - margin && x <= b.maxX + margin &&
             z >= b.minZ - margin && z <= b.maxZ + margin) {

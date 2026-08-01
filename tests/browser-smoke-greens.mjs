@@ -33,13 +33,16 @@ await page.waitForSelector('#mode-btn-course', { timeout: 15000 });
 await sleep(1000);
 
 const rows = await page.evaluate(async () => {
-    const main = await import('./src/main.js');
-    const ui = await import('./src/ui.js');
     const lib = await import('./src/courseLibrary.js');
     const course = await lib.loadCourse('courses/augusta-national.json');
-    ui.showGameView();
-    await main.setGameMode(main.GAME_MODES.PLAY_HOLE, null, null, null, course);
-    const ph = await import('./src/modes/playHole.js');
+    // This asks questions about the TERRAIN FIELD — how steep the green is
+    // where the pin sits, and whether a ball at rest stays put. None of that
+    // needs a rendered hole, and rendering one cost ~20 s each, 6 1/2 minutes
+    // for the round. The rendered base mesh contributes exactly 0.0000 m to
+    // queryTerrainHeight (checked over 1764 samples across four holes) — the
+    // analytic field is the whole story — so building the field directly is
+    // the same measurement, two orders of magnitude cheaper.
+    const { processHoleLayout } = await import('./src/holeLoader.js');
     const gc = await import('./src/greenContours.js');
     const sim = await import('./src/gameLogic/simulation.js');
     const state = await import('./src/gameLogic/state.js');
@@ -47,9 +50,8 @@ const rows = await page.evaluate(async () => {
     state.setWind(0, 0);
     const out = [];
     for (let h = 0; h < course.holes.length; h++) {
-        if (h > 0) await ph.advanceToNextHole();
-        await new Promise(r => setTimeout(r, 800));
-        const layout = ph.getCurrentHoleLayout();
+        const layout = processHoleLayout(course.holes[h]);
+        gc.setTerrainFromLayout(layout);
         const c = layout.greenContour, flag = layout.flagPosition;
         if (!c || !flag) { out.push({ hole: h + 1, skip: true }); continue; }
         const gAt = (x, z) => { const g = gc.gradientAt(x, z); return g ? Math.hypot(g.x, g.z) : 0; };

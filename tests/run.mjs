@@ -34,12 +34,7 @@ const TIMING_SENSITIVE = new Set([
 // Long sweeps over the whole course library, plus the timing-sensitive set —
 // worth running, not worth running on every save. --quick leaves them out.
 const SLOW = new Set([
-    'browser-smoke-greens',      // renders all 18 Augusta holes: ~390 s
-    // ~210 s, and nearly all of it is ONE hole render — Sawgrass' water
-    // polygons are expensive to build. The assertions themselves are quick;
-    // move this back into --quick once hole loading is cheaper.
-    'browser-smoke-waterdrop',
-    ...TIMING_SENSITIVE,         // ~330 s and only reliable serially
+    ...TIMING_SENSITIVE,         // only reliable run serially, so they go last
 ]);
 
 const name = (f) => f.replace(/\.mjs$/, '');
