@@ -454,6 +454,139 @@ function makeGreenPadFeature(contour, baseFeatures, greenPolys) {
 }
 
 /**
+ * Fairways may fall away sideways, but not off a cliff.
+ *
+ * A DEM samples elevation every 20 m, so a sea cliff arrives as a 20 m ramp
+ * rather than a face — and where that ramp crosses a fairway, the fairway
+ * inherits it. Measured over Pebble's 6th, 8th and 18th, a tenth of the
+ * fairway area ran steeper than 38% and a hundredth steeper than 70%; the
+ * inland control (Bethpage 1, 5, 13) tops out at 30%.
+ *
+ * The steepness is not wrong, it is just in the wrong place: it belongs in
+ * the rough, where nothing constrains it. So this caps how far the ground may
+ * deviate from the hole's centreline height ACROSS the fairway, and hands the
+ * difference to the ground just outside. Slope ALONG the hole is untouched —
+ * plenty of real holes run steeply downhill and should keep doing so.
+ */
+const MAX_FAIRWAY_CROSS_SLOPE = 0.25;  // Bethpage's 99th percentile is 0.26
+const FAIRWAY_PAD_SHED_SLOPE = 0.55;   // how hard the shed height may fall away outside
+const FAIRWAY_PAD_MAX_SHED_M = 25;
+
+/**
+ * The hole's centreline, recovered from the generated rough corridor:
+ * corridorPolygon emits [...left, ...right.reversed()], so vertex i and
+ * vertex 2N-1-i bracket the same centreline point. Doglegs survive, which a
+ * straight tee-to-flag line would cut the corner off.
+ */
+function corridorCentreline(poly) {
+    if (!poly || poly.length < 6 || poly.length % 2) return null;
+    const n = poly.length / 2, mid = [];
+    for (let i = 0; i < n; i++) {
+        const a = poly[i], b = poly[poly.length - 1 - i];
+        mid.push({ x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 });
+    }
+    return mid.length >= 4 ? mid.slice(1, -1) : mid;
+}
+
+function makeFairwayPadFeature(fairwayPolys, centreline, baseFeatures, greenPolys) {
+    const polys = fairwayPolys.filter(v => Array.isArray(v) && v.length >= 3);
+    if (!polys.length || !centreline || centreline.length < 2) return null;
+
+    const baseAt = (x, z) => {
+        let h = 0;
+        for (const f of baseFeatures) {
+            const b = f.bbox;
+            if (x < b.minX || x > b.maxX || z < b.minZ || z > b.maxZ) continue;
+            h += f.evalAt(x, z);
+        }
+        return h;
+    };
+
+    // Nearest point on the hole's centreline, and how far off it we are.
+    const nearestOnLine = (x, z) => {
+        let best = null, bestD = Infinity;
+        for (let i = 0; i < centreline.length - 1; i++) {
+            const a = centreline[i], b = centreline[i + 1];
+            const ex = b.x - a.x, ez = b.z - a.z, L = ex * ex + ez * ez;
+            const t = L ? Math.max(0, Math.min(1, ((x - a.x) * ex + (z - a.z) * ez) / L)) : 0;
+            const px = a.x + ex * t, pz = a.z + ez * t;
+            const d = Math.hypot(x - px, z - pz);
+            if (d < bestD) { bestD = d; best = { x: px, z: pz }; }
+        }
+        return { p: best, d: bestD };
+    };
+
+    // How much correction the cap implies at a point: the amount by which the
+    // ground deviates from the centreline beyond what the cap allows.
+    // A hard min() switches on abruptly, and the kink where it engages is
+    // itself a steep face — capping the deviation but leaving a wall at the
+    // cap line. tanh saturates smoothly: it is the identity for gentle ground
+    // and approaches the limit asymptotically, so the corrected cross-section
+    // has no corner in it.
+    const correctionAt = (x, z) => {
+        const { p, d } = nearestOnLine(x, z);
+        if (!p) return 0;
+        const allowed = MAX_FAIRWAY_CROSS_SLOPE * Math.max(d, 0.5);
+        const dev = baseAt(x, z) - baseAt(p.x, p.z);
+        const capped = allowed * Math.tanh(dev / allowed);
+        return capped - dev;
+    };
+
+    // The green owns its own ground. Without this the shed band reaches the
+    // putting surface and tilts it — Baerum's 9th came out with its centre on
+    // a 7.8% slope, which unit-greenrest rightly refuses.
+    const greens = (greenPolys || []).filter(v => Array.isArray(v) && v.length >= 3);
+    const GREEN_KEEP_OUT_M = 6;
+    const greenShield = (x, z) => {
+        let d = Infinity;
+        for (const v of greens) {
+            const e = distanceToPolygonEdge(x, z, v);
+            d = Math.min(d, pointInPolygon(x, z, v) ? -e : e);
+        }
+        if (!Number.isFinite(d)) return 1;
+        if (d <= 0) return 0;
+        if (d >= GREEN_KEEP_OUT_M) return 1;
+        return smootherstep(d / GREEN_KEEP_OUT_M);
+    };
+
+    // Distance outside the fairway, negative inside.
+    const edgeDist = (x, z) => {
+        let best = Infinity;
+        for (const v of polys) {
+            const d = distanceToPolygonEdge(x, z, v);
+            best = Math.min(best, pointInPolygon(x, z, v) ? -d : d);
+        }
+        return best;
+    };
+
+    // The shed height has to go somewhere: feather it out over a band sized
+    // to the biggest correction, or the wall just moves to the fairway edge.
+    let worst = 0;
+    for (const v of polys) for (const p of v) worst = Math.max(worst, Math.abs(correctionAt(p.x, p.z)));
+    const shed = Math.min(FAIRWAY_PAD_MAX_SHED_M,
+                          Math.max(4, 1.875 * worst / FAIRWAY_PAD_SHED_SLOPE));
+
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const v of polys) for (const p of v) {
+        minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+        minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z);
+    }
+    if (worst < 0.05) return null;   // nothing to do on a sane hole
+
+    return {
+        bbox: { minX: minX - shed, maxX: maxX + shed, minZ: minZ - shed, maxZ: maxZ + shed },
+        evalAt(x, z) {
+            const t = edgeDist(x, z);
+            if (t >= shed) return 0;
+            const c = correctionAt(x, z) * greenShield(x, z);
+            if (c === 0) return 0;
+            if (t <= 0) return c;                            // on the fairway: full cap
+            return c * smootherstep(1 - t / shed);           // shed it into the rough
+        },
+    };
+}
+
+/**
  * Builds the terrain field for a hole layout: authored green contour and
  * hole-wide terrain features, plus automatic bunker bowls and water
  * depressions. Pass null to clear (flat).
@@ -485,6 +618,19 @@ export function setTerrainFromLayout(layout, { skipGreenPad = false } = {}) {
             else if (f.type === 'ridge' || f.type === 'valley') made = makeRidgeFeature(f);
             if (made) { features.push(made); baseFeatures.push(made); }
         }
+    }
+
+    // Keep the fairway's cross-slope playable (see makeFairwayPadFeature).
+    // Sits before the green pad so the green's own grading wins where they
+    // overlap around the front of the putting surface.
+    if (baseFeatures.length && (layout.fairways || []).length) {
+        const corridor = (layout.lightRough || [])[0];
+        const line = corridorCentreline(corridor?.vertices || corridor?.controlPoints);
+        const pad = makeFairwayPadFeature(
+            (layout.fairways || []).map(f => f.vertices || f.controlPoints).filter(Boolean),
+            line, baseFeatures,
+            (layout.greens || []).map(g => g.vertices || g.controlPoints).filter(Boolean));
+        if (pad) features.push(pad);
     }
 
     // Grade the green into the base terrain (see makeGreenPadFeature).
