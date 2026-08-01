@@ -83,7 +83,7 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
     const point = pointMeters;
 
 
-    // Check order: Tee > Green > Fairway > Bunkers > Water > Rough > Background
+    // Check order: Tee > Green > Bunkers > Water > Fairway > Rough > Background
     // Note: holeLayout vertices are now in METERS.
 
     // 1. Tee Box (Polygon) - Check first as it might overlap rough/background
@@ -109,23 +109,18 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
     }
     // TODO: Add check for legacy circle green if needed
 
-    // 3. Fairways (Array of Polygons or single Polygon)
-    // Check for new format (array) first, then fall back to legacy single fairway
-    if (holeLayout.fairways && Array.isArray(holeLayout.fairways)) {
-        for (let i = 0; i < holeLayout.fairways.length; i++) {
-            const fairway = holeLayout.fairways[i];
-            if (fairway.vertices && isPointInPolygon(point, fairway.vertices)) {
-                return 'FAIRWAY';
-            }
-        }
-    } else if (holeLayout.fairway?.vertices) {
-        // Legacy single fairway support
-        if (isPointInPolygon(point, holeLayout.fairway.vertices)) {
-            return 'FAIRWAY';
-        }
-    }
-
-    // 4. Bunkers (Array of Polygons/Circles)
+    // 3. Bunkers (Array of Polygons/Circles)
+    //
+    // Hazards must beat fairway, not lose to it. A fairway bunker is drawn
+    // INSIDE the fairway polygon — that is what a fairway bunker is — and
+    // with fairway checked first, 321 bunkers and 61 water hazards across
+    // the library handed back a fairway lie while the player was visibly
+    // sitting in sand or in the pond left of Augusta's 11th. The terrain
+    // bowl was always real; only the lie lookup disagreed with it.
+    //
+    // Green still outranks both: five water polygons clip a green edge by a
+    // metre or two of mapping slop, and a putting surface must never turn
+    // into a penalty drop.
     if (holeLayout.bunkers && Array.isArray(holeLayout.bunkers)) {
         for (let i = 0; i < holeLayout.bunkers.length; i++) {
             const bunker = holeLayout.bunkers[i];
@@ -143,7 +138,7 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
         }
     }
 
-    // 5. Water Hazards (Array of Polygons/Circles/Ellipses)
+    // 4. Water Hazards (Array of Polygons/Circles/Ellipses)
     if (holeLayout.waterHazards && Array.isArray(holeLayout.waterHazards)) {
         for (let i = 0; i < holeLayout.waterHazards.length; i++) {
             const water = holeLayout.waterHazards[i];
@@ -167,6 +162,22 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
                     return 'WATER';
                 }
             }
+        }
+    }
+
+    // 5. Fairways (Array of Polygons or single Polygon)
+    // Check for new format (array) first, then fall back to legacy single fairway
+    if (holeLayout.fairways && Array.isArray(holeLayout.fairways)) {
+        for (let i = 0; i < holeLayout.fairways.length; i++) {
+            const fairway = holeLayout.fairways[i];
+            if (fairway.vertices && isPointInPolygon(point, fairway.vertices)) {
+                return 'FAIRWAY';
+            }
+        }
+    } else if (holeLayout.fairway?.vertices) {
+        // Legacy single fairway support
+        if (isPointInPolygon(point, holeLayout.fairway.vertices)) {
+            return 'FAIRWAY';
         }
     }
 
