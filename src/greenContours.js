@@ -33,6 +33,45 @@ const WATER_RIM = 3.0;
 // below the waterline almost immediately — a wide feather leaves a dry
 // carved ring between the water and the rim
 const POND_RIM = 1.2;
+// A pond's shore may be steep, but not a wall. Rim width grows with the climb
+// from bed to bank to hold roughly this gradient.
+const POND_SHORE_SLOPE = 0.5;
+// Water is never allowed this close under the playing surfaces beside it —
+// raising a pond to its true rim height must not put it over a green.
+const WATER_FREEBOARD = 0.25;
+
+/**
+ * Lowest ground under any playable surface near this water polygon. Greens,
+ * fairways, tees and bunkers all count: a bunker below the waterline is as
+ * wrong as a flooded green.
+ */
+function playableFloorNear(layout, verts, reach = 8) {
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const v of verts) {
+        minX = Math.min(minX, v.x); maxX = Math.max(maxX, v.x);
+        minZ = Math.min(minZ, v.z); maxZ = Math.max(maxZ, v.z);
+    }
+    let floor = Infinity;
+    const consider = (poly) => {
+        if (!poly || poly.length < 3) return;
+        for (const p of poly) {
+            if (p.x < minX - reach || p.x > maxX + reach ||
+                p.z < minZ - reach || p.z > maxZ + reach) continue;
+            // Points INSIDE the water polygon are mapping overlap, not dry
+            // ground — a fairway drawn a few metres over a pond edge. The
+            // hazard already outranks fairway there, so they must not drag
+            // the waterline down with them.
+            if (pointInPolygon(p.x, p.z, verts)) continue;
+            if (distanceToPolygonEdge(p.x, p.z, verts) > reach) continue;
+            floor = Math.min(floor, bankLevelAt(p.x, p.z));
+        }
+    };
+    for (const g of layout.greens || []) consider(g.vertices || g.controlPoints);
+    for (const f of layout.fairways || []) consider(f.vertices || f.controlPoints);
+    for (const b of layout.bunkers || []) consider(b.vertices || b.controlPoints);
+    consider(layout.tee?.vertices);
+    return floor;
+}
 
 let features = []; // { bbox: {minX,maxX,minZ,maxZ}, evalAt(x,z) }
 
@@ -497,15 +536,31 @@ export function setTerrainFromLayout(layout, { skipGreenPad = false } = {}) {
                 waterSheets.push({ mode: 'flat', y: level + WATER_SURFACE_Y });
                 continue;
             }
-            let minBank = Infinity, maxBank = -Infinity;
-            for (const v of verts) {
-                const b = bankLevelAt(v.x, v.z);
-                if (b < minBank) minBank = b;
-                if (b > maxBank) maxBank = b;
-            }
+            const banks = verts.map(v => bankLevelAt(v.x, v.z)).sort((a, b) => a - b);
+            const minBank = banks[0], maxBank = banks[banks.length - 1];
             if (maxBank - minBank <= 2.5) {
-                features.push(makeLevelWaterFeature(verts, minBank - WATER_DEPTH, POND_RIM));
-                waterSheets.push({ mode: 'flat', y: minBank + WATER_SURFACE_Y });
+                // Where the waterline goes. The OSM polygon IS the waterline —
+                // that is what the mapper drew — so the surface belongs at the
+                // rim's own height. Taking the MINIMUM of that rim, as this
+                // used to, takes the minimum of a noisy DEM signal and biases
+                // low every single time: across the library water sat a median
+                // 0.47 m below its own median bank, 1.25 m at p90 and 2.14 m at
+                // worst. A pond two metres down in a bathtub also has to meet
+                // the shore somewhere, and where it cuts a uniform slope the
+                // intersection is a straight contour — the hard line across
+                // Augusta's 15th. Use the median and let the carve take care of
+                // any rim sample that reads lower.
+                const median = banks[Math.floor(banks.length / 2)];
+                const level = Math.min(median, playableFloorNear(layout, verts) - WATER_FREEBOARD);
+                // A rim has to climb from the bed to the bank, and at a fixed
+                // 1.2 m a two-metre climb is a wall. Widen it with the drop,
+                // but never so far that a small pond is all shore.
+                const drop = Math.max(0, maxBank - (level - WATER_DEPTH));
+                const room = 0.35 * Math.sqrt(polygonArea(verts) / Math.PI);
+                const rim = Math.min(Math.max(POND_RIM, room),
+                                     Math.max(POND_RIM, 1.875 * drop / POND_SHORE_SLOPE));
+                features.push(makeLevelWaterFeature(verts, level - WATER_DEPTH, rim));
+                waterSheets.push({ mode: 'flat', y: level + WATER_SURFACE_Y });
             } else {
                 const f = makeDepressionFeature(verts, WATER_DEPTH, WATER_RIM);
                 f.isWater = true;

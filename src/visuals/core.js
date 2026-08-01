@@ -9,7 +9,7 @@ import { getFlagPosition as getHoleFlagPosition, getCurrentHoleObjects } from '.
 import { getTargetObjects, getFlagPosition as getTargetFlagPosition } from './targetView.js'; // Import target view objects and flag position for CTF mode
 import { createTeeMesh } from './objects.js'; // Import the tee creator
 import { getSurfaceProperties } from '../surfaces.js'; // Import surface properties getter
-import { heightAt as terrainHeightAt } from '../greenContours.js';
+import { heightAt as terrainHeightAt, getWaterSheets } from '../greenContours.js';
 import { initTextureCaps } from './textures.js';
 import { updateFlagstick } from './flagstick.js';
 import { updateWind, getWindStrength } from './wind.js';
@@ -235,7 +235,7 @@ function createSkyAndHorizon(targetScene) {
     // in a void. Sits below every surface layer; fog blends it out.
     // Subdivided so updateEarthTerrain() can drape it over DEM elevation —
     // otherwise a hole dropping 40m (Augusta 10) would sink below it.
-    const earthGeom = new THREE.PlaneGeometry(1600, 1600, 96, 96);
+    const earthGeom = new THREE.PlaneGeometry(EARTH_SPAN, EARTH_SPAN, EARTH_SEGMENTS, EARTH_SEGMENTS);
     // Vertex-coloured so the backdrop varies instead of reading as one flat
     // slab. It also needs to sit close to the course's own greens in value —
     // too dark and the surrounds become a wall behind the hole rather than
@@ -267,6 +267,17 @@ function createSkyAndHorizon(targetScene) {
 
 let earthMesh = null;
 let sunLight = null;
+
+const EARTH_SPAN = 1600;
+const EARTH_SEGMENTS = 144;
+// Offsets, in half-cells, sampled around each backdrop vertex so its height is
+// the low point of the cell rather than the value at its centre.
+// The backdrop is offset this far below whatever it is standing in for.
+const EARTH_DROP = 0.9;
+const EARTH_PROBES = [
+    [-1, 0], [1, 0], [0, -1], [0, 1],
+    [-1, -1], [1, -1], [-1, 1], [1, 1],
+];
 
 /**
  * Device pixel ratio, capped. An uncapped 3x DPR phone renders NINE times the
@@ -304,12 +315,68 @@ export function focusShadowsOn(x, z) {
  * setTerrainFromLayout). Flat holes stay flat at -0.9; DEM holes carry the
  * backdrop down/up with the landscape so terrain never clips through it.
  */
-export function updateEarthTerrain() {
+export function updateEarthTerrain(holeLayout = null) {
     if (!earthMesh) return;
     const pos = earthMesh.geometry.attributes.position;
+    // The backdrop is 1600 m across 96 segments: it samples the terrain field
+    // every 16.7 m and draws straight chords between those samples, while the
+    // playable meshes follow the same field to well under a metre. Sitting a
+    // fixed 0.9 m below, any dip deeper than that between two samples put the
+    // backdrop ABOVE the real ground — and since it is a separate mesh with no
+    // depth bias, it won the depth test and painted a band of scenery-green
+    // straight across water, sand and green alike. Augusta's 15th showed it as
+    // a wide slab from above and a razor-thin diagonal from the tee, which is
+    // one horizontal plane seen at two angles.
+    //
+    // Sampling the LOW point of each vertex's own cell instead of its centre
+    // keeps every chord at or under the surface it is standing in for.
+    // Sampling alone cannot follow a cliff — Pebble's 8th drops to the sea
+    // inside a single cell — so anything under a water sheet is additionally
+    // pinned beneath it. That is where the artifact actually reads: scenery
+    // standing proud of a pond is far more obvious than scenery a little high
+    // in a hillside.
+    const ponds = [];
+    for (const [i, w] of (holeLayout?.waterHazards || []).entries()) {
+        const v = w.vertices || w.controlPoints;
+        const sheet = getWaterSheets()[i];
+        if (!v || v.length < 3 || sheet?.mode !== 'flat') continue;
+        let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+        for (const p of v) {
+            minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+            minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z);
+        }
+        ponds.push({ v, y: sheet.y, minX, maxX, minZ, maxZ });
+    }
+    const inPond = (p, x, z) => {
+        if (x < p.minX || x > p.maxX || z < p.minZ || z > p.maxZ) return false;
+        let inside = false;
+        for (let a = 0, b = p.v.length - 1; a < p.v.length; b = a++) {
+            const q = p.v[a], r = p.v[b];
+            if ((q.z > z) !== (r.z > z) && x < (r.x - q.x) * (z - q.z) / (r.z - q.z) + q.x) inside = !inside;
+        }
+        return inside;
+    };
+
+    const step = EARTH_SPAN / EARTH_SEGMENTS;
+    const probe = step * 0.5;
     for (let i = 0; i < pos.count; i++) {
         // Plane is rotated -90° about X: local (x, y) → world (x, -y)
-        pos.setZ(i, terrainHeightAt(pos.getX(i), -pos.getY(i)));
+        const x = pos.getX(i), z = -pos.getY(i);
+        let low = terrainHeightAt(x, z);
+        for (const [dx, dz] of EARTH_PROBES)
+            low = Math.min(low, terrainHeightAt(x + dx * probe, z + dz * probe));
+        // A full cell, not a half: the chord from a clamped vertex to an
+        // unclamped one on the cliff top above still crosses the sheet.
+        for (const p of ponds) {
+            let hit = false;
+            for (const r of [1, 1.6]) {
+                for (const [dx, dz] of [[0, 0], ...EARTH_PROBES])
+                    if (inPond(p, x + dx * step * r, z + dz * step * r)) { hit = true; break; }
+                if (hit) break;
+            }
+            if (hit) low = Math.min(low, p.y - EARTH_DROP);
+        }
+        pos.setZ(i, low);
     }
     pos.needsUpdate = true;
     earthMesh.geometry.computeVertexNormals();

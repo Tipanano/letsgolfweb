@@ -183,7 +183,7 @@ export function drawHole(holeLayout) {
     // displaced surface meshes all read it during rendering. Bunker bowls and
     // water depressions derive automatically from the layout polygons.
     GreenContours.setTerrainFromLayout(holeLayout || null);
-    CoreVisuals.updateEarthTerrain();
+    CoreVisuals.updateEarthTerrain(holeLayout || null);
 
     switchToHoleView(holeLayout);
 
