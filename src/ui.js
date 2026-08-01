@@ -2077,3 +2077,57 @@ if (shotInstructionsModal) {
         }
     });
 }
+
+// --- Penalty-area drop ---------------------------------------------------
+// A ball in the water used to leave you standing in the water: the next shot
+// was played from wherever it sank. This is the smallest thing that fixes
+// that — the two choices that cover nearly every real situation, offered as a
+// modal because the player must make the call before they can swing again.
+
+/**
+ * @param info {{dropPoint, dropSurface, walkedBackM, canReplay, replayDistanceM}}
+ * @param onChoice ('drop' | 'replay') => void
+ */
+export function showWaterDropModal(info, onChoice) {
+    document.getElementById('water-drop-modal')?.remove();
+
+    const surfaceLabel = (s) => ({
+        FAIRWAY: 'fairway', GREEN: 'green', BUNKER: 'a bunker', TEE: 'the tee',
+        LIGHT_ROUGH: 'light rough', MEDIUM_ROUGH: 'rough', THICK_ROUGH: 'thick rough',
+        NATIVE_AREA: 'the native area',
+    }[s] || 'the rough');
+
+    const modal = document.createElement('div');
+    modal.id = 'water-drop-modal';
+    const canDrop = !!info?.dropPoint;
+    modal.innerHTML = `
+        <div class="wd-card">
+            <div class="wd-title">💧 In the water</div>
+            <div class="wd-sub">One penalty stroke either way.</div>
+            ${canDrop ? `
+            <button type="button" class="wd-btn wd-primary" data-choice="drop">
+                <span class="wd-btn-main">Drop at the crossing</span>
+                <span class="wd-btn-sub">Beside where it went in — ${surfaceLabel(info.dropSurface)}${
+                    info.replayDistanceM != null ? `, ${Math.round(info.replayDistanceM)} m ahead of the last shot` : ''}</span>
+            </button>` : `
+            <div class="wd-note">It never crossed dry ground, so there is no
+            margin to drop at — the shot has to be replayed.</div>`}
+            ${info?.canReplay ? `
+            <button type="button" class="wd-btn${canDrop ? '' : ' wd-primary'}" data-choice="replay">
+                <span class="wd-btn-main">Replay the shot</span>
+                <span class="wd-btn-sub">From the same spot and lie as last time</span>
+            </button>` : ''}
+        </div>`;
+    document.body.appendChild(modal);
+
+    modal.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-choice]');
+        if (!btn) return;
+        modal.remove();
+        onChoice(btn.dataset.choice);
+    });
+}
+
+export function hideWaterDropModal() {
+    document.getElementById('water-drop-modal')?.remove();
+}

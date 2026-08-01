@@ -1588,3 +1588,59 @@ body:not(.debug-mode) #fs-debug-buttons {
 #power-pref-pop .ppp-row input[type="range"] { flex: 1; }
 #power-pref-pop #power-pref-label { min-width: 3em; text-align: right; font-weight: 600; }
 #power-pref-pop .ppp-hint { margin-top: 8px; opacity: 0.75; font-size: 0.85em; line-height: 1.35; }
+
+/* --- Penalty-area drop --------------------------------------------------- */
+/* Blocking, because the player cannot swing again until they have chosen.
+   Sits above the fullscreen game view and the rhythm HUD. */
+#water-drop-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 10600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.55);
+    padding: 16px;
+    /* Home-indicator and notch safety on phones */
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+}
+#water-drop-modal .wd-card {
+    width: min(360px, 92vw);
+    padding: 18px 16px 14px;
+    border-radius: 16px;
+    background: rgba(20, 30, 34, 0.97);
+    color: #fff;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.55);
+}
+#water-drop-modal .wd-title { font-size: 1.15em; font-weight: 700; }
+#water-drop-modal .wd-sub { margin-top: 4px; opacity: 0.7; font-size: 0.85em; }
+#water-drop-modal .wd-note {
+    margin-top: 12px; padding: 10px 12px; border-radius: 10px;
+    background: rgba(255, 255, 255, 0.06); font-size: 0.85em;
+    opacity: 0.85; line-height: 1.4;
+}
+#water-drop-modal .wd-btn {
+    display: block;
+    width: 100%;
+    margin-top: 12px;
+    padding: 12px 14px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.07);
+    color: #fff;
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
+    /* Fingers, not mice */
+    min-height: 56px;
+}
+#water-drop-modal .wd-btn.wd-primary {
+    background: #2e7d43;
+    border-color: #3c9c58;
+}
+#water-drop-modal .wd-btn:active { filter: brightness(1.15); }
+#water-drop-modal .wd-btn-main { display: block; font-weight: 600; }
+#water-drop-modal .wd-btn-sub {
+    display: block; margin-top: 3px; opacity: 0.78;
+    font-size: 0.82em; line-height: 1.3;
+}

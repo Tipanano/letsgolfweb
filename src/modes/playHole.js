@@ -11,6 +11,7 @@ import {
 } from './practiceGreen.js'; // Short-game practice area
 import { hasContour } from '../greenContours.js'; // For the slope-arrows hint
 import { getSurfaceTypeAtPoint } from '../utils/gameUtils.js';
+import { findHazardCrossing } from '../waterDrop.js';
 import { recordCompletedRound, getProfile } from '../career/careerStore.js';
 
 // The name shown on the in-game scoreboard: the career profile name once the
@@ -33,6 +34,9 @@ let currentBallPosition = null;
 let currentLie = 'TEE'; // Default lie
 let formerBallPosition = null; // Previous ball position before last shot (for OOB handling)
 let formerLie = null; // Previous lie before last shot (for OOB handling)
+// Set when a shot finishes in a penalty area: the margin crossing, somewhere
+// dry beside it, and where the shot was played from. Cleared once taken.
+let pendingWaterDrop = null;
 let holeJustCompleted = false; // Renamed from isHoledOut: true if hole was just finished, awaiting 'n'
 let currentModeActive = false;
 let currentHoleIndex = 0; // For now, always 0, representing the first/current hole
@@ -429,6 +433,23 @@ export function handleShotResult(shotData) {
     formerBallPosition = currentBallPosition ? { ...currentBallPosition } : null;
     formerLie = currentLie;
 
+    // A ball that finished in a penalty area needs the point where it last
+    // crossed the margin, and that has to be worked out NOW while the
+    // trajectory is in hand — by the time the player is offered a drop the
+    // shot data is gone.
+    pendingWaterDrop = null;
+    if (shotData.surfaceName === 'WATER' && currentHoleLayout) {
+        const found = findHazardCrossing(shotData.trajectory,
+            (x, z) => getSurfaceTypeAtPoint({ x, z }, currentHoleLayout));
+        pendingWaterDrop = {
+            // null dropPoint = the ball never crossed a margin on dry land
+            // (a tee shot that started over water). Replay is the only option.
+            ...(found || { crossing: null, dropPoint: null, dropSurface: null }),
+            fromPosition: formerBallPosition ? { ...formerBallPosition } : null,
+            fromLie: formerLie,
+        };
+    }
+
     shotsTaken++;
     score++; // Increment total round score for each shot taken
     console.log(`PlayHole: Handling shot ${shotsTaken} (Total round: ${score}) result:`, shotData);
@@ -701,6 +722,68 @@ export function getFormerBallPosition() {
 
 export function getFormerLie() {
     return formerLie;
+}
+
+/**
+ * The drop offer for a ball in a penalty area, or null. `dropPoint` is null
+ * when the ball never crossed a margin over dry ground, which leaves replaying
+ * the shot as the only option.
+ */
+export function getPendingWaterDrop() {
+    if (!pendingWaterDrop) return null;
+    const d = pendingWaterDrop;
+    return {
+        dropPoint: d.dropPoint ? { ...d.dropPoint } : null,
+        dropSurface: d.dropSurface,
+        walkedBackM: d.walkedBackM ?? null,
+        canReplay: !!d.fromPosition,
+        // How much ground the drop gives up against replaying — the number
+        // that actually decides it when the crossing is short of the tee shot.
+        replayDistanceM: (d.dropPoint && d.fromPosition)
+            ? +Math.hypot(d.dropPoint.x - d.fromPosition.x, d.dropPoint.z - d.fromPosition.z).toFixed(1)
+            : null,
+    };
+}
+
+/**
+ * Drops beside where the ball last crossed the hazard margin, one penalty
+ * stroke. Returns false when there is no legal drop point.
+ */
+export function takeWaterDropAtCrossing() {
+    if (!currentModeActive || !pendingWaterDrop?.dropPoint) return false;
+    const p = pendingWaterDrop.dropPoint;
+    const surface = getSurfaceTypeAtPoint({ x: p.x, z: p.z }, currentHoleLayout) || 'LIGHT_ROUGH';
+    currentBallPosition = { x: p.x, y: visuals.queryTerrainHeight(p.x, p.z) + BALL_RADIUS, z: p.z };
+    currentLie = surface;
+    shotsTaken++;   // penalty stroke
+    score++;
+    pendingWaterDrop = null;
+    console.log(`PlayHole: water drop taken at margin. Lie: ${currentLie}`, currentBallPosition);
+    persistAfterDrop();
+    return true;
+}
+
+/** Replays from where the shot was played, one penalty stroke (Rule 17.1d(1)). */
+export function replayFromPreviousLie() {
+    if (!currentModeActive || !pendingWaterDrop?.fromPosition) return false;
+    pendingWaterDrop = null;
+    moveToFormerPosition();   // restores the spot AND adds the penalty stroke
+    return true;
+}
+
+function persistAfterDrop() {
+    if (practiceMode) return;
+    savePlayHoleState({
+        currentHoleIndex: currentHoleIndex,
+        ballPosition: currentBallPosition,
+        strokesThisHole: shotsTaken,
+        totalStrokesRound: score,
+        currentLie: currentLie,
+        formerPosition: formerBallPosition,
+        formerLie: formerLie,
+        holeLayoutData: currentHoleLayout,
+        holeJustCompletedState: holeJustCompleted,
+    });
 }
 
 // Move ball back to former position (for OOB handling)

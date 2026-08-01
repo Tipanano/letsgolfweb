@@ -14,7 +14,8 @@ import {
 } from './animations.js';
 import {
     updateStatus, resetUIForNewShot, updateDebugTimingInfo, clearClubSelection, setSelectedClubButton, // Import UI functions (resetUIForNewShot is already imported)
-    getBallPositionIndex as getBallPositionIndexUI, getBallPositionLevels as getBallPositionLevelsUI
+    getBallPositionIndex as getBallPositionIndexUI, getBallPositionLevels as getBallPositionLevelsUI,
+    showWaterDropModal
 } from '../ui.js';
 import { estimateRhythmChipCarry, CHIP_PROFILES } from '../chipPhysics.js';
 import { gameAlert } from '../ui/gameAlert.js';
@@ -32,6 +33,9 @@ import {
     prepareForTeeShotAfterHoleOut,
     returnToTee,
     moveToFormerPosition,
+    getPendingWaterDrop,
+    takeWaterDropAtCrossing,
+    replayFromPreviousLie,
     isPracticeMode,
     isRoundActive,
     hasNextRoundHole,
@@ -607,11 +611,23 @@ export function resetSwing() {
             return;
         }
 
-        // TODO: Handle hazards - offer drop option (not implemented yet)
-        if (currentLie === 'WATER' || currentLie === 'BUNKER') {
-            // TODO: Implement drop option UI
-            // For now, continue from current position
-            console.log('resetSwing: Hazard detected (' + currentLie + ') - TODO: Implement drop option');
+        // A ball in a penalty area cannot simply be played from where it
+        // stopped — until now it was, which is how you ended up swinging from
+        // the bottom of a lake. A bunker is NOT this case: sand is a hazard
+        // you play out of, and it is a real lie now that surfaces report it.
+        if (currentLie === 'WATER') {
+            const drop = getPendingWaterDrop();
+            if (drop && (drop.dropPoint || drop.canReplay)) {
+                console.log('resetSwing: ball in a penalty area, offering a drop', drop);
+                showWaterDropModal(drop, (choice) => {
+                    const done = choice === 'drop' ? takeWaterDropAtCrossing() : replayFromPreviousLie();
+                    if (!done) console.warn('resetSwing: drop choice could not be applied:', choice);
+                    resetVisuals(getPlayHoleBallPosition(), getPlayHoleLie());
+                    _prepareNextShotAtCurrentPosition();
+                });
+                return;   // the modal drives the rest
+            }
+            console.warn('resetSwing: in water with no drop offer — playing it as it lies');
         }
 
         // Case 3: Normal shot - continue from current position
