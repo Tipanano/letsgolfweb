@@ -6,7 +6,7 @@ import { createNoise2D } from 'https://esm.sh/simplex-noise';
 import earcut from 'https://cdn.skypack.dev/earcut@2.2.4';
 import { heightAt as contourHeightAt, gradientAt as contourGradientAt, hasContour, isNearContour, isNearFineFeature, bankLevelAt, getWaterSheets, WATER_SURFACE_Y } from '../greenContours.js';
 import { getSurfaceMaterial } from './textures.js';
-import { greenEdgeDistance, FRINGE_WIDTH_M } from '../fringe.js';
+import { fringeAt } from '../fringe.js';
 
 // Baked hillshade for contoured ground: the scene's high ambient light washes
 // out real shading, so slope readability is painted into vertex colors —
@@ -325,9 +325,17 @@ function bunkerRimShade(surfaceName, x, z) {
 const FRINGE_LIGHTEN = 0.14;   // Peak lift right at the green's edge
 let fringeLayout = null;
 
-/** Registers the hole's greens so the surrounding collar can be shaded. */
-export function setFringeGreens(greens) {
-    fringeLayout = Array.isArray(greens) && greens.length ? { greens } : null;
+/**
+ * Registers the hole so its greens' collars can be shaded.
+ *
+ * The WHOLE layout, not just the greens: the collar's width depends on the
+ * approach bearing, which is read from the rough corridor's centreline. Handing
+ * this a greens-only object would not merely draw a uniform band — the
+ * approach cache is keyed on the green's vertex array and shared with the
+ * surface lookup, so whichever ran first would decide the width for both.
+ */
+export function setFringeLayout(holeLayout) {
+    fringeLayout = holeLayout?.greens?.length || holeLayout?.green ? holeLayout : null;
 }
 
 /** Brightness multiplier for grass in a green's collar (1 = untouched). */
@@ -335,9 +343,11 @@ function fringeShade(surfaceName, x, z) {
     // The green paints its own edge, and sand and water have no collar.
     if (!fringeLayout || surfaceName === 'Green' || surfaceName === 'Bunker' ||
         surfaceName === 'Water') return 1;
-    const d = greenEdgeDistance(x, z, fringeLayout, FRINGE_WIDTH_M);
-    if (d === Infinity) return 1;
-    const t = d / FRINGE_WIDTH_M;   // 0 at the green's edge, 1 at the outer limit
+    const f = fringeAt(x, z, fringeLayout);
+    if (!f) return 1;
+    // Normalised by the LOCAL width, so the apron and the collar each fade out
+    // at their own edge instead of the apron ending in a hard step.
+    const t = f.dist / f.width;     // 0 at the green's edge, 1 at the outer limit
     return 1 + FRINGE_LIGHTEN * (1 - t) * (1 - t);
 }
 

@@ -7,7 +7,7 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
 import { TextureLoader } from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
 import { SURFACES } from '../surfaces.js';
-import { renderRoughAreas, renderFairways, renderGreen, renderBunkers, setMowPattern, setBunkerRims, setFringeGreens } from './holeRenderer.js';
+import { renderRoughAreas, renderFairways, renderGreen, renderBunkers, setMowPattern, setBunkerRims, setFringeLayout } from './holeRenderer.js';
 import { disposeSceneObject } from './textures.js';
 import { buildGrass } from './grass.js';
 import { setTerrainFromLayout } from '../greenContours.js';
@@ -135,7 +135,7 @@ export function initRangeVisuals(scene) {
 
     setMowPattern(7); // Fixed mow direction — the range is always the same place
     setBunkerRims(layout.bunkers);
-    setFringeGreens(layout.greens);
+    setFringeLayout(layout);
 
     renderRoughAreas(layout, scene, textureLoader, rangeObjects);
     renderBunkers(layout, scene, textureLoader, rangeObjects);

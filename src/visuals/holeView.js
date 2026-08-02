@@ -14,7 +14,7 @@ import {
     renderTeeBox,
     setMowPattern,
     setBunkerRims,
-    setFringeGreens
+    setFringeLayout
 } from './holeRenderer.js';
 import { disposeSceneObject } from './textures.js';
 import { queryTerrainHeight } from '../visuals.js'; // For getting terrain height at flag position
@@ -75,7 +75,7 @@ export function drawHoleLayout(holeLayout) {
     // a lightened one.
     setMowPattern(holeLayout.number ?? holeLayout.par ?? 0);
     setBunkerRims(holeLayout.bunkers);
-    setFringeGreens(holeLayout.greens);
+    setFringeLayout(holeLayout);
 
     // Render all surfaces using the new height-aware renderer
     renderBackground(holeLayout, scene, textureLoader, currentHoleObjects);

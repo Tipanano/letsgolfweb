@@ -60,10 +60,15 @@ export const SURFACES = {
       launchAngleChange: 0,
       velocityReduction: 0.01
     },
-    // A tight lie, but with a little more cushion under the ball than a green.
+    // Just tighter than fairway, not most of the way to a green. A collar is
+    // cut around 10 mm against a fairway's 12 mm — the friction above is set
+    // FASTER than fairway for exactly that reason, and the strike factors have
+    // to follow the same logic or the surface argues with itself. The first
+    // pass here used 0.75/0.85, which was green-like and unjustified: there is
+    // grass under the ball on a collar, and plenty of it.
     strikeFactors: {
-      fatForgiveness: 0.75,
-      thinForgiveness: 0.85
+      fatForgiveness: 0.92,
+      thinForgiveness: 0.95
     },
     // The fringe has no mesh of its own — it is a distance test around the
     // green, and the ball rests on whatever polygon is actually drawn there.

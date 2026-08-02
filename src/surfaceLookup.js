@@ -109,8 +109,9 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
 
     // 5. Fringe — the collar around a green.
     //
-    // It has no polygon; it is the ground within FRINGE_WIDTH_M of a green's
-    // edge. Placing the test HERE is the entire design: bunkers and water have
+    // It has no polygon; it is the ground within the local collar width of a
+    // green's edge — 4 m into the approach, 1.5 m around the sides and back.
+    // Placing the test HERE is the entire design: bunkers and water have
     // already had their say, so a greenside bunker cut into the collar stays a
     // bunker and there is no fringe behind it. It beats fairway because an
     // approach fairway running to the green is interrupted by the collar, not

@@ -1,9 +1,13 @@
 // A green has a collar, and the collar yields to everything sharper than it.
 //
-// The fringe has no polygon — it is the ground within FRINGE_WIDTH_M of a
-// green's edge, resolved in getSurfaceTypeAtPoint AFTER bunkers and water and
-// BEFORE fairway. That order is the entire design, so it is what this test
-// pins down. A greenside bunker cut into the collar must stay a bunker; a
+// The fringe has no polygon — it is the ground within the local collar width
+// of a green's edge, resolved in getSurfaceTypeAtPoint AFTER bunkers and water
+// and BEFORE fairway. That order is the entire design, so it is what this test
+// pins down. The width is directional: a broad apron on the side you play in
+// from, a tight collar around the sides and back, with the bearing read from
+// the rough corridor's centreline so a dogleg's last bend is followed. It
+// differs from the naive tee-to-flag line by more than 15° on 137 of 562
+// greens, which is why it is worth recovering rather than assuming. A greenside bunker cut into the collar must stay a bunker; a
 // pond lapping the green edge must stay water. Measured across the library, a
 // hazard sits inside the collar along 4.1% of total green perimeter, so this
 // is not a hypothetical case — it is Augusta's 15th and half of Oakmont.
@@ -18,7 +22,7 @@
 import { readFileSync, readdirSync } from 'fs';
 import { getSurfaceTypeAtPoint } from '../src/surfaceLookup.js';
 import { processHoleLayout } from '../src/holeLoader.js';
-import { FRINGE_WIDTH_M, greenEdgeDistance } from '../src/fringe.js';
+import { FRINGE_WIDTH_M, FRINGE_APRON_M, FRINGE_COLLAR_M, fringeAt, fringeWidthAt } from '../src/fringe.js';
 import { SURFACES } from '../src/surfaces.js';
 
 const fail = (msg) => { console.error('FAIL:', msg); process.exit(1); };
@@ -69,7 +73,12 @@ for (const { where, L } of holes) {
             const mid = { x: (p.x + q.x) / 2, z: (p.z + q.z) / 2 };
             if (inPoly(mid.x + nx * 0.5, mid.z + nz * 0.5, gv)) { nx = -nx; nz = -nz; }
 
-            const probe = { x: mid.x + nx * (FRINGE_WIDTH_M * 0.5), z: mid.z + nz * (FRINGE_WIDTH_M * 0.5) };
+            // Step out by half the LOCAL width: the collar is 1.5 m behind
+            // the green and 4 m into the approach, so a fixed offset would
+            // either fall outside the narrow side or barely leave the apron's
+            // inner edge.
+            const w = fringeWidthAt(mid.x + nx * 0.1, mid.z + nz * 0.1, gv, L);
+            const probe = { x: mid.x + nx * (w * 0.5), z: mid.z + nz * (w * 0.5) };
             if (inPoly(probe.x, probe.z, gv)) continue;   // concave notch — skip
             const s = getSurfaceTypeAtPoint(probe, L);
 
@@ -105,7 +114,7 @@ for (const { where, L } of holes) {
             const c = gv.reduce((a, w) => ({ x: a.x + w.x / gv.length, z: a.z + w.z / gv.length }), { x: 0, z: 0 });
             const ox = p.x - c.x, oz = p.z - c.z, len = Math.hypot(ox, oz) || 1;
             const probe = { x: p.x + (ox / len) * (FRINGE_WIDTH_M * 3), z: p.z + (oz / len) * (FRINGE_WIDTH_M * 3) };
-            if (greenEdgeDistance(probe.x, probe.z, L) !== Infinity) continue; // concavity — genuinely near another edge
+            if (fringeAt(probe.x, probe.z, L)) continue; // concavity — genuinely near another edge
             wideProbes++;
             if (getSurfaceTypeAtPoint(probe, L) === 'FRINGE') wideFringe++;
         }
@@ -133,7 +142,47 @@ if (greenLost > 0)
 if (wideFringe > 0)
     failures.push(`${wideFringe} points beyond ${FRINGE_WIDTH_M * 3} m from a green were reported as FRINGE`);
 
-// 4. Cost. Compared against the same lookups on a layout with the greens
+// 4. The apron faces the approach.
+//
+// Widths are read by sweeping angles around each green rather than by asking
+// for the bearing directly, so this tests the collar the player actually
+// walks on. Two things can go wrong and both are caught here: the bearing not
+// being derived at all (every direction comes back FRINGE_WIDTH_M, so widest
+// equals narrowest), and the bearing pointing the wrong way — which would put
+// the apron behind the green, exactly backwards.
+const SWEEP = 36;
+let shaped = 0, towardTee = 0, greensSwept = 0;
+for (const { L } of holes) {
+    const tee = L.tee?.center;
+    for (const g of (L.greens || [])) {
+        const gv = V(g);
+        if (!gv || gv.length < 3 || !tee) continue;
+        const c = gv.reduce((a, w) => ({ x: a.x + w.x / gv.length, z: a.z + w.z / gv.length }), { x: 0, z: 0 });
+        let wide = -1, narrow = Infinity, wideAng = 0;
+        for (let k = 0; k < SWEEP; k++) {
+            const a = (k / SWEEP) * Math.PI * 2;
+            const w = fringeWidthAt(c.x + Math.cos(a) * 10, c.z + Math.sin(a) * 10, gv, L);
+            if (w > wide) { wide = w; wideAng = a; }
+            if (w < narrow) narrow = w;
+        }
+        greensSwept++;
+        if (wide - narrow < 0.5) continue;   // uniform — no bearing was derived
+        shaped++;
+        // Widest direction vs the direction back to the tee. A dogleg can put
+        // these well apart, which is the entire point of reading the corridor
+        // rather than the tee line, so this only has to hold in the main.
+        const tx = tee.x - c.x, tz = tee.z - c.z, tl = Math.hypot(tx, tz) || 1;
+        if (Math.cos(wideAng) * (tx / tl) + Math.sin(wideAng) * (tz / tl) > 0) towardTee++;
+    }
+}
+console.log(`  approach shaping: ${shaped}/${greensSwept} greens have a directional collar, ` +
+    `${shaped ? (100 * towardTee / shaped).toFixed(0) : 0}% of those widen toward the tee side`);
+if (shaped < greensSwept * 0.8)
+    failures.push(`only ${shaped} of ${greensSwept} greens got a directional collar — the approach bearing is not being derived`);
+if (shaped && towardTee < shaped * 0.75)
+    failures.push(`only ${towardTee} of ${shaped} aprons face the tee side — the approach bearing looks inverted`);
+
+// 5. Cost. Compared against the same lookups on a layout with the greens
 //    removed, so the ratio measures the fringe check and nothing else, and
 //    holds on any machine.
 const bench = holes.slice(0, 60);
