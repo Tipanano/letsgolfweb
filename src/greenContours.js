@@ -502,18 +502,25 @@ function makeFairwayPadFeature(fairwayPolys, centreline, baseFeatures, greenPoly
         return h;
     };
 
-    // Nearest point on the hole's centreline, and how far off it we are.
+    // Centreline heights are fixed for the hole, so sample the DEM along it
+    // ONCE. evalAt is called for every terrain vertex and every physics query;
+    // evaluating the base field twice per call made Pebble's 6th take 50 s to
+    // build where it takes 29 s with no pad at all.
+    const lineH = centreline.map(p => baseAt(p.x, p.z));
+
+    // Nearest point on the hole's centreline, how far off it we are, and the
+    // centreline's own height there.
     const nearestOnLine = (x, z) => {
-        let best = null, bestD = Infinity;
+        let bestD = Infinity, bestH = 0;
         for (let i = 0; i < centreline.length - 1; i++) {
             const a = centreline[i], b = centreline[i + 1];
             const ex = b.x - a.x, ez = b.z - a.z, L = ex * ex + ez * ez;
             const t = L ? Math.max(0, Math.min(1, ((x - a.x) * ex + (z - a.z) * ez) / L)) : 0;
             const px = a.x + ex * t, pz = a.z + ez * t;
             const d = Math.hypot(x - px, z - pz);
-            if (d < bestD) { bestD = d; best = { x: px, z: pz }; }
+            if (d < bestD) { bestD = d; bestH = lineH[i] + (lineH[i + 1] - lineH[i]) * t; }
         }
-        return { p: best, d: bestD };
+        return { d: bestD, h: bestH };
     };
 
     // How much correction the cap implies at a point: the amount by which the
@@ -524,10 +531,9 @@ function makeFairwayPadFeature(fairwayPolys, centreline, baseFeatures, greenPoly
     // and approaches the limit asymptotically, so the corrected cross-section
     // has no corner in it.
     const correctionAt = (x, z) => {
-        const { p, d } = nearestOnLine(x, z);
-        if (!p) return 0;
+        const { d, h } = nearestOnLine(x, z);
         const allowed = MAX_FAIRWAY_CROSS_SLOPE * Math.max(d, 0.5);
-        const dev = baseAt(x, z) - baseAt(p.x, p.z);
+        const dev = baseAt(x, z) - h;
         const capped = allowed * Math.tanh(dev / allowed);
         return capped - dev;
     };
@@ -575,6 +581,14 @@ function makeFairwayPadFeature(fairwayPolys, centreline, baseFeatures, greenPoly
 
     return {
         bbox: { minX: minX - shed, maxX: maxX + shed, minZ: minZ - shed, maxZ: maxZ + shed },
+        // This field has no sharp part anywhere. The cap saturates through
+        // tanh and sheds through smootherstep across tens of metres, so it is
+        // as low-frequency as the DEM grid and renders cleanly at the coarse
+        // budget. Answering the proximity question with the bounding box, as a
+        // feature does by default, is what put Pebble's 6th at 3.6 MILLION
+        // vertices and 144 seconds to load, against 1.1 M and 29 s without
+        // the pad — the same trap the sea polygons fell into.
+        fineNear() { return false; },
         evalAt(x, z) {
             const t = edgeDist(x, z);
             if (t >= shed) return 0;

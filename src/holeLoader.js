@@ -146,8 +146,16 @@ export function processHoleLayout(sourceLayout) {
             // heavy rough, fescue and trees there and save the white stakes
             // for the property line, which is still what you get beyond the
             // background polygon itself.
-            if (layout.background.surface === 'OUT_OF_BOUNDS')
+            if (layout.background.surface === 'OUT_OF_BOUNDS') {
                 layout.background.surface = outerRoughFor(layout.courseName);
+                // The LIE out here is now rough rather than a penalty, but the
+                // ground is still scenery: the earth plane and its scrub are
+                // what the player sees, and drawing the background box on top
+                // of them puts a flat slab across the whole hole — and one
+                // more huge polygon through adaptive subdivision on every
+                // load. Keep it logical only.
+                layout.background.sceneryOnly = true;
+            }
             layout.background.surface = SURFACES[layout.background.surface];
             layout.background.type = 'polygon';
         }

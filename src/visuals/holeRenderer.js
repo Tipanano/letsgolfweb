@@ -464,6 +464,9 @@ export function renderBackground(holeLayout, scene, textureLoader, objectsArray)
     // white stakes mark the boundary (see oobStakes.js). The logical OOB
     // region (surface detection, penalties) is unaffected.
     if (holeLayout.background.surface?.name === 'Out of Bounds') return;
+    // Same reasoning for a background that is only a LIE: the land beyond the
+    // course is the earth plane, not a polygon laid over it.
+    if (holeLayout.background.sceneryOnly) return;
 
     renderPolygonWithHeights(bgData, scene, textureLoader, objectsArray, {
         name: 'Background',

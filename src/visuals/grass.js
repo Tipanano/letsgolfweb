@@ -138,7 +138,8 @@ export function buildGrass(holeLayout, scene, objectsArray) {
 
     const jobs = Object.entries(GRASS_STYLES)
         .map(([layoutKey, style]) => ({ layoutKey, style, polys: holeLayout[layoutKey] }));
-    if (holeLayout.background?.vertices && holeLayout.background.surface?.name === 'Out of Bounds') {
+    if (holeLayout.background?.vertices &&
+        (holeLayout.background.surface?.name === 'Out of Bounds' || holeLayout.background.sceneryOnly)) {
         jobs.push({ layoutKey: 'background', style: OOB_SCRUB_STYLE, polys: [holeLayout.background] });
     }
 
