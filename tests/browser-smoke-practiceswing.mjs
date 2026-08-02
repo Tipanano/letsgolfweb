@@ -7,7 +7,8 @@
 // before the flight simulation.
 //
 // So the assertions are about what must NOT happen: the ball does not move,
-// the shot count does not rise, and the feedback still appears. Any one of
+// the shot count does not rise, no NEXT step appears, and the feedback still
+// shows up. Any one of
 // those failing turns a practice aid into a way to lose strokes. The last
 // section is the one that matters most for trusting the toggle: turning it off
 // again has to give back a real shot.
@@ -120,8 +121,11 @@ async function swing(settleMs = 400) {
         actions.triggerFullSwingCalc();
         // A real shot animates for seconds; a rehearsal settles at once. Poll
         // rather than sleep a fixed time, so neither case is guessed at.
+        // A real shot animates for seconds and ends in 'result'; a rehearsal
+        // returns to 'ready' at once and raises its card. Wait for either.
         const deadline = Date.now() + settle;
-        while (Date.now() < deadline && state.getGameState() !== 'result')
+        while (Date.now() < deadline && state.getGameState() !== 'result' &&
+               !document.getElementById('practice-swing-card')?.classList.contains('visible'))
             await new Promise(r => setTimeout(r, 100));
 
         return {
@@ -200,10 +204,23 @@ const moved = Math.hypot(rehearsal.after.ball.x - rehearsal.before.ball.x,
 if (moved > 0.05) fail(`a practice swing moved the ball ${moved.toFixed(2)} m — it must stay put`);
 if (rehearsal.after.shots !== rehearsal.before.shots)
     fail(`a practice swing counted a stroke (${rehearsal.before.shots} -> ${rehearsal.after.shots})`);
-if (rehearsal.state !== 'result')
-    fail(`a practice swing left the game in "${rehearsal.state}" — it must settle so (n) works`);
+// Back at address, NOT at a result screen. A rehearsal is not a shot, so
+// there is nothing to advance past — parking in 'result' put a NEXT button
+// under a swing that never happened, and made rehearsing twice cost a tap in
+// between. It is also what kept touch in its address phase, since both the
+// bottom pill and the address-mode exit key off 'result'.
+if (rehearsal.state !== 'ready')
+    fail(`a practice swing left the game in "${rehearsal.state}" — it must return to address, ready to swing again`);
 if (rehearsal.trace.toggleDuringSwing)
     fail('the practice toggle stayed on screen once the backswing had started');
+
+// A second rehearsal must be possible with no tap in between — that is the
+// whole reason the toggle stays on.
+const again = await swing();
+console.log('again     :', JSON.stringify({ state: again.state, shots: again.after.shots }));
+if (again.trace.afterStart !== 'backswing')
+    fail(`a second practice swing could not start (state ${again.trace.afterStart}) — a NEXT step is still in the way`);
+if (again.after.shots !== again.before.shots) fail('the second practice swing counted a stroke');
 
 // --- 2. The feedback is the whole output, so it has to be there ------------
 const status = await page.evaluate(() => document.getElementById('status-text-display')?.textContent || '');
@@ -261,7 +278,9 @@ const chip = await page.evaluate(async () => {
     const spin = (ms) => { const t0 = performance.now(); while (performance.now() - t0 < ms) { /* wait */ } };
     for (let i = 0; i < 4; i++) { actions.recordChipRhythmTap(); spin(300); }
     actions.strikeRhythmChip();
-    for (let i = 0; i < 30 && state.getGameState() !== 'result'; i++)
+    // A rehearsal ends back at 'ready', so wait for the card instead of a
+    // state that will never arrive.
+    for (let i = 0; i < 30 && !document.getElementById('practice-swing-card')?.classList.contains('visible'); i++)
         await new Promise(r => setTimeout(r, 100));
     return { before,
              after: { shots: ph.getDisplayShotNumber(),

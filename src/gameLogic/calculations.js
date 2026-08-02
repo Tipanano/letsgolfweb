@@ -7,13 +7,14 @@ import {
     getBackswingStartTime, // <-- Added missing import
     getShotDirectionAngle, // <-- Gets RELATIVE angle
     getCurrentTargetLineAngle, // <-- Gets ABSOLUTE target line angle
+    resetSwingVariablesOnly,
     // getCurrentHoleLayout is NOT in state.js
 } from './state.js'; // Removed PUTT_DISTANCE_FACTOR, IDEAL_BACKSWING_DURATION_MS is fine as is.
 import { getCurrentHoleLayout } from '../modes/playHole.js'; // <-- Import from correct module
 import { getHoleConfig as getCTFHoleConfig } from '../visuals/targetView.js'; // Import CTF hole config getter
 import { ctfConfigToHoleLayout } from '../holeConfigGenerator.js'; // Import CTF config converter
 import { stopFullDownswingAnimation, stopChipDownswingAnimation /* Putt stopped in actions */ } from './animations.js';
-import { updateStatus, getBallPositionIndex, getBallPositionLevels, displayIdealJPressWindowOnBackswing, displayDownswingFeedbackWindows } from '../ui.js'; // Added displayDownswingFeedbackWindows
+import { updateStatus, getBallPositionIndex, getBallPositionLevels, displayIdealJPressWindowOnBackswing, displayDownswingFeedbackWindows, resetUIForNewShot } from '../ui.js'; // Added displayDownswingFeedbackWindows
 import { calculateImpactPhysics } from '../swingPhysics.js';
 import { calculateChipImpact, calculateRhythmChipImpact, CHIP_PROFILES } from '../chipPhysics.js';
 import { calculatePuttImpact, calculateRhythmPuttImpact } from '../puttPhysics.js';
@@ -25,7 +26,7 @@ import { getSurfaceProperties } from '../surfaces.js'; // Import surface propert
 import { clamp, getSurfaceTypeAtPoint } from '../utils/gameUtils.js'; // Import getSurfaceTypeAtPoint
 import { getCurrentGameMode } from '../main.js'; // Import mode checker
 import { isPracticeMode } from '../modes/playHole.js';
-import { setSwingReport } from '../ui/rhythmPuttHud.js';
+import { setSwingReport, showAddressHint } from '../ui/rhythmPuttHud.js';
 import { isPracticeSwingArmed, practiceSwingSummary, practiceSwingDetail } from '../practiceSwing.js';
 import { showPracticeSwingCard } from '../ui/practiceSwingCard.js';
 
@@ -35,20 +36,33 @@ import { showPracticeSwingCard } from '../ui/practiceSwingCard.js';
  * left is to show it and hand control back without touching the ball, the
  * card, or the camera.
  *
- * The detail modal opens EVERY time. A rehearsal produces no ball flight, so
+ * The detail card opens EVERY time. A rehearsal produces no ball flight, so
  * the numbers are the whole of its output; leaving them in a status line and
  * a HUD hint (which the player may have muted) meant a practice swing could
  * look like nothing happened at all.
+ *
+ * It returns straight to ADDRESS rather than to 'result'. A rehearsal is not
+ * a shot: there is nothing to advance past, and parking in 'result' put a
+ * NEXT button under a swing that never happened — so rehearsing twice in a
+ * row, which is the entire point of a toggle that stays on, cost a tap in
+ * between. Going back to ready also keeps touch in its address phase, since
+ * both the bottom pill and the address-mode exit key off 'result'.
  */
 function finishPracticeSwing(impact, club, report, opts = {}) {
     setSwingReport(report);
-    updateStatus(practiceSwingSummary());
-    setGameState('result');
     try {
         showPracticeSwingCard(practiceSwingDetail(impact, club, {
             backswingMs: getBackswingDuration(), ...opts,
         }), opts.shotType === 'full' ? 'Practice swing' : `Practice ${(opts.label || opts.shotType).toLowerCase()}`);
     } catch (e) { console.error('practice swing report failed', e); }
+
+    // Timing bars and swing variables back to their starting state, so the
+    // next backswing can begin immediately. The ball, the lie, the aim and
+    // the camera were never touched, so nothing else needs restoring.
+    resetSwingVariablesOnly();   // also sets gameState back to 'ready'
+    resetUIForNewShot();         // ...which ends by setting the status to Ready
+    updateStatus(practiceSwingSummary());
+    showAddressHint(getCurrentShotType(), { hasClub: !!getSelectedClub() });
 }
 
 /**
