@@ -17,6 +17,8 @@
 // the rough. That asymmetry is the half of this feature that changes how a
 // hole plays rather than how it looks.
 
+import { outsideBox, edgeDistance } from './polygonEdge.js';
+
 /** Collar width on the approach side — the apron you can run a ball into. */
 export const FRINGE_APRON_M = 4.0;
 /** Collar width around the sides and back. */
@@ -34,43 +36,15 @@ const APRON_FALLOFF = 2;
 // the corridor outline does not swing it.
 const APPROACH_LOOKBACK_M = 40;
 
-// Bounding boxes are what make this cheap. getSurfaceTypeAtPoint is called per
-// physics step AND per grass-tuft placement attempt — tens of thousands of
-// times per hole — and almost every one of those points is nowhere near a
-// green. Keyed on the vertex array so a re-rendered layout reuses the box.
-const boxes = new WeakMap();
-// Centre, and the direction the approach comes from. Same cache discipline:
-// recovering a dogleg centreline per lookup would be absurd.
+// Centre, and the direction the approach comes from. Cached per green: the
+// surface lookup runs per physics step and per grass-tuft placement attempt,
+// and recovering a dogleg centreline on each one would be absurd.
 const approaches = new WeakMap();
-
-function boxOf(verts) {
-    let box = boxes.get(verts);
-    if (box) return box;
-    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-    for (const v of verts) {
-        if (v.x < minX) minX = v.x;
-        if (v.x > maxX) maxX = v.x;
-        if (v.z < minZ) minZ = v.z;
-        if (v.z > maxZ) maxZ = v.z;
-    }
-    box = { minX, maxX, minZ, maxZ };
-    boxes.set(verts, box);
-    return box;
-}
 
 function centroidOf(verts) {
     let x = 0, z = 0;
     for (const v of verts) { x += v.x; z += v.z; }
     return { x: x / verts.length, z: z / verts.length };
-}
-
-function distSqToSegment(px, pz, ax, az, bx, bz) {
-    const dx = bx - ax, dz = bz - az;
-    const lenSq = dx * dx + dz * dz;
-    let t = lenSq > 0 ? ((px - ax) * dx + (pz - az) * dz) / lenSq : 0;
-    t = t < 0 ? 0 : (t > 1 ? 1 : t);
-    const cx = ax + dx * t - px, cz = az + dz * t - pz;
-    return cx * cx + cz * cz;
 }
 
 /**
@@ -189,15 +163,8 @@ export function fringeWidthAt(x, z, verts, holeLayout) {
 export function fringeAt(x, z, holeLayout) {
     let best = null;
     for (const verts of greenPolygons(holeLayout)) {
-        const b = boxOf(verts);
-        if (x < b.minX - FRINGE_WIDTH_M || x > b.maxX + FRINGE_WIDTH_M ||
-            z < b.minZ - FRINGE_WIDTH_M || z > b.maxZ + FRINGE_WIDTH_M) continue;
-        let distSq = Infinity;
-        for (let i = 0, j = verts.length - 1; i < verts.length; j = i++) {
-            const d = distSqToSegment(x, z, verts[j].x, verts[j].z, verts[i].x, verts[i].z);
-            if (d < distSq) distSq = d;
-        }
-        const dist = Math.sqrt(distSq);
+        if (outsideBox(x, z, verts, FRINGE_WIDTH_M)) continue;
+        const dist = edgeDistance(x, z, verts);
         const width = fringeWidthAt(x, z, verts, holeLayout);
         // Ranked by how deep into the collar the point is, so two greens whose
         // collars overlap hand back the one it more properly belongs to.

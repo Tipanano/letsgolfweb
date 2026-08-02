@@ -46,6 +46,25 @@ const OOB_SCRUB_STYLE = {
 };
 
 const MAX_TUFTS_PER_TYPE = 14000;
+
+// The rough grades share ONE budget rather than getting 14k each.
+//
+// Until the corridor was graded by distance (roughBands.js) every hole's rough
+// was a single LIGHT_ROUGH polygon, so exactly one of these four styles ever
+// produced tufts and the per-type cap was in practice a total. Now all four
+// can be live on the same hole, and 289 of 486 holes already saturate the cap
+// on their own, so keeping it per-type would have quadrupled the tuft count
+// and the placement attempts behind it.
+//
+// One pass samples the corridor and buckets each accepted point by the grade
+// it resolves to — banding the SAMPLING, not the polygons. Relative density
+// is preserved by accepting a grade with probability density/MAX_ROUGH_DENSITY,
+// so thick rough still reads thicker than a first cut; only the totals are
+// held down.
+const ROUGH_KEYS = ['lightRough', 'mediumRough', 'thickRough', 'nativeAreas'];
+const MAX_ROUGH_DENSITY = 3.0;   // NATIVE_AREA, the densest of the four
+const ROUGH_TUFT_BUDGET = 16000;
+const ROUGH_ATTEMPT_BUDGET = 60000;
 const BLADES_PER_TUFT = 5;
 
 // --- Wind ---------------------------------------------------------------
@@ -136,20 +155,68 @@ export function buildGrass(holeLayout, scene, objectsArray) {
     const tuftGeom = createTuftGeometry();
     const dummy = new THREE.Object3D();
 
-    const jobs = Object.entries(GRASS_STYLES)
-        .map(([layoutKey, style]) => ({ layoutKey, style, polys: holeLayout[layoutKey] }));
+    // --- The graded corridor, sampled once and bucketed by grade ---
+    const styleBySurface = new Map();
+    for (const key of ROUGH_KEYS) {
+        const st = GRASS_STYLES[key];
+        if (st) styleBySurface.set(st.surfaceKey, { layoutKey: key, style: st });
+    }
+    const roughPolys = [];
+    for (const key of ROUGH_KEYS)
+        for (const p of (holeLayout[key] || [])) if (p?.vertices?.length >= 3) roughPolys.push(p);
+
+    const buckets = new Map();   // surfaceKey -> placements[]
+    let placed = 0;
+    if (roughPolys.length) {
+        const boxes = roughPolys.map(p => ({ p, ...polygonAreaAndBBox(p.vertices) }))
+            .filter(b => b.area >= 0.5 && (b.maxX - b.minX) * (b.maxZ - b.minZ) > 0);
+        const totalArea = boxes.reduce((s, b) => s + b.area, 0);
+        for (const b of boxes) {
+            if (placed >= ROUGH_TUFT_BUDGET) break;
+            // Attempts split across polygons by area, so a hole with several
+            // corridor pieces spends the same total as one with a single piece.
+            const share = totalArea > 0 ? b.area / totalArea : 1;
+            const attempts = Math.ceil(ROUGH_ATTEMPT_BUDGET * share);
+            for (let i = 0; i < attempts && placed < ROUGH_TUFT_BUDGET; i++) {
+                const x = b.minX + Math.random() * (b.maxX - b.minX);
+                const z = b.minZ + Math.random() * (b.maxZ - b.minZ);
+                const surface = getSurfaceTypeAtPoint({ x, z }, holeLayout);
+                const entry = styleBySurface.get(surface);
+                if (!entry) continue;                    // green, bunker, fairway, water
+                const st = entry.style;
+                // Relative density between grades, one pass.
+                if (Math.random() * MAX_ROUGH_DENSITY >= st.density) continue;
+                let heightBoost = 1;
+                if (st.patchNoise) {
+                    const n = noise2D(x * st.patchNoise.scale, z * st.patchNoise.scale);
+                    if (n < st.patchNoise.threshold) continue;
+                    heightBoost = 0.7 + 0.6 * Math.min(1, (n - st.patchNoise.threshold));
+                }
+                let list = buckets.get(surface);
+                if (!list) buckets.set(surface, list = []);
+                list.push({ x, z, heightBoost });
+                placed++;
+            }
+        }
+    }
+
+    const jobs = [];
+    for (const [surface, list] of buckets) {
+        const entry = styleBySurface.get(surface);
+        jobs.push({ layoutKey: entry.layoutKey, style: entry.style, placements: list });
+    }
     if (holeLayout.background?.vertices &&
         (holeLayout.background.surface?.name === 'Out of Bounds' || holeLayout.background.sceneryOnly)) {
         jobs.push({ layoutKey: 'background', style: OOB_SCRUB_STYLE, polys: [holeLayout.background] });
     }
 
-    for (const { layoutKey, style, polys } of jobs) {
-        if (!Array.isArray(polys) || polys.length === 0) continue;
-
-        const layerHeight = SURFACES[style.surfaceKey]?.height ?? 0;
-        const palette = style.colors.map(c => new THREE.Color(c));
-
-        // Collect accepted tuft placements across all polygons of this type
+    /**
+     * Rejection-samples one style's own polygons. Only the OOB scrub uses this
+     * now — it has a single polygon, a single style and a budget of its own.
+     * The corridor grades are sampled together above, because they share the
+     * same ground and would otherwise each pay for a full pass over it.
+     */
+    const sampleOwnPolys = (style, polys) => {
         const placements = [];
         for (const poly of polys) {
             if (!poly?.vertices || poly.vertices.length < 3) continue;
@@ -183,6 +250,16 @@ export function buildGrass(holeLayout, scene, objectsArray) {
             }
             if (placements.length >= MAX_TUFTS_PER_TYPE) break;
         }
+        return placements;
+    };
+
+    for (const job of jobs) {
+        const { layoutKey, style, polys } = job;
+        const layerHeight = SURFACES[style.surfaceKey]?.height ?? 0;
+        const palette = style.colors.map(c => new THREE.Color(c));
+
+        const placements = job.placements
+            || (Array.isArray(polys) && polys.length ? sampleOwnPolys(style, polys) : []);
 
         if (placements.length === 0) continue;
 

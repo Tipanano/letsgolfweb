@@ -7,6 +7,7 @@
 
 import { isPointInPolygon } from './pointInPolygon.js';
 import { isFringeAt } from './fringe.js';
+import { roughGradeAt } from './roughBands.js';
 
 /**
  * Determines the surface type at a given 2D point based on the hole layout.
@@ -167,12 +168,16 @@ export function getSurfaceTypeAtPoint(pointMeters, holeLayout) {
         }
     }
 
-    // Check light rough
+    // The corridor. Every imported hole carries ONE rough polygon and it is
+    // always tagged light, so the grade comes from how far out of the mown
+    // ground the point sits rather than from which polygon holds it — see
+    // roughBands.js. Hand-authored layouts that draw their own medium and
+    // thick polygons are answered above and never reach this.
     if (holeLayout.lightRough && Array.isArray(holeLayout.lightRough)) {
         for (let i = 0; i < holeLayout.lightRough.length; i++) {
             const rough = holeLayout.lightRough[i];
             if (rough.vertices && isPointInPolygon(point, rough.vertices)) {
-                return 'LIGHT_ROUGH';
+                return roughGradeAt(point.x, point.z, holeLayout);
             }
         }
     }
