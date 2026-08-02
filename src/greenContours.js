@@ -502,25 +502,65 @@ function makeFairwayPadFeature(fairwayPolys, centreline, baseFeatures, greenPoly
         return h;
     };
 
-    // Centreline heights are fixed for the hole, so sample the DEM along it
-    // ONCE. evalAt is called for every terrain vertex and every physics query;
-    // evaluating the base field twice per call made Pebble's 6th take 50 s to
-    // build where it takes 29 s with no pad at all.
-    const lineH = centreline.map(p => baseAt(p.x, p.z));
+    // Cumulative arc length along the coarse centreline.
+    const cum = [0];
+    for (let i = 1; i < centreline.length; i++)
+        cum.push(cum[i - 1] + Math.hypot(centreline[i].x - centreline[i - 1].x,
+                                         centreline[i].z - centreline[i - 1].z));
+    const total = cum[cum.length - 1];
+
+    // The height profile is sampled DENSELY along the line, even though the
+    // line itself is coarse.
+    //
+    // corridorPolygon emits one vertex pair per corridor bend, so the recovered
+    // centreline is a handful of points: a median of 158 m between them across
+    // the library, and 92 holes have exactly TWO — a single straight segment
+    // from tee to green. Taking the height reference from a linear
+    // interpolation between those points made the reference a straight RAMP,
+    // so every real undulation in the fairway read as deviation from it and got
+    // corrected away. On Augusta's 17th that lifted the fairway 3.75 m above
+    // the ground beside it: a causeway with a step down to the rough on both
+    // sides, which is not what capping a CROSS slope is supposed to do.
+    //
+    // Sampling every PROFILE_STEP_M of arc fixes the reference without making
+    // the nearest-point search any more expensive — that still walks the few
+    // coarse segments, and the height is an O(1) lookup by arc length. evalAt
+    // runs for every terrain vertex and every physics query, and this pad has
+    // form for being the slow thing: evaluating the base field twice per call
+    // once made Pebble's 6th take 50 s to build against 29 s with no pad.
+    const PROFILE_STEP_M = 8;
+    const steps = Math.max(1, Math.ceil(total / PROFILE_STEP_M));
+    const profile = new Array(steps + 1);
+    for (let k = 0; k <= steps; k++) {
+        const s = (total * k) / steps;
+        // Walk to the coarse segment holding this arc length.
+        let i = 0;
+        while (i < cum.length - 2 && cum[i + 1] < s) i++;
+        const seg = cum[i + 1] - cum[i];
+        const t = seg > 0 ? (s - cum[i]) / seg : 0;
+        const a = centreline[i], b = centreline[i + 1];
+        profile[k] = baseAt(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t);
+    }
+    const heightAtArc = (s) => {
+        if (!(total > 0)) return profile[0];
+        const u = Math.max(0, Math.min(steps, (s / total) * steps));
+        const k = Math.floor(u), f = u - k;
+        return k >= steps ? profile[steps] : profile[k] + (profile[k + 1] - profile[k]) * f;
+    };
 
     // Nearest point on the hole's centreline, how far off it we are, and the
     // centreline's own height there.
     const nearestOnLine = (x, z) => {
-        let bestD = Infinity, bestH = 0;
+        let bestD = Infinity, bestS = 0;
         for (let i = 0; i < centreline.length - 1; i++) {
             const a = centreline[i], b = centreline[i + 1];
             const ex = b.x - a.x, ez = b.z - a.z, L = ex * ex + ez * ez;
             const t = L ? Math.max(0, Math.min(1, ((x - a.x) * ex + (z - a.z) * ez) / L)) : 0;
             const px = a.x + ex * t, pz = a.z + ez * t;
             const d = Math.hypot(x - px, z - pz);
-            if (d < bestD) { bestD = d; bestH = lineH[i] + (lineH[i + 1] - lineH[i]) * t; }
+            if (d < bestD) { bestD = d; bestS = cum[i] + (cum[i + 1] - cum[i]) * t; }
         }
-        return { d: bestD, h: bestH };
+        return { d: bestD, h: heightAtArc(bestS) };
     };
 
     // How much correction the cap implies at a point: the amount by which the
@@ -605,7 +645,7 @@ function makeFairwayPadFeature(fairwayPolys, centreline, baseFeatures, greenPoly
  * hole-wide terrain features, plus automatic bunker bowls and water
  * depressions. Pass null to clear (flat).
  */
-export function setTerrainFromLayout(layout, { skipGreenPad = false } = {}) {
+export function setTerrainFromLayout(layout, { skipGreenPad = false, skipFairwayPad = false } = {}) {
     features = [];
     waterSheets = [];
     if (!layout) return;
@@ -637,7 +677,7 @@ export function setTerrainFromLayout(layout, { skipGreenPad = false } = {}) {
     // Keep the fairway's cross-slope playable (see makeFairwayPadFeature).
     // Sits before the green pad so the green's own grading wins where they
     // overlap around the front of the putting surface.
-    if (baseFeatures.length && (layout.fairways || []).length) {
+    if (!skipFairwayPad && baseFeatures.length && (layout.fairways || []).length) {
         const corridor = (layout.lightRough || [])[0];
         const line = corridorCentreline(corridor?.vertices || corridor?.controlPoints);
         const pad = makeFairwayPadFeature(
