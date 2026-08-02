@@ -5,10 +5,11 @@
 // rolls it, and the shot settles back to a playable state.
 //
 // Note on assertions: this sandbox throttles timers hard (a 420 ms interval
-// lands at ~1000 ms), so a test cannot dictate tempo and therefore cannot
-// dictate putt length. Roll distance is bounded loosely — enough to prove
-// the ball rolled and stayed on a putting scale. Green speed itself is
-// characterized in tests/browser-smoke-shotphysics.mjs (putt-roll row) and
+// lands at ~1000 ms), which used to mean a test could not dictate tempo and
+// therefore could not dictate putt length. It can — by busy-waiting instead
+// of sleeping, so the intervals the rhythm module measures are real. Roll
+// distance is now bounded tightly. Green speed itself is still characterized
+// in tests/browser-smoke-shotphysics.mjs (putt-roll row) and
 // tests/unit-conditions.mjs.
 // Run: node tests/browser-smoke-putt.mjs
 import { createRequire } from 'module';
@@ -116,8 +117,11 @@ await page.evaluate(async () => {
         document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
         document.dispatchEvent(new KeyboardEvent('keyup', { key: k, bubbles: true }));
     };
-    const wait = (ms) => new Promise(r => setTimeout(r, ms));
-    for (let i = 0; i < 4; i++) { key('w'); await wait(450); }
+    // Busy-wait, NOT setTimeout — see browser-smoke-chip.mjs. A throttled,
+    // uneven sleep is graded as a wobbly tempo, which is what made this
+    // suite's roll distance swing between 0.87 m and 2.69 m on identical code.
+    const wait = (ms) => { const t0 = performance.now(); while (performance.now() - t0 < ms) { /* hold */ } };
+    for (let i = 0; i < 4; i++) { key('w'); wait(450); }
     key('i');
 });
 await page.screenshot({ path: OUT + 'shot3-tapping.png' });
@@ -139,8 +143,13 @@ const final = await page.evaluate(async ([bx, bz]) => {
     };
 }, [before.x, before.z]);
 console.log('putt: ', JSON.stringify(final), '| settled in', settled);
-if (final.rolled < 0.3) fail(`putt never rolled (${final.rolled} m)`);
-if (final.rolled > 45) fail(`putt rolled off the scale (${final.rolled} m)`);
+// With even taps this is deterministic: 18.2 m, run to run inside 6 cm. A
+// 450 ms tempo ASKS for a long putt — that is the mechanism working, not a
+// claim about green speed, which unit-conditions and shotphysics own. The old
+// bounds were 0.3-45 m because throttled taps duffed the stroke to somewhere
+// between 0.87 m and 2.69 m and nothing tighter could have held.
+if (final.rolled < 10) fail(`putt was duffed (${final.rolled} m) — a 450 ms tempo asks for ~18 m`);
+if (final.rolled > 30) fail(`putt rolled off the scale (${final.rolled} m)`);
 if (final.restOffset < 0.04 || final.restOffset > 0.14)
     fail(`ball ended ${final.restOffset} m above the terrain — not resting on the surface`);
 

@@ -101,10 +101,17 @@ async function playChip({ withShapeTap }) {
             document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
             document.dispatchEvent(new KeyboardEvent('keyup', { key: k, bubbles: true }));
         };
-        const wait = (ms) => new Promise(r => setTimeout(r, ms));
-        for (let i = 0; i < 4; i++) { key('w'); await wait(420); }
-        key('i');                                   // strike on the beat
-        if (shape) { await wait(180); key('i'); }   // shape tap
+        // Busy-wait, NOT setTimeout. This sandbox throttles timers hard and
+        // UNEVENLY — a 420 ms sleep lands anywhere from 420 to 1000+ ms — and
+        // uneven taps are exactly what rhythm chipping grades as a wobbly
+        // tempo, so the strike came back a duff and the chip travelled 0.4 m.
+        // That was this suite's whole flake history: bimodal at ~0.4 m or
+        // ~1.0 m on identical code, failing about half the time. A spin loop
+        // gives the rhythm module the even intervals it is measuring.
+        const wait = (ms) => { const t0 = performance.now(); while (performance.now() - t0 < ms) { /* hold */ } };
+        for (let i = 0; i < 4; i++) { key('w'); wait(420); }
+        key('i');                             // strike on the beat
+        if (shape) { wait(180); key('i'); }   // shape tap
     }, withShapeTap);
     const settled = await settle(['result', 'ready']);
     if (!settled) fail(`chip never settled (${withShapeTap ? 'shaped' : 'stock'})`);
@@ -122,8 +129,11 @@ async function playChip({ withShapeTap }) {
 const stock = await playChip({ withShapeTap: false });
 console.log('stock chip: ', JSON.stringify(stock));
 await page.screenshot({ path: OUT + 'chip3-result.png' });
-if (stock.travelled < 0.5) fail(`stock chip never left the ground (${stock.travelled} m)`);
-if (stock.travelled > 60) fail(`stock chip flew like a full swing (${stock.travelled} m)`);
+// With even taps a 420 ms tempo carries ~31 m, run to run inside a metre.
+// The old bounds were 0.5-60 m because every chip here duffed to ~0.4 m, so
+// the suite was only ever asserting that a mishit moved the ball at all.
+if (stock.travelled < 12) fail(`stock chip was duffed (${stock.travelled} m) — expected ~31 m`);
+if (stock.travelled > 50) fail(`stock chip flew like a full swing (${stock.travelled} m)`);
 
 // 2) Shaped chip: a second 'i' after the strike adds curve
 await page.keyboard.press('n');
