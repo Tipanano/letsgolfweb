@@ -23,6 +23,9 @@ npm-debug.log*
 # Build output
 dist/
 build/
-# Browser-suite screenshots: regenerated on every run (several MB per run).
-# The handful already tracked predate this rule; gitignore leaves those alone.
+# Browser-suite screenshots: write-only diagnostics, regenerated on every run.
+# Nothing reads them back — every one is a bare page.screenshot() call — so
+# they only ever produced a binary diff after each run, and the seven that
+# were tracked drifted a whole HUD redesign out of date before anyone noticed.
+# They are still written locally for eyeballing after a run.
 tests/*.png
