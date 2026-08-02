@@ -1169,8 +1169,13 @@ export function updateVisualOverlayInfo(mode, { holeNum = 'N/A', par = 'N/A', di
         }
 
         // Update Top Left (Play Hole / CTF)
+        // The panel below already reads "HOLE 4 · PAR 4", so repeating a
+        // generic "Hole 4" here was the same number printed twice. A hole with
+        // a real name — Carnoustie's Home, Augusta's Golden Bell — is worth
+        // showing; "Hole 4" is not.
         if (overlayCourseLine) {
-            const label = [courseName, holeName].filter(Boolean).join(' — ');
+            const named = holeName && !/^\s*hole\s*\d+\s*$/i.test(holeName) ? holeName : '';
+            const label = [courseName, named].filter(Boolean).join(' — ');
             overlayCourseNameSpan.textContent = label;
             overlayCourseLine.style.display = label ? '' : 'none';
         }

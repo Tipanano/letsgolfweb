@@ -265,11 +265,25 @@ function injectStyles() {
             text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
         }
         body.touch-active #visual-info-overlay { padding: 8px; }
-        /* Vertical rhythm: bar/minis (0-52) → status line (58-78) → info (84+) */
-        body.touch-active .overlay-top { margin-top: 84px !important; padding: 0 58px; box-sizing: border-box; }
+        /* Vertical rhythm: bar/minis (0-52) → status line (58-78) → info (84+).
+           The head lays the status BELOW the panels on a desktop, where there
+           is room either side of it; on a phone the panels are nearly full
+           width, so the order flips and the status keeps the high ground it
+           had before. column-reverse rather than a second DOM node, so both
+           layouts stay one element each. */
+        body.touch-active.fullscreen-mode .overlay-head {
+            margin-top: calc(58px + env(safe-area-inset-top, 0px));
+            flex-direction: column-reverse;
+        }
+        /* Was 0 58px, to clear mini buttons that no longer flank this row —
+           at 430px wide it left the panels 138px and truncated the course
+           name to "Aarhus Go...". */
+        body.touch-active .overlay-top { margin-top: 6px !important; padding: 0; box-sizing: border-box; }
         body.touch-active #top-center-status {
-            top: calc(58px + env(safe-area-inset-top, 0px)) !important;
             max-width: 62vw; /* clears the mini buttons flanking it */
+            margin: 0;
+            font-size: 0.84rem;
+            padding: 5px 12px;
         }
         /* Club/shot/power/stance: horizontal chip row above the pill */
         body.touch-active #fullscreen-controls {
@@ -321,14 +335,10 @@ function injectStyles() {
         /* The panel IS the setup guidance when it's open — the rhythm hint
            would just sit on top of it */
         body.tc-panel-open:not(.tc-address) #rhythm-putt-hud { display: none !important; }
-        /* Player/score line: small strip above the chip row */
-        body.touch-active .overlay-bottom {
-            position: fixed;
-            left: 8px;
-            right: 8px;
-            bottom: calc(132px + env(safe-area-inset-bottom, 0px));
-        }
-        body.touch-active .overlay-bottom .overlay-text-item { font-size: 11px; }
+        /* The player/score strip that used to live down here has moved into
+           the hole panel: on a phone the bottom belongs to the controls, and
+           it was landing underneath the address hint. .overlay-bottom now
+           carries only the shot summary, which positions itself. */
         /* Rhythm hint: compact, and never over the shot. It docks under the
            status line — high ground that shows sky or terrain well past the
            target, never the near green a chip or putt is aimed at. It used
@@ -339,7 +349,12 @@ function injectStyles() {
             padding: 6px 12px;
             gap: 10px;
             font-size: 12px;
-            top: calc(196px + env(safe-area-inset-top, 0px));
+            /* Docks under the info panels. 196px cleared the old bare-text
+               readouts; the panels are taller than the text they replaced and
+               the right one runs to ~232px with a greens row, so the pill was
+               landing across "Lie". Measured against the tallest panel the
+               HUD can build, not guessed. */
+            top: calc(244px + env(safe-area-inset-top, 0px));
             bottom: auto;
         }
         /* Address: tighter still — this is live tempo feedback, read at a
@@ -367,6 +382,24 @@ function injectStyles() {
                 max-width: clamp(180px, calc(100vw - 2 * min(42vw, 240px) - 40px), 320px);
             }
         }
+
+        /* The practice-swing toggle belongs to the ADDRESS phase, which on
+           touch is a real place the player taps into. In Setup it would land
+           on the club/shot-type chip row (bottom: 84px), and Setup is where
+           you choose the shot, not where you rehearse it. Docked top-left
+           under the shot-info chip, which is the one strip the address phase
+           leaves free. */
+        body.touch-active #practice-swing-toggle {
+            /* Below the status line, which the address phase keeps. The left
+               info panel is hidden here, so this column is free. */
+            top: calc(96px + env(safe-area-inset-top, 0px));
+            left: 10px;
+            bottom: auto;
+            transform: none;
+            font-size: 0.76rem;
+            padding: 6px 11px;
+        }
+        body.touch-active:not(.tc-address) #practice-swing-toggle { display: none !important; }
 
         /* ============ Address phase: strip everything non-shot ============ */
         body.tc-address #fullscreen-controls,

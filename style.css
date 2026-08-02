@@ -287,19 +287,141 @@ h2 {
     /* font-size is now part of .overlay-text-item */
 }
 
-#top-center-status {
-    position: absolute;
-    top: 10px; /* Adjust as needed */
-    left: 50%;
-    transform: translateX(-50%);
-    text-align: center;
-    z-index: 6; /* Ensure it's above canvas but potentially below other popups */
-    /* .overlay-text-item class will be applied to the span inside this div via HTML */
+/* --- In-game HUD -------------------------------------------------------
+   The readouts used to be bare white text with a 1px shadow, sitting
+   directly on the sky. Against a pale horizon — which is most of what a tee
+   shot looks at — that is close to invisible, and a shadow cannot fix a
+   contrast problem it is only outlining. Each block now sits on its own
+   translucent panel, the same treatment the fullscreen controls already use,
+   so the text has a guaranteed background whatever is behind it. */
+
+.overlay-panel {
+    background: rgba(14, 22, 17, 0.62);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    border-radius: 12px;
+    padding: 8px 12px;
+    color: #f1f7f2;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    line-height: 1.32;
+    /* Never let a long course name or a wide readout push a panel off screen.
+       min-width:0 is the load-bearing half: without it a flex item refuses to
+       shrink below its content, and nowrap rows simply overflowed the
+       viewport — which is how "Stimp 10.5 · Medium" ran off the right edge. */
+    min-width: 0;
+    max-width: 44%;
+}
+.overlay-top-right { max-width: 56%; }
+.overlay-row, .overlay-headline { min-width: 0; }
+.overlay-v {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-/* Move top center status down in fullscreen to avoid top bar */
-body.fullscreen-mode #top-center-status {
-    top: 70px;
+/* Label and value, so the eye can find a number without reading a sentence.
+   "Wind: 9.5 m/s" was one run of identical text; the label is now quiet and
+   the value carries the weight. */
+.overlay-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    white-space: nowrap;
+}
+.overlay-k {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: 0.6;
+    font-weight: 600;
+}
+.overlay-v {
+    font-size: 0.98rem;
+    font-weight: 700;
+    /* Digits must not jitter as the distance counts down. */
+    font-variant-numeric: tabular-nums;
+}
+.overlay-strong {
+    font-size: 1.05rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+.overlay-headline {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    white-space: nowrap;
+}
+.overlay-course {
+    font-size: 0.74rem;
+    opacity: 0.72;
+    font-weight: 600;
+    margin-bottom: 2px;
+    /* A long club name truncates rather than wrapping the panel into a wall. */
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Distance to the flag is the one number read on every single shot. */
+.overlay-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    margin-bottom: 4px;
+}
+.overlay-hero-value {
+    font-size: 1.45rem;
+    font-weight: 800;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+#top-center-status {
+    align-self: center;
+    max-width: min(78%, 460px);
+    margin-top: 8px;
+    padding: 6px 14px;
+    text-align: center;
+    background: rgba(14, 22, 17, 0.62);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    border-radius: 999px;
+    color: #f1f7f2;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 0.92rem;
+    font-weight: 600;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+    z-index: 6;
+}
+
+/* The head owns the top row and the status beneath it, so the status can no
+   longer land on top of either corner panel on a narrow screen. */
+.overlay-head {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+}
+
+/* Clear the fullscreen top bar once, for the whole head. */
+body.fullscreen-mode .overlay-head {
+    margin-top: 56px;
+}
+
+@media (max-width: 520px) {
+    .overlay-panel { padding: 6px 9px; border-radius: 10px; }
+    /* Your own name is the one thing on screen you already know. */
+    .overlay-player { display: none; }
+    .overlay-k { font-size: 0.62rem; }
+    .overlay-v { font-size: 0.88rem; }
+    .overlay-hero-value { font-size: 1.2rem; }
+    #top-center-status { font-size: 0.82rem; padding: 5px 11px; }
 }
 
 /* --- Swing Arc Visualizer Overlay --- */
@@ -354,16 +476,13 @@ body.fullscreen-mode #swing-arc-overlay {
 .overlay-top, .overlay-bottom {
     display: flex;
     justify-content: space-between; /* Space out main left/right blocks */
+    align-items: flex-start;         /* Panels size to their own content */
+    gap: 8px;
     width: 100%;
 }
 
-/* Move overlay-top down in fullscreen to avoid top bar */
-body.fullscreen-mode .overlay-top {
-    margin-top: 60px;
-}
-
 /* Align text within the corner blocks */
-.overlay-top-left, .overlay-bottom-left {
+.overlay-top-left {
     text-align: left;
 }
 
@@ -371,11 +490,6 @@ body.fullscreen-mode .overlay-top {
     text-align: right;
     margin-left: auto; /* Keep on right side even when left is hidden */
 }
-
-/* Remove individual styling if .overlay-text-item is applied directly to child divs */
-/* .overlay-top-left div, .overlay-top-right div, .overlay-bottom-left div { */
-    /* margin-bottom: 2px; /* Now part of .overlay-text-item */
-/* } */
 
 /* --- Overlay Mode Visibility --- */
 /* Hide all mode-specific overlay sections by default */
@@ -394,9 +508,20 @@ body.mode-range #visual-info-overlay .mode-range {
 /* Adjust display for flex containers if needed */
 body.mode-play-hole #visual-info-overlay .overlay-top-left.mode-play-hole,
 body.mode-closest-to-flag #visual-info-overlay .overlay-top-left.mode-closest-to-flag,
-body.mode-range #visual-info-overlay .overlay-top-left.mode-range,
-body.mode-play-hole #visual-info-overlay .overlay-bottom-left.mode-play-hole {
+body.mode-range #visual-info-overlay .overlay-top-left.mode-range {
      display: block; /* These are divs containing text lines */
+}
+
+/* The distance block and the label/value rows are flex, so the generic mode
+   rule above must not flatten them back to blocks when they become visible. */
+body.mode-play-hole #visual-info-overlay .overlay-hero.mode-play-hole,
+body.mode-closest-to-flag #visual-info-overlay .overlay-hero.mode-closest-to-flag,
+body.mode-play-hole #visual-info-overlay .overlay-row.mode-play-hole {
+     display: flex;
+}
+/* ...but the phone still gets to drop the player's own name. */
+@media (max-width: 520px) {
+    body.mode-play-hole #visual-info-overlay .overlay-row.overlay-player { display: none; }
 }
 
 
@@ -884,12 +1009,18 @@ body.fullscreen-mode #instructions {
 #fullscreen-controls {
     display: flex; /* Always show the controls */
     position: fixed;
-    top: 220px; /* Position below the overlay-top */
+    top: 260px; /* Clear of the HUD head — see the media query below */
     right: 10px;
     z-index: 10000;
     gap: 10px;
     flex-direction: column;
     align-items: flex-end;
+}
+
+/* On a phone the HUD head is taller relative to the screen and the stack has
+   to start lower, or the CLUB button sits across the status line. */
+@media (max-width: 520px) {
+    #fullscreen-controls { top: 300px; gap: 7px; }
 }
 
 /* Control button showing current selection */
@@ -924,6 +1055,13 @@ body.fullscreen-mode #instructions {
 .fs-control-btn .value {
     display: block;
     font-size: 1em;
+}
+
+/* At 140px minimum these were claiming a third of a phone's width. Placed
+   AFTER the base rule on purpose: a media query adds no specificity, so an
+   override written above the rule it overrides simply loses. */
+@media (max-width: 520px) {
+    .fs-control-btn { min-width: 104px; padding: 6px 10px; font-size: 0.78em; }
 }
 
 /* Popup panels for each control */
@@ -1082,9 +1220,12 @@ body.fullscreen-mode #instructions {
     background: rgba(0, 0, 0, 0.3);
     backdrop-filter: blur(4px);
     z-index: 10000;
-    padding: 0 20px;
+    padding: 0 12px;
     align-items: center;
-    gap: 15px;
+    gap: 8px;
+    /* A phone is narrower than this bar's content. Without room to shrink the
+       last button simply hung off the right edge, half-drawn. */
+    overflow: hidden;
 }
 
 body.fullscreen-mode #fullscreen-top-bar {
@@ -1101,9 +1242,12 @@ body.fullscreen-mode #fullscreen-toggle-btn {
 
 /* Fullscreen bar button styles */
 .fullscreen-bar-btn {
-    padding: 10px 18px;
+    padding: 10px 14px;
     font-size: 0.95em;
     font-weight: 600;
+    white-space: nowrap;   /* "Switch Hole" was wrapping to two lines */
+    flex: 0 1 auto;
+    min-width: 0;
     cursor: pointer;
     border: none;
     border-radius: 6px;
@@ -1111,6 +1255,11 @@ body.fullscreen-mode #fullscreen-toggle-btn {
     transition: background-color 0.2s ease, transform 0.1s ease;
     background: rgba(255, 255, 255, 0.15);
     backdrop-filter: blur(8px);
+}
+
+@media (max-width: 520px) {
+    #fullscreen-top-bar { padding: 0 8px; gap: 6px; }
+    .fullscreen-bar-btn { padding: 9px 10px; font-size: 0.84em; }
 }
 
 .fullscreen-bar-btn:hover {

@@ -259,36 +259,44 @@
                 <!-- NEW Overlay for In-Game Info -->
                 <div id="visual-info-overlay">
                     <!-- Content will be dynamically shown/hidden based on mode -->
+                    <!-- The head groups the two corner panels and the status
+                         line beneath them. They used to be positioned
+                         independently, so on a phone the status wrapped across
+                         the middle of both. -->
+                    <div class="overlay-head">
                     <div class="overlay-top">
                         <!-- Play Hole / CTF Top Left -->
-                        <div class="overlay-top-left mode-play-hole mode-closest-to-flag">
-                            <div class="overlay-text-item" id="overlay-course-line" style="display:none;"><span id="overlay-course-name"></span></div>
-                            <div class="overlay-text-item">Hole: <span id="overlay-hole-num">N/A</span> Par: <span id="overlay-par">N/A</span></div>
-                            <div class="overlay-text-item">Shot: <span id="overlay-shot-num">N/A</span> <span id="overlay-for-score-text"></span></div>
+                        <div class="overlay-panel overlay-top-left mode-play-hole mode-closest-to-flag">
+                            <div class="overlay-course" id="overlay-course-line" style="display:none;"><span id="overlay-course-name"></span></div>
+                            <div class="overlay-headline"><span class="overlay-k">Hole</span><span class="overlay-strong" id="overlay-hole-num">N/A</span><span class="overlay-k">Par</span><span class="overlay-strong" id="overlay-par">N/A</span></div>
+                            <div class="overlay-row"><span class="overlay-k">Shot</span><span class="overlay-v"><span id="overlay-shot-num">N/A</span> <span id="overlay-for-score-text"></span></span></div>
+                            <div class="overlay-row mode-play-hole"><span class="overlay-k">Total</span><span class="overlay-v"><span id="overlay-total-score">N/A</span> (<span id="overlay-position">N/A</span>)</span></div>
+                            <div class="overlay-row mode-play-hole overlay-player"><span class="overlay-k">Player</span><span class="overlay-v" id="overlay-player-name">Player 1</span></div>
                         </div>
                         <!-- Range Top Left -->
-                        <div class="overlay-top-left mode-range">
-                             <div class="overlay-text-item">Last Shot: <span id="overlay-last-shot-dist">N/A</span> yd</div>
-                             <div class="overlay-text-item">Spin: <span id="overlay-back-spin">N/A</span> / <span id="overlay-side-spin">N/A</span> rpm</div>
+                        <div class="overlay-panel overlay-top-left mode-range">
+                             <div class="overlay-row"><span class="overlay-k">Last shot</span><span class="overlay-v"><span id="overlay-last-shot-dist">N/A</span> yd</span></div>
+                             <div class="overlay-row"><span class="overlay-k">Spin</span><span class="overlay-v"><span id="overlay-back-spin">N/A</span> / <span id="overlay-side-spin">N/A</span> rpm</span></div>
                         </div>
                         <!-- Common Top Right -->
-                        <div class="overlay-top-right">
-                            <div class="overlay-text-item mode-play-hole mode-closest-to-flag">To Flag: <span id="overlay-dist-flag">N/A</span></div>
-                            <div class="overlay-text-item">Wind: <span id="overlay-wind">N/A</span></div>
-                            <div class="overlay-text-item">Temp: <span id="overlay-temp">N/A</span></div>
-                            <div class="overlay-text-item">Lie: <span id="overlay-lie">N/A</span></div>
-                            <div class="overlay-text-item" id="overlay-conditions-item" style="display: none;">Greens: <span id="overlay-conditions"></span></div>
+                        <div class="overlay-panel overlay-top-right">
+                            <div class="overlay-hero mode-play-hole mode-closest-to-flag">
+                                <span class="overlay-k">To flag</span>
+                                <span class="overlay-hero-value" id="overlay-dist-flag">N/A</span>
+                            </div>
+                            <div class="overlay-row"><span class="overlay-k">Wind</span><span class="overlay-v" id="overlay-wind">N/A</span></div>
+                            <div class="overlay-row"><span class="overlay-k">Temp</span><span class="overlay-v" id="overlay-temp">N/A</span></div>
+                            <div class="overlay-row"><span class="overlay-k">Lie</span><span class="overlay-v" id="overlay-lie">N/A</span></div>
+                            <div class="overlay-row" id="overlay-conditions-item" style="display: none;"><span class="overlay-k">Greens</span><span class="overlay-v" id="overlay-conditions"></span></div>
                         </div>
                     </div>
-                    <!-- NEW Top Center Status -->
-                    <div id="top-center-status" class="overlay-text-item"><span id="status-text-display">Ready...</span></div>
+                    <!-- Status, centred beneath the panels rather than across them -->
+                    <div id="top-center-status"><span id="status-text-display">Ready...</span></div>
+                    </div>
 
                     <div class="overlay-bottom">
                          <!-- Play Hole Bottom Left -->
-                        <div class="overlay-bottom-left mode-play-hole">
-                            <div class="overlay-text-item">Player: <span id="overlay-player-name">Player 1</span></div>
-                            <div class="overlay-text-item">Total: <span id="overlay-total-score">N/A</span> (<span id="overlay-position">N/A</span>)</div>
-                        </div>
+
                         <!-- Range / CTF might not need bottom left, or could show something else -->
                          <!-- Shot Summary Widget - Progressive shot data display -->
                         <div id="shot-summary-widget" style="display: none;">
