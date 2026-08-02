@@ -4,6 +4,7 @@
 // tempo + steadiness readout, and stage hints. Owns its own DOM and styles.
 
 import { getActiveDrill } from '../career/greenCard.js';
+import { togglePracticeSwing, isPracticeSwingArmed, onPracticeSwingChange } from '../practiceSwing.js';
 
 let hudEl = null;
 let pulseEl = null;
@@ -17,6 +18,36 @@ function injectStyles() {
     stylesInjected = true;
     const style = document.createElement('style');
     style.textContent = `
+        /* The practice-swing toggle lives at address, beside the hint pill.
+           It is deliberately NOT part of the pill: the pill hides when the
+           player mutes hints, and the toggle has to stay reachable. */
+        #practice-swing-toggle {
+            position: absolute;
+            box-sizing: border-box;
+            bottom: 78px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: none;
+            padding: 7px 14px;
+            background: rgba(20, 30, 24, 0.82);
+            border: 1px solid rgba(125, 255, 160, 0.25);
+            border-radius: 999px;
+            color: #eaf6ec;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            font-size: 0.82rem;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            cursor: pointer;
+            z-index: 1002;
+            -webkit-tap-highlight-color: transparent;
+        }
+        #practice-swing-toggle.visible { display: block; }
+        #practice-swing-toggle.armed {
+            background: rgba(196, 132, 22, 0.9);
+            border-color: rgba(255, 205, 106, 0.95);
+            color: #fff8e8;
+        }
+
         #rhythm-putt-hud {
             position: absolute;
             /* border-box so max-width is the REAL footprint — the touch
@@ -136,6 +167,42 @@ function ensureCreated() {
     hintEl = hudEl.querySelector('#rhythm-putt-hint');
 }
 
+let practiceEl = null;
+
+function ensurePracticeToggle() {
+    if (practiceEl) return practiceEl;
+    injectStyles();
+    practiceEl = document.createElement('button');
+    practiceEl.id = 'practice-swing-toggle';
+    practiceEl.type = 'button';
+    practiceEl.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        togglePracticeSwing();
+    });
+    (document.getElementById('game-view') || document.body).appendChild(practiceEl);
+    const paint = (armed) => {
+        practiceEl.classList.toggle('armed', armed);
+        practiceEl.textContent = armed ? '● Practice swing — no ball' : '○ Practice swing';
+    };
+    paint(isPracticeSwingArmed());
+    onPracticeSwingChange(paint);
+    return practiceEl;
+}
+
+/**
+ * Shows or hides the at-address practice toggle.
+ *
+ * At address is the only place it makes sense: it is the moment the player is
+ * deciding what this swing is for, and it is where a rehearsal would be taken.
+ * It was in the fullscreen setup panel first, which meant arming it was three
+ * taps away from the swing it applied to.
+ */
+export function setPracticeToggleVisible(visible) {
+    if (!visible && !practiceEl) return;   // nothing built yet, nothing to hide
+    ensurePracticeToggle().classList.toggle('visible', !!visible);
+}
+
 function steadinessInfo(cv) {
     if (cv < 0.045) return { label: 'steady', cls: 'rhythm-steady-good' };
     if (cv < 0.10) return { label: 'okay', cls: 'rhythm-steady-ok' };
@@ -196,6 +263,13 @@ export function strikeName() {
 
 export function showAddressHint(type, { hasClub = true } = {}) {
     lastHint = { type, opts: { hasClub } };
+
+    // The toggle belongs to the address moment for a full swing or a chip:
+    // not while reviewing a result ('next'), not without a club to swing, and
+    // not for a putt — calculatePuttShot deliberately clears the swing report,
+    // so an armed toggle there would silently do nothing. Set before the muted
+    // early-returns below, which hide the pill but must not hide this.
+    setPracticeToggleVisible(hasClub && (type === 'full' || type === 'chip'));
 
     // Instructions are muted by default: skip the how-to text, but never
     // swallow the swing report ('next' after a practice shot) or the

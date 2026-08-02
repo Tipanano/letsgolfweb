@@ -7,10 +7,15 @@
 // before the flight simulation.
 //
 // So the assertions are about what must NOT happen: the ball does not move,
-// the shot count does not rise, and the swing report still appears. Any one of
+// the shot count does not rise, and the feedback still appears. Any one of
 // those failing turns a practice aid into a way to lose strokes. The last
 // section is the one that matters most for trusting the toggle: turning it off
 // again has to give back a real shot.
+//
+// The toggle lives AT ADDRESS, not in the setup panel, and the detail modal
+// opens after every rehearsal. Both are checked here because both are easy to
+// break silently: a toggle that never appears is unreachable, and a rehearsal
+// whose numbers never render looks like a swing that did nothing.
 //
 // Run: node tests/browser-smoke-practiceswing.mjs
 import { createRequire } from 'module';
@@ -94,6 +99,10 @@ async function swing(settleMs = 400) {
         const trace = { start: state.getGameState() };
         actions.startBackswing();
         trace.afterStart = state.getGameState();
+        // The choice is made once the club moves; the chip must not sit over
+        // the swing.
+        trace.toggleDuringSwing =
+            !!document.getElementById('practice-swing-toggle')?.classList.contains('visible');
         state.setBackswingStartTime(performance.now() - 700);
         actions.endBackswing();
         await new Promise(r => setTimeout(r, 60));
@@ -130,6 +139,58 @@ const setArmed = (on) => page.evaluate(async (v) => {
     return ps.isPracticeSwingArmed();
 }, on);
 
+// --- 0. The toggle is at address, and only at address ----------------------
+const toggleAt = async (label) => page.evaluate(() => {
+    const el = document.getElementById('practice-swing-toggle');
+    return { exists: !!el, visible: !!el?.classList.contains('visible'),
+             armed: !!el?.classList.contains('armed'), text: el?.textContent || '' };
+});
+await page.evaluate(async () => {
+    const hud = await import('./src/ui/rhythmPuttHud.js');
+    hud.showAddressHint('full', { hasClub: true });
+});
+const atAddress = await toggleAt();
+console.log('at address:', JSON.stringify(atAddress));
+if (!atAddress.exists) fail('there is no practice-swing toggle in the DOM');
+if (!atAddress.visible) fail('the practice-swing toggle is not shown at address');
+
+// Reviewing a result is not address, and a putt has no swing report to give.
+for (const [type, why] of [['next', 'while reviewing a result'], ['putt', 'for a putt']]) {
+    await page.evaluate(async (t) => {
+        const hud = await import('./src/ui/rhythmPuttHud.js');
+        hud.showAddressHint(t, { hasClub: true });
+    }, type);
+    const t = await toggleAt();
+    if (t.visible) fail(`the practice-swing toggle is still shown ${why}`);
+}
+// And it must survive the player muting the instruction hints, since the pill
+// it sits beside disappears entirely in that mode.
+const muted = await page.evaluate(async () => {
+    const hud = await import('./src/ui/rhythmPuttHud.js');
+    if (hud.swingHintsShown()) hud.toggleSwingHints();
+    hud.showAddressHint('full', { hasClub: true });
+    const el = document.getElementById('practice-swing-toggle');
+    const pill = document.getElementById('rhythm-putt-hud');
+    const out = { toggle: !!el?.classList.contains('visible'),
+                  pill: !!pill?.classList.contains('visible') };
+    if (!hud.swingHintsShown()) hud.toggleSwingHints();   // put it back
+    return out;
+});
+console.log('hints muted:', JSON.stringify(muted));
+if (!muted.toggle) fail('muting the hints also hid the practice-swing toggle');
+
+// Clicking it arms it — the control has to work, not just exist.
+await page.evaluate(async () => {
+    const hud = await import('./src/ui/rhythmPuttHud.js');
+    hud.showAddressHint('full', { hasClub: true });
+    document.getElementById('practice-swing-toggle').click();
+});
+const clicked = await toggleAt();
+console.log('after click:', JSON.stringify(clicked));
+if (!clicked.armed) fail('clicking the toggle did not arm it');
+if (!/no ball/i.test(clicked.text)) fail(`an armed toggle must say so — it reads "${clicked.text}"`);
+await page.evaluate(() => document.getElementById('practice-swing-toggle').click());
+
 // --- 1. Armed: the swing happens, the ball does not ------------------------
 if (await setArmed(true) !== true) fail('the practice swing toggle would not arm');
 const rehearsal = await swing();
@@ -141,6 +202,8 @@ if (rehearsal.after.shots !== rehearsal.before.shots)
     fail(`a practice swing counted a stroke (${rehearsal.before.shots} -> ${rehearsal.after.shots})`);
 if (rehearsal.state !== 'result')
     fail(`a practice swing left the game in "${rehearsal.state}" — it must settle so (n) works`);
+if (rehearsal.trace.toggleDuringSwing)
+    fail('the practice toggle stayed on screen once the backswing had started');
 
 // --- 2. The feedback is the whole output, so it has to be there ------------
 const status = await page.evaluate(() => document.getElementById('status-text-display')?.textContent || '');
@@ -149,6 +212,26 @@ if (!/practice swing/i.test(status))
     fail(`the status line does not mention the practice swing: "${status.slice(0, 90)}"`);
 if (!/mph clubhead/i.test(status))
     fail(`the practice swing reported no clubhead speed: "${status.slice(0, 90)}"`);
+
+// Every beat, every time — including the ones that were fine. A player who
+// cannot tell "hips good" from "hips not measured" learns nothing.
+const detail = await page.evaluate(() => {
+    const el = [...document.querySelectorAll('div')]
+        .find(d => /Practice swing/i.test(d.textContent) && d.querySelector('table'));
+    return el ? el.textContent.replace(/\s+/g, ' ') : null;
+});
+console.log('modal     :', detail ? JSON.stringify(detail.slice(0, 150)) : 'MISSING');
+if (!detail) fail('no practice-swing detail modal appeared');
+for (const beat of ['Hips', 'Rotation', 'Arms', 'Wrists'])
+    if (!detail.includes(beat)) fail(`the detail modal never mentions ${beat}: "${detail.slice(0, 200)}"`);
+if (!/Clubhead/i.test(detail)) fail('the detail modal shows no clubhead speed');
+if (!/Backswing/i.test(detail)) fail('the detail modal shows no backswing length');
+// Dismiss it before the next swing.
+await page.evaluate(() => {
+    const btn = [...document.querySelectorAll('button')].find(b => /^OK$/i.test(b.textContent.trim()));
+    if (btn) btn.click();
+});
+await sleep(300);
 
 // --- 3. Disarmed: a real shot must come back ------------------------------
 await page.evaluate(async () => (await import('./src/gameLogic/actions.js')).resetSwing());

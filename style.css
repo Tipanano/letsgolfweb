@@ -914,17 +914,6 @@ body.fullscreen-mode #instructions {
     transform: translateX(-3px);
 }
 
-/* Armed practice swing: the button has to be unmistakable, because a swing
-   that produces no ball flight reads as a bug if you have forgotten it is on. */
-.fs-control-btn.armed {
-    background: rgba(196, 132, 22, 0.75);
-    border-color: rgba(255, 205, 106, 0.95);
-}
-
-.fs-control-btn.armed:hover {
-    background: rgba(214, 146, 26, 0.85);
-}
-
 .fs-control-btn .label {
     display: block;
     font-size: 0.7em;

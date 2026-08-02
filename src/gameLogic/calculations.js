@@ -26,18 +26,28 @@ import { clamp, getSurfaceTypeAtPoint } from '../utils/gameUtils.js'; // Import 
 import { getCurrentGameMode } from '../main.js'; // Import mode checker
 import { isPracticeMode } from '../modes/playHole.js';
 import { setSwingReport } from '../ui/rhythmPuttHud.js';
-import { isPracticeSwingArmed, practiceSwingSummary } from '../practiceSwing.js';
+import { isPracticeSwingArmed, practiceSwingSummary, practiceSwingDetail } from '../practiceSwing.js';
+import { modal } from '../ui/modal.js';
 
 /**
  * Ends a rehearsal. The impact calculation has already run — that IS the
  * point, it is what produces the tempo and speed feedback — so all that is
  * left is to show it and hand control back without touching the ball, the
  * card, or the camera.
+ *
+ * The detail modal opens EVERY time. A rehearsal produces no ball flight, so
+ * the numbers are the whole of its output; leaving them in a status line and
+ * a HUD hint (which the player may have muted) meant a practice swing could
+ * look like nothing happened at all.
  */
 function finishPracticeSwing(impact, club, report) {
     setSwingReport(report);
     updateStatus(practiceSwingSummary(impact, club) + " — press (n)");
     setGameState('result');
+    try {
+        modal.alert(practiceSwingDetail(impact, club, getBackswingDuration()),
+                    'Practice swing', 'info');
+    } catch (e) { console.error('practice swing report failed', e); }
 }
 
 /**

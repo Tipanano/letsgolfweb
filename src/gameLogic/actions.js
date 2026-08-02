@@ -53,7 +53,7 @@ import * as multiplayerManager from '../multiplayerManager.js'; // Import multip
 import * as RhythmPutt from '../rhythmPutt.js';
 import { updatePuttPreview, hidePuttPreview } from '../visuals/puttPreview.js';
 import { getActiveDrill } from '../career/greenCard.js';
-import { updateRhythmHud, hideRhythmHud, flashBeat, showRhythmHud, showAddressHint, strikeName } from '../ui/rhythmPuttHud.js';
+import { updateRhythmHud, hideRhythmHud, flashBeat, showRhythmHud, showAddressHint, strikeName, setPracticeToggleVisible } from '../ui/rhythmPuttHud.js';
 import { ball } from '../visuals/core.js';
 import { getCurrentTargetLineAngle, getShotDirectionAngle } from './state.js';
 
@@ -98,6 +98,7 @@ export function startBackswing() {
     updateStatus(`${shotType.charAt(0).toUpperCase() + shotType.slice(1)} Backswing...`);
     resetUIForNewShot(); // Reset UI elements (preserving ball position)
     hideRhythmHud(); // Swing bars/arc take over from the address prompt
+    setPracticeToggleVisible(false); // The swing has started; the choice is made
 
     // Notify multiplayer manager that shot has started
     multiplayerManager.onShotStarted();
