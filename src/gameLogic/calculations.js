@@ -26,6 +26,19 @@ import { clamp, getSurfaceTypeAtPoint } from '../utils/gameUtils.js'; // Import 
 import { getCurrentGameMode } from '../main.js'; // Import mode checker
 import { isPracticeMode } from '../modes/playHole.js';
 import { setSwingReport } from '../ui/rhythmPuttHud.js';
+import { isPracticeSwingArmed, practiceSwingSummary } from '../practiceSwing.js';
+
+/**
+ * Ends a rehearsal. The impact calculation has already run — that IS the
+ * point, it is what produces the tempo and speed feedback — so all that is
+ * left is to show it and hand control back without touching the ball, the
+ * card, or the camera.
+ */
+function finishPracticeSwing(impact, club, report) {
+    setSwingReport(report);
+    updateStatus(practiceSwingSummary(impact, club) + " — press (n)");
+    setGameState('result');
+}
 
 /**
  * Human-readable swing feedback for practice contexts: what shape came
@@ -188,11 +201,20 @@ export function calculateFullSwingShot() {
     const impactResult = calculateImpactPhysics(timingInputs, selectedClub, swingSpeed, ballPositionFactor, currentSurface); // Pass currentSurface
 
     // Practice contexts (range, practice/drill holes) get a post-shot swing
-    // report explaining the outcome; it renders with the next-shot hint.
+    // report explaining the outcome; it renders with the next-shot hint. A
+    // rehearsal always gets one — with no ball to watch, the report is the
+    // entire output of the swing.
+    const rehearsal = isPracticeSwingArmed();
+    let swingReportText = null;
     try {
         const practice = getCurrentGameMode() === 'range' || isPracticeMode();
-        setSwingReport(practice ? buildSwingReport(impactResult) : null);
+        swingReportText = (practice || rehearsal) ? buildSwingReport(impactResult) : null;
+        setSwingReport(swingReportText);
     } catch (e) { /* feedback must never break the shot */ }
+
+    // A rehearsal stops here: everything below simulates flight, moves the
+    // ball and records a stroke.
+    if (rehearsal) return finishPracticeSwing(impactResult, selectedClub, swingReportText);
 
     // --- Use results from impactResult ---
     const ballSpeed = impactResult.ballSpeed;
@@ -488,11 +510,18 @@ export function calculateChipShot() {
         ? calculateRhythmChipImpact(rhythmStrike, selectedClub, ballPositionFactor, currentSurface, chipProfile)
         : calculateChipImpact(backswingDuration, rotationOffset, hitOffset, selectedClub, ballPositionFactor, currentSurface); // Legacy fallback
 
-    // Practice contexts get the same post-shot explanation full swings do
+    // Practice contexts get the same post-shot explanation full swings do; a
+    // rehearsal always does, since the report is all it produces.
+    const chipRehearsal = isPracticeSwingArmed();
+    let chipReportText = null;
     try {
         const practice = getCurrentGameMode() === 'range' || isPracticeMode();
-        setSwingReport(practice ? buildChipReport(impactResult, chipProfile.label) : null);
+        chipReportText = (practice || chipRehearsal)
+            ? buildChipReport(impactResult, chipProfile.label) : null;
+        setSwingReport(chipReportText);
     } catch (e) { /* feedback must never break the shot */ }
+
+    if (chipRehearsal) return finishPracticeSwing(impactResult, selectedClub, chipReportText);
 
     // --- Use results ---
     const ballSpeed = impactResult.ballSpeed;

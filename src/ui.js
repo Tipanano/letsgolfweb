@@ -9,6 +9,7 @@ import { modal } from './ui/modal.js';
 import * as playHoleModal from './playHoleModal.js';
 import { getProfile as getCareerProfile, updateProfile as updateCareerProfile } from './career/careerStore.js';
 import { DEBUG_MODE } from './config.js'; // Import debug mode setting
+import { togglePracticeSwing, onPracticeSwingChange, setPracticeSwingArmed } from './practiceSwing.js';
 
 /**
  * Shows today's course conditions in the env block ("Stimp 11 · Firm"), or
@@ -938,6 +939,22 @@ export function setPutterControlsVisibility(isPutter) {
     if (fsStanceBtn) {
         fsStanceBtn.style.display = isPutter ? 'none' : '';
     }
+
+    setPracticeSwingAvailable(!isPutter && currentShotType !== 'putt');
+}
+
+/**
+ * Shows or hides the practice-swing toggle, and disarms it when hidden.
+ *
+ * Putting is the one stroke it does not cover: there is no putt swing report
+ * to show (calculatePuttShot clears it — the feedback there is the rhythm
+ * HUD), so an armed toggle would silently do nothing. A hidden control that
+ * is still armed is worse than no control, hence the disarm.
+ */
+function setPracticeSwingAvailable(available) {
+    const btn = document.getElementById('fs-practice-btn');
+    if (btn) btn.style.display = available ? '' : 'none';
+    if (!available) setPracticeSwingArmed(false);
 }
 
 // Function to update control visibility based on shot type
@@ -949,6 +966,8 @@ export function updateControlsForShotType(shotType) {
     if (fsPowerBtn) {
         fsPowerBtn.style.display = isChipOrPutt ? 'none' : '';
     }
+
+    setPracticeSwingAvailable(shotType !== 'putt');
 }
 
 // --- Event Listener Setup ---
@@ -1657,6 +1676,21 @@ if (fsShotTypeBtn && fsShotTypePanel) {
 }
 if (fsPowerBtn && fsPowerPanel) {
     fsPowerBtn.addEventListener('click', () => toggleFSPanel(fsPowerPanel));
+}
+
+// Practice swing is a straight toggle, not a panel — it has one state and
+// wants to be one tap away when you are trying to find a tempo.
+const fsPracticeBtn = document.getElementById('fs-practice-btn');
+if (fsPracticeBtn) {
+    fsPracticeBtn.addEventListener('click', () => {
+        closeFSPanels();
+        togglePracticeSwing();
+    });
+    onPracticeSwingChange((armed) => {
+        fsPracticeBtn.classList.toggle('armed', armed);
+        const v = document.getElementById('fs-practice-value');
+        if (v) v.textContent = armed ? 'ON — no ball' : 'Off';
+    });
 }
 if (fsStanceBtn && fsStancePanel) {
     fsStanceBtn.addEventListener('click', () => toggleFSPanel(fsStancePanel));
