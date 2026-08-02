@@ -44,20 +44,12 @@ export function onPracticeSwingChange(fn) {
 }
 
 /**
- * The rehearsal's status line: what the swing would have delivered.
- *
- * Clubhead speed is the honest measure of "power" here — the swing report
- * already names efficiency and the per-beat timing, but with no ball flight to
- * watch there is nothing else showing how hard the swing actually was.
+ * The rehearsal's status line. Deliberately short: the card carries the
+ * numbers, and the long version overflowed the status pill and was clipped
+ * mid-sentence on a phone.
  */
-export function practiceSwingSummary(impact, club) {
-    if (!impact) return 'Practice swing';
-    const bits = [];
-    if (impact.actualCHS > 0) bits.push(`${Math.round(impact.actualCHS)} mph clubhead`);
-    if (impact.potentialCHS > 0 && impact.actualCHS > 0)
-        bits.push(`${Math.round((impact.actualCHS / impact.potentialCHS) * 100)}% of your potential`);
-    const name = club?.name ? ` · ${club.name}` : '';
-    return `Practice swing${name}${bits.length ? ' · ' + bits.join(' · ') : ''}`;
+export function practiceSwingSummary() {
+    return 'Practice swing — no stroke played';
 }
 
 // How far off a beat may be before it stops counting as pure. The one-line
@@ -65,64 +57,119 @@ export function practiceSwingSummary(impact, club) {
 // here nothing is omitted, so it only decides the wording and the colour.
 const PURE_MS = 25;
 
-function beatRow(name, dev) {
-    let verdict, colour;
-    if (typeof dev !== 'number' || !isFinite(dev) || Math.abs(dev) > 999) {
-        verdict = 'missed'; colour = '#c62828';
-    } else if (Math.abs(dev) < PURE_MS) {
-        verdict = `pure (${dev >= 0 ? '+' : ''}${Math.round(dev)} ms)`; colour = '#2e7d32';
-    } else {
-        verdict = `${dev > 0 ? 'late' : 'early'} ${Math.round(Math.abs(dev))} ms`;
-        colour = Math.abs(dev) < 60 ? '#ef6c00' : '#c62828';
-    }
-    return `<tr>
-        <td style="padding:4px 10px 4px 0;color:#37474f;">${name}</td>
-        <td style="padding:4px 0;text-align:right;font-weight:700;color:${colour};
-                   font-variant-numeric:tabular-nums;">${verdict}</td>
-    </tr>`;
+const GOOD = 'ps-good', OK = 'ps-ok', BAD = 'ps-bad';
+
+function row(name, verdict, cls) {
+    return `<tr><td class="ps-name">${name}</td><td class="ps-verdict ${cls}">${verdict}</td></tr>`;
 }
 
+function beatRow(name, dev) {
+    if (typeof dev !== 'number' || !isFinite(dev) || Math.abs(dev) > 999)
+        return row(name, 'missed', BAD);
+    if (Math.abs(dev) < PURE_MS)
+        return row(name, `pure (${dev >= 0 ? '+' : ''}${Math.round(dev)} ms)`, GOOD);
+    return row(name, `${dev > 0 ? 'late' : 'early'} ${Math.round(Math.abs(dev))} ms`,
+               Math.abs(dev) < 60 ? OK : BAD);
+}
+
+const stat = (label, value) =>
+    `<div class="ps-stat"><span class="ps-stat-k">${label}</span><span class="ps-stat-v">${value}</span></div>`;
+
 /**
- * The full rehearsal report, as modal HTML.
+ * A full swing's rehearsal: the five beats it is actually made of.
  *
- * A practice swing produces no ball, so this IS its output — which is why
- * every beat is listed every time, including the ones that were fine. The
+ * Every beat is listed every time, including the ones that were fine. The
  * one-line report drops anything inside PURE_MS to stay short; here that
  * would leave a player unable to tell "my hips were good" from "my hips were
  * not measured", and knowing which beats are already solid is most of the
  * value of rehearsing at all.
  */
-export function practiceSwingDetail(impact, club, backswingMs) {
-    if (!impact) return '<p>No swing was recorded.</p>';
+function fullSwingDetail(impact, backswingMs) {
     const eff = (impact.potentialCHS > 0 && impact.actualCHS > 0)
         ? Math.round((impact.actualCHS / impact.potentialCHS) * 100) : null;
-    const face = impact.faceAngleRelPath, path = impact.clubPathAngle;
-    const curve = Math.abs(face) < 2 ? 'straight'
-        : face > 6 ? 'slice' : face > 0 ? 'fade'
-        : face < -6 ? 'hook' : 'draw';
-    const start = Math.abs(path) < 2.5 ? '' : path > 0 ? ' push' : ' pull';
-
-    const stat = (label, value) => `<div style="flex:1 1 33%;min-width:96px;">
-        <div style="font-size:11px;opacity:0.65;text-transform:uppercase;letter-spacing:0.04em;">${label}</div>
-        <div style="font-size:17px;font-weight:700;color:#1b5e20;">${value}</div></div>`;
-
     return `
-    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+    <div class="ps-stats">
         ${stat('Clubhead', impact.actualCHS > 0 ? Math.round(impact.actualCHS) + ' mph' : '—')}
         ${stat('Efficiency', eff !== null ? eff + '%' : '—')}
-        ${stat('Backswing', backswingMs ? Math.round(backswingMs) + ' ms' : '—')}
+        ${backswingMs ? stat('Backswing', Math.round(backswingMs) + ' ms') : ''}
     </div>
-    <table style="width:100%;border-collapse:collapse;font-size:14px;
-                  border-top:1px solid #e0e0e0;border-bottom:1px solid #e0e0e0;">
+    <table class="ps-rows">
         ${beatRow('Hips', impact.transitionDev)}
         ${beatRow('Rotation', impact.rotationDev)}
         ${beatRow('Arms', impact.armsDev)}
         ${beatRow('Wrists', impact.wristsDev)}
-    </table>
-    <p style="margin:12px 0 0;font-size:13px;color:#37474f;">
-        Strike <strong>${impact.strikeQuality}</strong> · shape <strong>${curve}${start}</strong>${club?.name ? ' · ' + club.name : ''}
-    </p>
-    <p style="margin:8px 0 0;font-size:12px;opacity:0.7;">
-        No stroke was played and the ball has not moved.
-    </p>`;
+    </table>`;
+}
+
+/**
+ * A chip's rehearsal, which measures something completely different.
+ *
+ * A rhythm chip has no hips, rotation, arms or wrists beat — it has a tapped
+ * tempo that sets the carry and one strike tap against that beat. Feeding it
+ * through the full-swing layout reported all four beats as "missed" on every
+ * single practice chip, which is not a bad swing, it is the wrong question.
+ */
+function chipDetail(impact, backswingMs) {
+    const r = impact.rhythm;
+    if (!r) {
+        // Legacy timing path: no rhythm data exists to explain.
+        return `<div class="ps-stats">${stat('Backswing', backswingMs ? Math.round(backswingMs) + ' ms' : '—')}</div>
+                <p class="ps-note">This chip used the older timing input, which records no rhythm to report.</p>`;
+    }
+    const devPct = Math.round((r.beatDeviationMs / r.tempoMs) * 100);
+    const cvPct = r.cv * 100;
+    const strike = Math.abs(devPct) <= 6
+        ? row('Strike', 'on the beat', GOOD)
+        : row('Strike', `${Math.abs(devPct)}% ${devPct > 0 ? 'late' : 'early'}`,
+              Math.abs(devPct) <= 14 ? OK : BAD);
+    const steady = cvPct < 5 ? row('Tap tempo', `steady (±${Math.max(1, Math.round(cvPct))}%)`, GOOD)
+        : cvPct < 9 ? row('Tap tempo', `uneven (±${Math.round(cvPct)}%)`, OK)
+        : row('Tap tempo', `wobbly (±${Math.round(cvPct)}%)`, BAD);
+    // The optional second tap shapes the shot; it is only scored if played.
+    const shape = typeof r.shapeDevFrac === 'number'
+        ? row('Shape tap', Math.abs(r.shapeDevFrac) < 0.08 ? 'on the beat'
+              : `${Math.round(Math.abs(r.shapeDevFrac) * 100)}% ${r.shapeDevFrac > 0 ? 'late' : 'early'}`,
+              Math.abs(r.shapeDevFrac) < 0.08 ? GOOD : OK)
+        : '';
+    // Carry is what the tapped tempo was ASKING for — the useful number when
+    // there is no ball to watch land.
+    const carry = typeof r.targetDistance === 'number'
+        ? stat('Asking for', Math.round(r.targetDistance * 1.09361) + ' yd') : '';
+    return `
+    <div class="ps-stats">
+        ${stat('Tempo', Math.round(r.tempoMs) + ' ms')}
+        ${carry}
+    </div>
+    <table class="ps-rows">
+        ${steady}
+        ${strike}
+        ${shape}
+    </table>`;
+}
+
+/**
+ * The full rehearsal report, as card HTML.
+ *
+ * A practice swing produces no ball, so this IS its output — which is why the
+ * shot type has to pick the right measurements rather than showing one layout
+ * for everything.
+ */
+export function practiceSwingDetail(impact, club, { shotType = 'full', backswingMs = null, label = '' } = {}) {
+    if (!impact) return '<p class="ps-note">No swing was recorded.</p>';
+    const face = shotType === 'full' ? impact.faceAngleRelPath : impact.absoluteFaceAngle;
+    const path = impact.clubPathAngle;
+    let shape;
+    if (shotType === 'full') {
+        const curve = Math.abs(face) < 2 ? 'straight'
+            : face > 6 ? 'slice' : face > 0 ? 'fade'
+            : face < -6 ? 'hook' : 'draw';
+        shape = curve + (Math.abs(path) < 2.5 ? '' : path > 0 ? ' push' : ' pull');
+    } else {
+        shape = Math.abs(face) < 1.5 ? 'straight' : face > 0 ? 'push right' : 'pull left';
+    }
+    const body = shotType === 'full' ? fullSwingDetail(impact, backswingMs) : chipDetail(impact, backswingMs);
+    const what = label || (shotType === 'full' ? 'swing' : shotType);
+    return `${body}
+    <p class="ps-summary">${impact.strikeQuality} ${what.toLowerCase()} · ${shape}${club?.name ? ' · ' + club.name : ''}</p>
+    <p class="ps-note">No stroke was played and the ball has not moved.</p>`;
 }

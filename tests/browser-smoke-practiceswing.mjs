@@ -210,30 +210,83 @@ const status = await page.evaluate(() => document.getElementById('status-text-di
 console.log('status    :', JSON.stringify(status.slice(0, 90)));
 if (!/practice swing/i.test(status))
     fail(`the status line does not mention the practice swing: "${status.slice(0, 90)}"`);
-if (!/mph clubhead/i.test(status))
-    fail(`the practice swing reported no clubhead speed: "${status.slice(0, 90)}"`);
+// The status stays SHORT on purpose — the long version overflowed the status
+// pill on a phone and was clipped mid-sentence. The numbers live on the card.
+if (status.length > 60)
+    fail(`the status line is ${status.length} chars and will be clipped: "${status}"`);
 
 // Every beat, every time — including the ones that were fine. A player who
 // cannot tell "hips good" from "hips not measured" learns nothing.
-const detail = await page.evaluate(() => {
-    const el = [...document.querySelectorAll('div')]
-        .find(d => /Practice swing/i.test(d.textContent) && d.querySelector('table'));
-    return el ? el.textContent.replace(/\s+/g, ' ') : null;
+const cardText = () => page.evaluate(() => {
+    const el = document.getElementById('practice-swing-card');
+    return el && el.classList.contains('visible') ? el.textContent.replace(/\s+/g, ' ') : null;
 });
-console.log('modal     :', detail ? JSON.stringify(detail.slice(0, 150)) : 'MISSING');
-if (!detail) fail('no practice-swing detail modal appeared');
+const detail = await cardText();
+console.log('card      :', detail ? JSON.stringify(detail.slice(0, 150)) : 'MISSING');
+if (!detail) fail('no practice-swing card appeared');
 for (const beat of ['Hips', 'Rotation', 'Arms', 'Wrists'])
-    if (!detail.includes(beat)) fail(`the detail modal never mentions ${beat}: "${detail.slice(0, 200)}"`);
-if (!/Clubhead/i.test(detail)) fail('the detail modal shows no clubhead speed');
-if (!/Backswing/i.test(detail)) fail('the detail modal shows no backswing length');
+    if (!detail.includes(beat)) fail(`the card never mentions ${beat}: "${detail.slice(0, 200)}"`);
+if (!/Clubhead/i.test(detail)) fail('the card shows no clubhead speed');
+if (!/Backswing/i.test(detail)) fail('the card shows no backswing length');
 // Dismiss it before the next swing.
-await page.evaluate(() => {
-    const btn = [...document.querySelectorAll('button')].find(b => /^OK$/i.test(b.textContent.trim()));
-    if (btn) btn.click();
-});
+await page.evaluate(() => document.querySelector('#practice-swing-card .ps-dismiss')?.click());
 await sleep(300);
+if (await cardText()) fail('the card would not dismiss');
 
-// --- 3. Disarmed: a real shot must come back ------------------------------
+// --- 3. A chip is not a swing, and must not be reported as one -------------
+//
+// A rhythm chip has no hips, rotation, arms or wrists beat. It has a tapped
+// tempo that sets the carry and one strike tap against that beat. Running it
+// through the full-swing layout reported all four beats as "missed" on every
+// practice chip — not a bad swing, the wrong question.
+await page.evaluate(async () => (await import('./src/gameLogic/actions.js')).resetSwing());
+await sleep(400);
+await setArmed(true);
+const chip = await page.evaluate(async () => {
+    const actions = await import('./src/gameLogic/actions.js');
+    const state = await import('./src/gameLogic/state.js');
+    const ph = await import('./src/modes/playHole.js');
+    const core = await import('./src/visuals/core.js');
+    state.setSelectedClub('PW');
+    state.setShotType('chip');
+    const before = { shots: ph.getDisplayShotNumber(),
+                     ball: { x: +core.ball.position.x.toFixed(2), z: +core.ball.position.z.toFixed(2) } };
+    // Four taps establish the tempo, then the strike lands on the next beat.
+    //
+    // Busy-wait, not setTimeout: this sandbox throttles timers so hard that a
+    // 60 ms sleep lands nearer a second, which stretched the taps past the
+    // rhythm's expiry window and left the chip stuck in chipRhythm with
+    // nothing armed. A spin loop gives the module the real intervals it is
+    // measuring.
+    const spin = (ms) => { const t0 = performance.now(); while (performance.now() - t0 < ms) { /* wait */ } };
+    for (let i = 0; i < 4; i++) { actions.recordChipRhythmTap(); spin(300); }
+    actions.strikeRhythmChip();
+    for (let i = 0; i < 30 && state.getGameState() !== 'result'; i++)
+        await new Promise(r => setTimeout(r, 100));
+    return { before,
+             after: { shots: ph.getDisplayShotNumber(),
+                      ball: { x: +core.ball.position.x.toFixed(2), z: +core.ball.position.z.toFixed(2) } },
+             state: state.getGameState() };
+});
+const chipCard = await cardText();
+console.log('chip      :', JSON.stringify(chip));
+console.log('chip card :', chipCard ? JSON.stringify(chipCard.slice(0, 150)) : 'MISSING');
+if (!chipCard) fail('a practice chip produced no card');
+for (const beat of ['Hips', 'Rotation', 'Arms', 'Wrists'])
+    if (chipCard.includes(beat))
+        fail(`a practice CHIP was reported with the full-swing beat "${beat}": "${chipCard.slice(0, 200)}"`);
+if (!/Tempo/i.test(chipCard)) fail(`a practice chip reported no tempo: "${chipCard.slice(0, 200)}"`);
+if (!/Strike/i.test(chipCard)) fail(`a practice chip reported no strike timing: "${chipCard.slice(0, 200)}"`);
+const chipMoved = Math.hypot(chip.after.ball.x - chip.before.ball.x, chip.after.ball.z - chip.before.ball.z);
+if (chipMoved > 0.05) fail(`a practice chip moved the ball ${chipMoved.toFixed(2)} m`);
+if (chip.after.shots !== chip.before.shots) fail('a practice chip counted a stroke');
+await page.evaluate(() => document.querySelector('#practice-swing-card .ps-dismiss')?.click());
+await page.evaluate(async () => {
+    const state = await import('./src/gameLogic/state.js');
+    state.setShotType('full');
+});
+
+// --- 4. Disarmed: a real shot must come back ------------------------------
 await page.evaluate(async () => (await import('./src/gameLogic/actions.js')).resetSwing());
 await sleep(400);
 if (await setArmed(false) !== false) fail('the practice swing toggle would not disarm');

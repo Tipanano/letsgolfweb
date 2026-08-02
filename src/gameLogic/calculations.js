@@ -27,7 +27,7 @@ import { getCurrentGameMode } from '../main.js'; // Import mode checker
 import { isPracticeMode } from '../modes/playHole.js';
 import { setSwingReport } from '../ui/rhythmPuttHud.js';
 import { isPracticeSwingArmed, practiceSwingSummary, practiceSwingDetail } from '../practiceSwing.js';
-import { modal } from '../ui/modal.js';
+import { showPracticeSwingCard } from '../ui/practiceSwingCard.js';
 
 /**
  * Ends a rehearsal. The impact calculation has already run — that IS the
@@ -40,13 +40,14 @@ import { modal } from '../ui/modal.js';
  * a HUD hint (which the player may have muted) meant a practice swing could
  * look like nothing happened at all.
  */
-function finishPracticeSwing(impact, club, report) {
+function finishPracticeSwing(impact, club, report, opts = {}) {
     setSwingReport(report);
-    updateStatus(practiceSwingSummary(impact, club) + " — press (n)");
+    updateStatus(practiceSwingSummary());
     setGameState('result');
     try {
-        modal.alert(practiceSwingDetail(impact, club, getBackswingDuration()),
-                    'Practice swing', 'info');
+        showPracticeSwingCard(practiceSwingDetail(impact, club, {
+            backswingMs: getBackswingDuration(), ...opts,
+        }), opts.shotType === 'full' ? 'Practice swing' : `Practice ${(opts.label || opts.shotType).toLowerCase()}`);
     } catch (e) { console.error('practice swing report failed', e); }
 }
 
@@ -224,7 +225,7 @@ export function calculateFullSwingShot() {
 
     // A rehearsal stops here: everything below simulates flight, moves the
     // ball and records a stroke.
-    if (rehearsal) return finishPracticeSwing(impactResult, selectedClub, swingReportText);
+    if (rehearsal) return finishPracticeSwing(impactResult, selectedClub, swingReportText, { shotType: 'full' });
 
     // --- Use results from impactResult ---
     const ballSpeed = impactResult.ballSpeed;
@@ -531,7 +532,8 @@ export function calculateChipShot() {
         setSwingReport(chipReportText);
     } catch (e) { /* feedback must never break the shot */ }
 
-    if (chipRehearsal) return finishPracticeSwing(impactResult, selectedClub, chipReportText);
+    if (chipRehearsal) return finishPracticeSwing(impactResult, selectedClub, chipReportText,
+        { shotType: 'chip', label: chipProfile.label });
 
     // --- Use results ---
     const ballSpeed = impactResult.ballSpeed;
