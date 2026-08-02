@@ -13,7 +13,8 @@ import {
     renderGreen,
     renderTeeBox,
     setMowPattern,
-    setBunkerRims
+    setBunkerRims,
+    setFringeGreens
 } from './holeRenderer.js';
 import { disposeSceneObject } from './textures.js';
 import { queryTerrainHeight } from '../visuals.js'; // For getting terrain height at flag position
@@ -70,9 +71,11 @@ export function drawHoleLayout(holeLayout) {
 
     // Per-hole ground styling, set before anything bakes vertex colours:
     // a mow direction unique to this hole, and the bunker outlines whose
-    // surrounding grass gets a darkened lip.
+    // surrounding grass gets a darkened lip, and the greens whose collar gets
+    // a lightened one.
     setMowPattern(holeLayout.number ?? holeLayout.par ?? 0);
     setBunkerRims(holeLayout.bunkers);
+    setFringeGreens(holeLayout.greens);
 
     // Render all surfaces using the new height-aware renderer
     renderBackground(holeLayout, scene, textureLoader, currentHoleObjects);

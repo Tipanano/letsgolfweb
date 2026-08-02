@@ -689,8 +689,10 @@ export function simulateGroundRoll(initialPosition, initialVelocity, surfaceType
             else nextLogTime += 0.5;
         }
 
-        // Hole check on green
-        if (currentSurface === 'GREEN' && holePos) {
+        // Hole check on the putting surface. The fringe counts: a pin tucked
+        // within a couple of metres of the edge puts the cup itself inside the
+        // collar's reach, and a putt that got there deserves to drop.
+        if ((currentSurface === 'GREEN' || currentSurface === 'FRINGE') && holePos) {
             const dx = position.x - holePos.x;
             const dz = position.z - holePos.z;
             const d = Math.sqrt(dx * dx + dz * dz);

@@ -44,6 +44,37 @@ export const SURFACES = {
     uvScale: 3.0, // Metres of ground per texture tile (world-space UVs)
     ballLieOffset: 0.06 // Display offset = green layer height, so the ball sits ON the rendered green
   },
+  FRINGE: {
+    name: 'Fringe',
+    color: '#4CAB48', // Between green and fairway
+    // A collar is cut shorter than fairway and longer than green, and that is
+    // exactly where its numbers sit. Puttable — the putter is chosen by club
+    // selection, not by surface, so this already works — but a putt through it
+    // dies noticeably faster than the same putt on the green.
+    bounce: 0.24,
+    rollOut: 0.62,
+    friction: 0.10,
+    spinResponse: 1.3,
+    flightModification: {
+      spinReduction: 0.02,
+      launchAngleChange: 0,
+      velocityReduction: 0.01
+    },
+    // A tight lie, but with a little more cushion under the ball than a green.
+    strikeFactors: {
+      fatForgiveness: 0.75,
+      thinForgiveness: 0.85
+    },
+    // The fringe has no mesh of its own — it is a distance test around the
+    // green, and the ball rests on whatever polygon is actually drawn there.
+    // That is usually light rough (0.01), sometimes the approach fairway
+    // (0.045), so the layer height splits the difference and is never more
+    // than a couple of centimetres wrong either way.
+    height: 0.02,
+    texturePath: 'assets/textures/green.jpg',
+    uvScale: 4.0,
+    ballLieOffset: 0.05
+  },
   FAIRWAY: {
     name: 'Fairway',
     color: '#5DBB5D', // Slightly lighter green

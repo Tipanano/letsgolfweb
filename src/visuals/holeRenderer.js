@@ -6,6 +6,7 @@ import { createNoise2D } from 'https://esm.sh/simplex-noise';
 import earcut from 'https://cdn.skypack.dev/earcut@2.2.4';
 import { heightAt as contourHeightAt, gradientAt as contourGradientAt, hasContour, isNearContour, isNearFineFeature, bankLevelAt, getWaterSheets, WATER_SURFACE_Y } from '../greenContours.js';
 import { getSurfaceMaterial } from './textures.js';
+import { greenEdgeDistance, FRINGE_WIDTH_M } from '../fringe.js';
 
 // Baked hillshade for contoured ground: the scene's high ambient light washes
 // out real shading, so slope readability is painted into vertex colors —
@@ -311,6 +312,35 @@ function bunkerRimShade(surfaceName, x, z) {
     return 1 - RIM_DARKEN * (1 - t) * (1 - t);
 }
 
+// --- Fringe ------------------------------------------------------------
+// The collar has no mesh of its own (see src/fringe.js for why), so it has to
+// read as a lighter, tighter-mown band painted onto whatever polygon is drawn
+// there — usually the rough corridor, sometimes the approach fairway. Same
+// vertex-colour pass as hillshade and mow stripes, so it is free at render.
+//
+// Near-green ground is already tessellated at the FINE 0.65 m budget, because
+// the green contour is a fine feature, so a 2 m band gets about three vertices
+// across it. That is enough for an edge; it would not be at the coarse budget.
+
+const FRINGE_LIGHTEN = 0.14;   // Peak lift right at the green's edge
+let fringeLayout = null;
+
+/** Registers the hole's greens so the surrounding collar can be shaded. */
+export function setFringeGreens(greens) {
+    fringeLayout = Array.isArray(greens) && greens.length ? { greens } : null;
+}
+
+/** Brightness multiplier for grass in a green's collar (1 = untouched). */
+function fringeShade(surfaceName, x, z) {
+    // The green paints its own edge, and sand and water have no collar.
+    if (!fringeLayout || surfaceName === 'Green' || surfaceName === 'Bunker' ||
+        surfaceName === 'Water') return 1;
+    const d = greenEdgeDistance(x, z, fringeLayout, FRINGE_WIDTH_M);
+    if (d === Infinity) return 1;
+    const t = d / FRINGE_WIDTH_M;   // 0 at the green's edge, 1 at the outer limit
+    return 1 + FRINGE_LIGHTEN * (1 - t) * (1 - t);
+}
+
 /**
  * Renders a polygon with heights (fairway, green, rough, etc.)
  * @param {Object} polygonData - Polygon data with vertices array
@@ -391,6 +421,7 @@ export function renderPolygonWithHeights(polygonData, scene, textureLoader, obje
             // distance almost entirely via that rim, and the sand itself is
             // deliberately excluded from hillshade above.
             factor *= bunkerRimShade(surfaceName, x, z);
+            factor *= fringeShade(surfaceName, x, z);
 
             colors[i * 3] = baseColor.r * factor;
             colors[i * 3 + 1] = baseColor.g * factor;
