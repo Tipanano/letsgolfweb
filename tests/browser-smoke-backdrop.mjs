@@ -77,6 +77,29 @@ const results = await page.evaluate(async (holes) => {
         core.scene.traverse(o => { if (o.isMesh && o.geometry?.parameters?.width === 1600) earth = o; });
         if (!earth) { out.push({ file, hole: hi + 1, error: 'backdrop mesh not found' }); continue; }
 
+        // The scenery treeline ring must ENCLOSE the hole. It was built once
+        // at radius 480 around the tee, and Augusta's 15th runs 495 m with
+        // the green and back pond beyond — the hole poked out through the
+        // scenery and the ring's fog-softened wall stood across the fairway
+        // 15 m in front of the green. Dead straight, full width, only on
+        // long holes: the "razor sheet".
+        let ring = null;
+        core.scene.traverse(o => { if (o.name === 'SceneryTreeline') ring = o; });
+        if (!ring) { out.push({ file, hole: hi + 1, error: 'treeline ring not found' }); continue; }
+        const L0 = ph.getCurrentHoleLayout();
+        const ringR = 480 * ring.scale.x;
+        const ringC = { x: ring.position.x, z: ring.position.z };
+        let worstIntrude = -Infinity, intrudeAt = null;
+        const probePt = (p) => {
+            if (!p || typeof p.x !== 'number') return;
+            const d = Math.hypot(p.x - ringC.x, p.z - ringC.z);
+            const intrude = d - ringR;   // >0: geometry OUTSIDE the scenery
+            if (intrude > worstIntrude) { worstIntrude = intrude; intrudeAt = { x: +p.x.toFixed(0), z: +p.z.toFixed(0) }; }
+        };
+        probePt(L0.tee?.center); probePt(L0.flagPosition);
+        for (const poly of [...(L0.fairways || []), ...(L0.greens || []), ...(L0.waterHazards || []), ...(L0.lightRough || [])])
+            for (const v of (poly?.vertices || poly?.controlPoints || [])) probePt(v);
+
         const L = ph.getCurrentHoleLayout();
         const t = L.tee.center, f = L.flagPosition;
         const ray = new THREE.Raycaster(), down = new THREE.Vector3(0, -1, 0);
@@ -126,7 +149,8 @@ const results = await page.evaluate(async (holes) => {
         });
         out.push({ file: file.replace('courses/', ''), hole: hi + 1,
             overGround, groundN, worstGround: +worstGround.toFixed(2),
-            overWater, waterN, worstWater: +worstWater.toFixed(2) });
+            overWater, waterN, worstWater: +worstWater.toFixed(2),
+            ringMargin: +(-worstIntrude).toFixed(0), intrudeAt });
     }
     return out;
 }, HOLES);
@@ -142,6 +166,14 @@ for (const r of results) {
         `over water ${r.overWater}/${r.waterN} (worst +${r.worstWater} m)`);
 }
 if (!results.some(r => r.groundN > 50)) fail('no backdrop samples taken — the probe is not reaching the mesh');
+// The hole must sit INSIDE the scenery with clear margin — geometry closer
+// than 40 m to the ring reads as a wall in the fog, and geometry beyond it
+// is the razor sheet again.
+for (const r of results) {
+    if (r.ringMargin !== undefined && r.ringMargin < 40)
+        fail(`${r.file} hole ${r.hole}: hole geometry reaches within ${r.ringMargin} m of the scenery treeline` +
+            (r.intrudeAt ? ` (at ${r.intrudeAt.x}, ${r.intrudeAt.z})` : ''));
+}
 for (const r of results) {
     if (r.worstGround > TOLERANCE)
         fail(`${r.file} hole ${r.hole}: the backdrop stands ${r.worstGround} m above the ground at ${r.overGround} of ${r.groundN} samples`);

@@ -228,8 +228,10 @@ function createSkyAndHorizon(targetScene) {
         fog: true, // Haze softens it into the distance
     });
     const treeline = new THREE.Mesh(treeGeom, treeMat);
+    treeline.name = 'SceneryTreeline';
     treeline.renderOrder = -1;
     targetScene.add(treeline);
+    treelineMesh = treeline;
 
     // Earth plane: extends the ground to the treeline so layouts never float
     // in a void. Sits below every surface layer; fog blends it out.
@@ -266,6 +268,7 @@ function createSkyAndHorizon(targetScene) {
 }
 
 let earthMesh = null;
+let treelineMesh = null;
 let sunLight = null;
 
 const EARTH_SPAN = 1600;
@@ -315,7 +318,58 @@ export function focusShadowsOn(x, z) {
  * setTerrainFromLayout). Flat holes stay flat at -0.9; DEM holes carry the
  * backdrop down/up with the landscape so terrain never clips through it.
  */
+/**
+ * Fits the scenery treeline ring around the CURRENT hole.
+ *
+ * The ring was built once at radius 480 around the origin — the tee — and a
+ * golf hole can simply be longer than that: Augusta's 15th runs 495 m to the
+ * flag with the green and its back pond beyond, so the hole poked out through
+ * the scenery and the ring's wall stood across the fairway 15 m in front of
+ * the green. Fog-softened olive, dead straight, full width: the "razor sheet"
+ * on every long hole, and invisible on short ones, which is why it survived
+ * this long.
+ *
+ * The ring now recentres on the hole and scales to hold ALL of its geometry
+ * with margin. The far arc of a long hole sits deeper in the fog and fades —
+ * that is the correct trade: scenery may recede, it may not stand on the
+ * fairway.
+ */
+const TREELINE_BASE_RADIUS = 480;   // as built; scale is relative to this
+const TREELINE_MARGIN = 140;        // m of clear ground beyond the furthest point
+function fitTreelineToHole(holeLayout) {
+    if (!treelineMesh) return;
+    if (!holeLayout) {
+        treelineMesh.position.set(0, 0, 0);
+        treelineMesh.scale.set(1, 1, 1);
+        return;
+    }
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    const take = (p) => {
+        if (!p || typeof p.x !== 'number') return;
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.z < minZ) minZ = p.z;
+        if (p.z > maxZ) maxZ = p.z;
+    };
+    take(holeLayout.tee?.center);
+    take(holeLayout.flagPosition);
+    const polys = [
+        ...(holeLayout.fairways || []), ...(holeLayout.greens || []),
+        ...(holeLayout.bunkers || []), ...(holeLayout.waterHazards || []),
+        ...(holeLayout.lightRough || []),
+    ];
+    for (const poly of polys) for (const v of (poly?.vertices || poly?.controlPoints || [])) take(v);
+    if (!Number.isFinite(minX)) return;
+    const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2;
+    const reach = Math.hypot(maxX - cx, maxZ - cz);
+    const radius = Math.max(TREELINE_BASE_RADIUS, reach + TREELINE_MARGIN);
+    treelineMesh.position.set(cx, 0, cz);
+    const k = radius / TREELINE_BASE_RADIUS;
+    treelineMesh.scale.set(k, 1, k);
+}
+
 export function updateEarthTerrain(holeLayout = null) {
+    fitTreelineToHole(holeLayout);
     if (!earthMesh) return;
     const pos = earthMesh.geometry.attributes.position;
     // The backdrop is 1600 m across 96 segments: it samples the terrain field
