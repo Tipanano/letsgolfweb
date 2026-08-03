@@ -338,7 +338,25 @@ function injectStyles() {
         /* The player/score strip that used to live down here has moved into
            the hole panel: on a phone the bottom belongs to the controls, and
            it was landing underneath the address hint. .overlay-bottom now
-           carries only the shot summary, which positions itself. */
+           carries only the shot summary — which positions itself bottom-right
+           at 10px, and on a phone that square is occupied by the chip row and
+           the NEXT pill, so the shot numbers were buried underneath both.
+           Dock it above the chip row, and give it the HUD panel treatment
+           instead of bare text so it reads against any ground. */
+        body.touch-active #shot-summary-widget {
+            bottom: calc(150px + env(safe-area-inset-bottom, 0px));
+            right: 8px;
+            background: rgba(14, 22, 17, 0.62);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.13);
+            border-radius: 10px;
+            padding: 6px 10px;
+        }
+        body.touch-active #shot-summary-widget .overlay-text-item {
+            font-size: 11.5px;
+            margin-bottom: 0;
+        }
         /* Rhythm hint: compact, and never over the shot. It docks under the
            status line — high ground that shows sky or terrain well past the
            target, never the near green a chip or putt is aimed at. It used
