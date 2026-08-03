@@ -151,6 +151,11 @@ const toggleAt = async (label) => page.evaluate(() => {
 });
 await page.evaluate(async () => {
     const hud = await import('./src/ui/rhythmPuttHud.js');
+    const phase = await import('./src/addressPhase.js');
+    // Desktop now has the same Setup -> Address phases as touch, and the
+    // toggle belongs to the address phase — in Setup it would float over
+    // controls it has nothing to do with.
+    phase.enterAddress();
     hud.showAddressHint('full', { hasClub: true });
 });
 const atAddress = await toggleAt();

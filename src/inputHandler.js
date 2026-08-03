@@ -26,6 +26,7 @@ import { getDownswingTimingStretch } from './swingPhysics.js';
 import * as RhythmPutt from './rhythmPutt.js';
 // Green-reading overlay
 import * as SlopeOverlay from './visuals/slopeOverlay.js';
+import * as AddressPhase from './addressPhase.js';
 // --- Constants for Aiming ---
 const AIM_INCREMENT_FULL = 0.5; // Degrees per key press
 const AIM_INCREMENT_CHIP = 0.2; // Degrees per key press
@@ -175,6 +176,9 @@ export function handleKeyDown(event) {
             return; // Consume event
         }
     }
+
+    // --- Setup/Address phase (desktop mirror of the touch flow) ---
+    if (AddressPhase.handlePhaseKey(event)) return;
 
     // --- Common Reset Logic ('n' key) ---
     if (event.key === 'n' && gameState === 'result') {

@@ -95,6 +95,8 @@ const TOUCHES = [
     ['src/surfaces.js',            ['unit-', 'browser-smoke-shotphysics', 'browser-smoke-sandbounce', 'browser-smoke-chip']],
     ['src/clubs.js',               ['browser-smoke-fullbag', 'browser-smoke-bagmatrix']],
     ['src/practiceSwing.js',       ['browser-smoke-practiceswing']],
+    ['src/addressPhase.js',        ['browser-smoke-addressphase', 'browser-smoke-practiceswing', 'browser-smoke-chip', 'browser-smoke-putt', 'browser-smoke-touch', 'browser-smoke-tapguard']],
+    ['src/inputHandler.js',        ['browser-smoke-addressphase', 'browser-smoke-chip', 'browser-smoke-putt', 'browser-smoke-touch', 'browser-smoke-tapguard', 'browser-smoke-shotstart']],
     // Presentation. Cannot reach a course file or a physics number.
     ['src/ui/practiceSwingCard.js',['browser-smoke-practiceswing']],
     ['src/ui/rhythmPuttHud.js',    ['browser-smoke-practiceswing', 'browser-smoke-putt', 'browser-smoke-chip', 'browser-smoke-touch']],

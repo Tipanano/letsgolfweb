@@ -30,6 +30,7 @@ import { initTouchControls } from './touchControls.js'; // On-screen swing zones
 import { getGameState } from './gameLogic/state.js';
 import { isViewActive as measurementViewActive } from './visuals/measurementView.js';
 import { aimAtScreenPoint } from './aimAtPoint.js'; // Double-click / double-tap point-to-aim
+import { initAddressPhase } from './addressPhase.js';
 
 // --- Game Modes ---
 export const GAME_MODES = {
@@ -501,6 +502,7 @@ if (closeManualBtn && manualModal) {
 // On-screen touch zones (touch devices only) — they dispatch synthetic
 // KeyboardEvents, so they ride the same listeners registered below.
 initTouchControls();
+initAddressPhase(); // Desktop Setup/Address phases; dormant when touch owns the screen
 
 // Add global key listeners that call the input handler
 document.addEventListener('keydown', (event) => {
