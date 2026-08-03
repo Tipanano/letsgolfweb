@@ -14,6 +14,30 @@
 //
 // Course data © OpenStreetMap contributors, ODbL — attribution is embedded
 // in the output.
+//
+// FETCHING: the input is one Overpass query centred on the course. This is
+// everything the importer reads — fetch it all, or trees/woods/creeks
+// silently vanish from the output:
+//
+//   [out:json][timeout:120];
+//   (
+//     way["golf"](around:2600,LAT,LON);
+//     way["natural"="wood"](around:2600,LAT,LON);
+//     way["landuse"="forest"](around:2600,LAT,LON);
+//     node["natural"="tree"](around:2600,LAT,LON);
+//     way["natural"="water"](around:2600,LAT,LON);
+//     way["waterway"](around:2600,LAT,LON);
+//     way["natural"="coastline"](around:2600,LAT,LON);
+//   );
+//   out geom;
+//
+// Each emitted hole stores its origin {lat, lon}, so a re-import never has to
+// re-derive the course position. When neighbouring courses share the radius
+// and --near cannot separate them (Augusta National overlaps its Par-3 and
+// Augusta Country Club inside any one circle), filter the fetch instead —
+// ANGC's holes are the ones carrying name tags:
+//
+//   d.elements = d.elements.filter(e => e.tags?.golf !== 'hole' || e.tags?.name)
 
 import { readFileSync, writeFileSync } from 'fs';
 
@@ -535,6 +559,14 @@ for (const el of elements) {
         addTree(project(el));
     }
 }
+const woodPolys = [];
+for (const el of elements) {
+    if (el.type !== 'way') continue;
+    const isWood = el.tags?.natural === 'wood' || el.tags?.landuse === 'forest';
+    if (!isWood) continue;
+    const wpts = polygonOf(el);
+    if (wpts) woodPolys.push(wpts);
+}
 for (const el of elements) {
     if (obstacles.length >= TREE_CAP) break;
     if (el.type !== 'way') continue;
@@ -642,27 +674,96 @@ if (par >= 4 && length > 230) {
                 if (wet({ x: p.x + nx * s, z: p.z + nz * s })) return true;
             return false;
         };
+        // Nor through the trees. The ribbon used to be a constant 20 m each
+        // side whatever stood there, which drew a 40 m band straight through
+        // the pines on every aerial-only course — Augusta's 17th had six trees
+        // STANDING ON its fairway, because the fairway was invented after the
+        // trees were real. Probe each station's clearance to the nearest wood
+        // (and water) and let the ribbon pinch: that asymmetric narrowing is
+        // what makes a tree-lined tee shot a tee shot.
+        const blocked = (p) => wet(p) || woodPolys.some(w => pointInPoly(p, w));
+        const normalAt = (arr, i) => {
+            const a = arr[Math.max(0, i - 1)], b = arr[Math.min(arr.length - 1, i + 1)];
+            const dx = b.x - a.x, dz = b.z - a.z, L2 = Math.hypot(dx, dz) || 1;
+            return { nx: -dz / L2, nz: dx / L2 };
+        };
+        const HALF_MAX = 20, HALF_STEP = 2, HALF_MIN = 5;
+        const clearance = (arr, i, sgn) => {
+            const { nx, nz } = normalAt(arr, i);
+            let ok = 0;
+            for (let d = HALF_STEP; d <= HALF_MAX; d += HALF_STEP) {
+                if (blocked({ x: arr[i].x + nx * d * sgn, z: arr[i].z + nz * d * sgn })) break;
+                ok = d;
+            }
+            return ok;
+        };
         const runs = [];
         let run = [];
         for (let n = 0; n < ribbon.length; n++) {
-            if (wetAcross(n)) { if (run.length >= 2) runs.push(run); run = []; }
+            // A station is unusable when water crosses it or the woods leave
+            // less than a cart path of dry, open ground.
+            const tooTight = clearance(ribbon, n, 1) + clearance(ribbon, n, -1) < 2 * HALF_MIN;
+            if (wetAcross(n) || tooTight) { if (run.length >= 2) runs.push(run); run = []; }
             else run.push(ribbon[n]);
         }
         if (run.length >= 2) runs.push(run);
+        // Variable-width corridor: same construction as corridorPolygon, but
+        // each station carries its own measured half-widths, smoothed with its
+        // neighbours so the edge undulates instead of sawtoothing. Smoothing
+        // may only ever NARROW below the measured clearance, never widen back
+        // into the trees it was measured against.
+        const variableRibbon = (r, cap) => {
+            const rawL = r.map((_, i) => clearance(r, i, 1));
+            const rawR = r.map((_, i) => clearance(r, i, -1));
+            const smoothed = (raw) => raw.map((v, i) => {
+                const prev = raw[Math.max(0, i - 1)], next = raw[Math.min(raw.length - 1, i + 1)];
+                return Math.max(HALF_MIN, Math.min(v, Math.round((prev + v + next) / 3)));
+            });
+            const hL = smoothed(rawL), hR = smoothed(rawR);
+            const first = r[0], second = r[1], last = r[r.length - 1], prev = r[r.length - 2];
+            const extend = (from, to, dist) => {
+                const dx = from.x - to.x, dz = from.z - to.z;
+                const len = Math.hypot(dx, dz) || 1;
+                return { x: from.x + (dx / len) * dist, z: from.z + (dz / len) * dist };
+            };
+            const pts = [extend(first, second, cap), ...r, extend(last, prev, cap)];
+            const wL = [hL[0], ...hL, hL[hL.length - 1]];
+            const wR = [hR[0], ...hR, hR[hR.length - 1]];
+            const left = [], right = [];
+            for (let i = 0; i < pts.length; i++) {
+                const { nx, nz } = normalAt(pts, i);
+                left.push({ x: +(pts[i].x + nx * wL[i]).toFixed(1), z: +(pts[i].z + nz * wL[i]).toFixed(1) });
+                right.push({ x: +(pts[i].x - nx * wR[i]).toFixed(1), z: +(pts[i].z - nz * wR[i]).toFixed(1) });
+            }
+            return [...left, ...right.reverse()];
+        };
         // The end cap extends past the last dry sample, so a run that stops
         // right at a shoreline still pokes into it. Retry without the cap,
         // and drop the run if even that is wet.
         let added = 0;
+        const synthesized = [];
         for (const r of runs) {
             for (const cap of [6, 0]) {
-                const poly = corridorPolygon(r, 20, cap).map(p => ({ x: +p.x.toFixed(1), z: +p.z.toFixed(1) }));
+                const poly = variableRibbon(r, cap);
                 if (poly.some(p => wet(p))) continue;
-                byType.fairway.push(poly); added++;
+                byType.fairway.push(poly); synthesized.push(poly); added++;
                 break;
             }
         }
         if (added)
             console.error(`  (synthesized fairway ribbon${added > 1 ? ` in ${added} parts` : ''} — mapped fairway covers ${(coverage * 100).toFixed(0)}% of the line)`);
+        // The tree scatter ran before this fairway existed, so its
+        // stay-off-the-fairway rule never saw it. Evict any tree the new
+        // ribbon swallowed — clearance keeps the ribbon out of the WOODS, but
+        // lone mapped trees and cap-starved wood fragments can still fall
+        // inside it.
+        if (synthesized.length) {
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                const o = obstacles[i];
+                if (o.type === 'tree' && synthesized.some(poly => pointInPoly(o, poly)))
+                    obstacles.splice(i, 1);
+            }
+        }
     }
 }
 const layout = {
