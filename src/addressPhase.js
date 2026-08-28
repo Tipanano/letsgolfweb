@@ -72,8 +72,11 @@ function injectStyles() {
         }
         #kb-address-exit {
             position: absolute;
+            /* Top-LEFT: address hides the hole/score panel that lives there,
+               so the slot is free. Top-right is the distance/wind/lie panel,
+               which stays up at address and was being covered. */
             top: 74px;
-            right: 10px;
+            left: 10px;
             display: none;
             padding: 8px 16px;
             border-radius: 10px;
@@ -88,6 +91,11 @@ function injectStyles() {
             user-select: none;
         }
         body.kb-address #kb-address-exit { display: block; }
+
+        /* While the ADDRESS/NEXT pill is up at the bottom, the swing-report
+           HUD pill must sit above it — both used to anchor ~24px from the
+           bottom and the report covered NEXT after every shot. */
+        body.kb-pill #rhythm-putt-hud { bottom: 96px; }
 
         /* Address strips the setup chrome, exactly the set touch strips.
            The distance/wind/lie panel stays — you read it over the shot. */
@@ -192,6 +200,7 @@ function refresh() {
     const show = !touchOwnsScreen() && inPlayHole() && !addressed &&
         (s === 'ready' || s === 'result');
     pillEl.classList.toggle('visible', show);
+    document.body.classList.toggle('kb-pill', show);
     if (!show) return;
     const clubMissing = s === 'ready' && !getSelectedClub();
     pillEl.classList.toggle('kb-disabled', clubMissing);

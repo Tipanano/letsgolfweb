@@ -50,7 +50,14 @@ function wantTouchControls() {
     const param = new URLSearchParams(location.search).get('touch');
     if (param === '1') return true;
     if (param === '0') return false;
-    return ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+    // Ask what the PRIMARY pointer is, not whether touch exists at all. A
+    // touchscreen laptop or a desktop Chrome with touch events enabled says
+    // yes to 'ontouchstart' and maxTouchPoints, and then got the whole
+    // thumb layer — including the 1.5x downswing stretch — while being
+    // played with a keyboard. 'pointer: coarse' is true on phones and
+    // tablets and false wherever a mouse or trackpad leads.
+    if (window.matchMedia) return window.matchMedia('(pointer: coarse)').matches;
+    return ('ontouchstart' in window) && navigator.maxTouchPoints > 1;
 }
 
 function sendKey(type, key) {
