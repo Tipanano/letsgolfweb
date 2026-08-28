@@ -25,7 +25,6 @@ import { getSurfaceProperties } from '../surfaces.js'; // Import surface propert
 // Removed Putt Trajectory import as roll simulation handles it
 import { clamp, getSurfaceTypeAtPoint } from '../utils/gameUtils.js'; // Import getSurfaceTypeAtPoint
 import { getCurrentGameMode } from '../main.js'; // Import mode checker
-import { isPracticeMode } from '../modes/playHole.js';
 import { setSwingReport, showAddressHint } from '../ui/rhythmPuttHud.js';
 import { isPracticeSwingArmed, practiceSwingSummary, practiceSwingDetail } from '../practiceSwing.js';
 import { showPracticeSwingCard } from '../ui/practiceSwingCard.js';
@@ -66,7 +65,7 @@ function finishPracticeSwing(impact, club, report, opts = {}) {
 }
 
 /**
- * Human-readable swing feedback for practice contexts: what shape came
+ * Human-readable swing feedback: what shape came
  * out, and which beats of the swing caused it.
  */
 function buildSwingReport(r) {
@@ -98,7 +97,7 @@ function buildSwingReport(r) {
 }
 
 /**
- * Chip/pitch feedback for practice contexts. Rhythm chips have two skills —
+ * Chip/pitch feedback. Rhythm chips have two skills —
  * strike tap vs the beat (direction) and tap-tempo steadiness (contact) — so
  * the report names both, and on a mishit says which one caused it.
  */
@@ -225,15 +224,15 @@ export function calculateFullSwingShot() {
     // --- Call the full swing physics calculation module ---
     const impactResult = calculateImpactPhysics(timingInputs, selectedClub, swingSpeed, ballPositionFactor, currentSurface); // Pass currentSurface
 
-    // Practice contexts (range, practice/drill holes) get a post-shot swing
-    // report explaining the outcome; it renders with the next-shot hint. A
-    // rehearsal always gets one — with no ball to watch, the report is the
-    // entire output of the swing.
+    // Every full swing gets a post-shot report explaining the outcome; it
+    // renders with the next-shot hint. It was practice-only at first, but a
+    // player on the course who just sliced one wants to know which beat did
+    // it just as much as one on the range. A rehearsal always gets one — with
+    // no ball to watch, the report is the entire output of the swing.
     const rehearsal = isPracticeSwingArmed();
     let swingReportText = null;
     try {
-        const practice = getCurrentGameMode() === 'range' || isPracticeMode();
-        swingReportText = (practice || rehearsal) ? buildSwingReport(impactResult) : null;
+        swingReportText = buildSwingReport(impactResult);
         setSwingReport(swingReportText);
     } catch (e) { /* feedback must never break the shot */ }
 
@@ -535,14 +534,13 @@ export function calculateChipShot() {
         ? calculateRhythmChipImpact(rhythmStrike, selectedClub, ballPositionFactor, currentSurface, chipProfile)
         : calculateChipImpact(backswingDuration, rotationOffset, hitOffset, selectedClub, ballPositionFactor, currentSurface); // Legacy fallback
 
-    // Practice contexts get the same post-shot explanation full swings do; a
-    // rehearsal always does, since the report is all it produces.
+    // Chips get the same post-shot explanation full swings do, on the course
+    // as well as in practice; a rehearsal always does, since the report is
+    // all it produces.
     const chipRehearsal = isPracticeSwingArmed();
     let chipReportText = null;
     try {
-        const practice = getCurrentGameMode() === 'range' || isPracticeMode();
-        chipReportText = (practice || chipRehearsal)
-            ? buildChipReport(impactResult, chipProfile.label) : null;
+        chipReportText = buildChipReport(impactResult, chipProfile.label);
         setSwingReport(chipReportText);
     } catch (e) { /* feedback must never break the shot */ }
 
