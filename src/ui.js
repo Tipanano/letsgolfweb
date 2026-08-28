@@ -1,6 +1,6 @@
 import { clubs, defaultPlayerBag } from './clubs.js'; // Import club data and defaultPlayerBag
 import { getDownswingTimingStretch } from './swingPhysics.js';
-import { metersToYards, YARDS_TO_METERS } from './utils/unitConversions.js'; // Import conversion utilities
+import { distanceValue, formatDist, unitLabel, unitLabelLong, getDistanceUnit, toggleDistanceUnit, onDistanceUnitChange } from './utils/unitConversions.js'; // Import conversion utilities
 import { getWind, getTemperature, getCurrentShotType } from './gameLogic/state.js'; // Import environment state getters (Corrected Path)
 import { toast } from './ui/toast.js';
 import { swingHintsShown, toggleSwingHints } from './ui/rhythmPuttHud.js';
@@ -499,6 +499,7 @@ export function showKeyPressMarker(key, offset, speedFactor) {
 }
 
 export function updateResultDisplay(resultData) {
+    lastResultData = resultData; // re-rendered when the distance unit changes
     resultText.textContent = resultData.message;
     // Helper to format numbers or return 'N/A'
     const formatNum = (num, digits = 1) => (num !== undefined && !isNaN(num)) ? num.toFixed(digits) : 'N/A';
@@ -514,11 +515,11 @@ export function updateResultDisplay(resultData) {
     backSpinText.textContent = formatNum(resultData.backSpin, 0);
     sideSpinText.textContent = formatNum(resultData.sideSpin, 0);
     
-    // Convert distances from meters to yards for display
-    const peakHeightYards = resultData.peakHeight ? metersToYards(resultData.peakHeight) : undefined;
-    const carryDistanceYards = resultData.carryDistance ? metersToYards(resultData.carryDistance) : undefined;
-    const rolloutDistanceYards = resultData.rolloutDistance ? metersToYards(resultData.rolloutDistance) : undefined;
-    const totalDistanceYards = resultData.totalDistance ? metersToYards(resultData.totalDistance) : undefined;
+    // Distances shown in the player's unit (meters or yards) — see unitConversions
+    const peakHeightYards = resultData.peakHeight ? distanceValue(resultData.peakHeight) : undefined;
+    const carryDistanceYards = resultData.carryDistance ? distanceValue(resultData.carryDistance) : undefined;
+    const rolloutDistanceYards = resultData.rolloutDistance ? distanceValue(resultData.rolloutDistance) : undefined;
+    const totalDistanceYards = resultData.totalDistance ? distanceValue(resultData.totalDistance) : undefined;
     
     peakHeightText.textContent = formatNum(peakHeightYards, 1);
     carryDistanceText.textContent = formatNum(carryDistanceYards, 1);
@@ -1134,6 +1135,7 @@ export function displayDownswingFeedbackWindows(rotationStartMs, rotationWidthMs
  * @param {number | string} [sideSpin='N/A'] - Sidespin of the last shot (Range).
  */
 export function updateVisualOverlayInfo(mode, { holeNum = 'N/A', par = 'N/A', distToFlag = 'N/A', shotNum = 'N/A', score = 'N/A', lie = 'N/A', wind = 'N/A', playerName = 'Player 1', totalScore = 'N/A', position = 'N/A', lastShotDist = 'N/A', backSpin = 'N/A', sideSpin = 'N/A', elevDelta = null, courseName = '', holeName = '' } = {}) {
+    lastOverlayArgs = [mode, arguments[1] || {}]; // re-rendered when the distance unit changes
     const formatNum = (num, digits = 0) => (num !== undefined && num !== null && !isNaN(num)) ? num.toFixed(digits) : 'N/A';
     const formatScore = (s) => {
         if (s === null || s === undefined || isNaN(s)) return 'N/A';
@@ -1156,8 +1158,10 @@ export function updateVisualOverlayInfo(mode, { holeNum = 'N/A', par = 'N/A', di
         let forScoreText = '';
         if (mode === 'play-hole' && par !== 'N/A' && shotNum !== 'N/A') {
             const scoreRelativeToPar = shotNum - par;
-            const distMeters = distToFlag / (1 / YARDS_TO_METERS); // Convert yards back to meters for check
-            if (distMeters <= 50) { // Only show if <= 50 meters
+            // distToFlag arrives in meters (it always did — the old
+            // "convert yards back" here multiplied by 1.09 and pushed the
+            // threshold out to 55 m)
+            if (distToFlag <= 50) { // Only show if <= 50 meters
                 if (scoreRelativeToPar < -2) forScoreText = '(for Albatross)';
                 else if (scoreRelativeToPar === -2) forScoreText = '(for Eagle)';
                 else if (scoreRelativeToPar === -1) forScoreText = '(for Birdie)';
@@ -1186,8 +1190,8 @@ export function updateVisualOverlayInfo(mode, { holeNum = 'N/A', par = 'N/A', di
 
         // Update Top Right (Distance to Flag), with elevation delta when the
         // hole sits meaningfully above/below the ball (contoured greens)
-        const distToFlagYards = (typeof distToFlag === 'number' && distToFlag > 0) ? metersToYards(distToFlag) : distToFlag;
-        let distText = `${formatNum(distToFlagYards, 0)} yd`;
+        const distToFlagShown = (typeof distToFlag === 'number' && distToFlag > 0) ? distanceValue(distToFlag) : distToFlag;
+        let distText = `${formatNum(distToFlagShown, 0)} ${unitLabel()}`;
         if (typeof elevDelta === 'number' && Math.abs(elevDelta) >= 0.05) {
             distText += ` ${elevDelta > 0 ? '▲' : '▼'}${Math.abs(elevDelta).toFixed(1)}m`;
         }
@@ -1203,7 +1207,7 @@ export function updateVisualOverlayInfo(mode, { holeNum = 'N/A', par = 'N/A', di
     } else if (mode === 'range') {
         // Update Top Left (Range)
         // Convert from meters to yards if needed
-        const lastShotDistYards = (typeof lastShotDist === 'number' && lastShotDist > 0) ? metersToYards(lastShotDist) : lastShotDist;
+        const lastShotDistYards = (typeof lastShotDist === 'number' && lastShotDist > 0) ? distanceValue(lastShotDist) : lastShotDist;
         if (overlayLastShotDistSpan) overlayLastShotDistSpan.textContent = formatNum(lastShotDistYards, 1);
         if (overlayBackSpinSpan) overlayBackSpinSpan.textContent = formatNum(backSpin, 0);
         if (overlaySideSpinSpan) overlaySideSpinSpan.textContent = formatNum(sideSpin, 0);
@@ -1233,19 +1237,19 @@ export function setGameModeClass(mode) {
 }
 
 // Function to update the target distance display in CTF mode
-export function updateTargetDistanceDisplay(distanceYards) {
+export function updateTargetDistanceDisplay(distanceMeters) {
     if (ctfTargetDistanceText) {
-        ctfTargetDistanceText.textContent = distanceYards.toFixed(0);
+        ctfTargetDistanceText.textContent = distanceValue(distanceMeters).toFixed(0);
     }
 }
 
 // Function to update the results display in CTF mode
-export function updateClosestToFlagResult(lastDistance, bestDistance, shotsTaken) {
+export function updateClosestToFlagResult(lastDistanceMeters, bestDistanceMeters, shotsTaken) {
     if (ctfLastDistanceText) {
-        ctfLastDistanceText.textContent = lastDistance.toFixed(1);
+        ctfLastDistanceText.textContent = distanceValue(lastDistanceMeters).toFixed(1);
     }
     if (ctfBestDistanceText) {
-        ctfBestDistanceText.textContent = bestDistance < Infinity ? bestDistance.toFixed(1) : 'N/A';
+        ctfBestDistanceText.textContent = bestDistanceMeters < Infinity ? distanceValue(bestDistanceMeters).toFixed(1) : 'N/A';
     }
     if (ctfShotsTakenText) {
         ctfShotsTakenText.textContent = shotsTaken;
@@ -1355,11 +1359,10 @@ export function createOrUpdateDistanceLabel(id, text, screenX, screenY, convertT
         distanceLabelContainer.appendChild(labelElement);
     }
 
-    // Convert to yards if text is a number and convertToYards is true
+    // A numeric text is meters; show it in the player's unit
     let displayText = text;
     if (convertToYards && typeof text === 'number') {
-        const yards = metersToYards(text);
-        displayText = `${yards.toFixed(1)} yd`;
+        displayText = formatDist(text, 1);
     }
     labelElement.textContent = displayText;
     // Position the label centered horizontally above the point, offset slightly vertically
@@ -2152,3 +2155,28 @@ export function showWaterDropModal(info, onChoice) {
 export function hideWaterDropModal() {
     document.getElementById('water-drop-modal')?.remove();
 }
+
+
+// --- Distance units: menu toggle + live unit labels ---
+// Static 'yd'/'m' suffixes in index.html are <span class="dist-unit"> (short)
+// or <span class="dist-unit-long">, refreshed here whenever the unit flips.
+let lastResultData = null;
+let lastOverlayArgs = null;
+function refreshUnitLabels() {
+    // Numbers already on screen were computed in the old unit — redo them
+    if (lastResultData) { try { updateResultDisplay(lastResultData); } catch (e) { console.error('unit re-render failed', e); } }
+    if (lastOverlayArgs) { try { updateVisualOverlayInfo(...lastOverlayArgs); } catch (e) { console.error('unit re-render failed', e); } }
+    document.querySelectorAll('.dist-unit').forEach(el => { el.textContent = unitLabel(); });
+    document.querySelectorAll('.dist-unit-long').forEach(el => { el.textContent = unitLabelLong(); });
+    const btn = document.getElementById('units-toggle-btn');
+    if (btn) btn.textContent = `Units: ${getDistanceUnit() === 'm' ? 'meters' : 'yards'}`;
+}
+(function initUnitsUI() {
+    const wire = () => {
+        refreshUnitLabels();
+        document.getElementById('units-toggle-btn')?.addEventListener('click', () => toggleDistanceUnit());
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire, { once: true });
+    else wire();
+    onDistanceUnitChange(refreshUnitLabels);
+})();

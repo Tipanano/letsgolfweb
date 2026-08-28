@@ -4,6 +4,7 @@
 // tempo + steadiness readout, and stage hints. Owns its own DOM and styles.
 
 import { getActiveDrill } from '../career/greenCard.js';
+import { formatDist } from '../utils/unitConversions.js';
 import { togglePracticeSwing, isPracticeSwingArmed, onPracticeSwingChange } from '../practiceSwing.js';
 
 let hudEl = null;
@@ -360,7 +361,7 @@ export function updateRhythmHud(snap, minTaps = 3, hintOverride = null) {
         return;
     }
 
-    distanceEl.textContent = snap.distanceMeters != null ? `${snap.distanceMeters.toFixed(1)} m` : '–';
+    distanceEl.textContent = snap.distanceMeters != null ? formatDist(snap.distanceMeters, 1) : '–';
 
     const steadiness = steadinessInfo(snap.cv);
     tempoEl.innerHTML = `${Math.round(snap.tempoMs)} ms · <span class="${steadiness.cls}">${steadiness.label}</span>`;

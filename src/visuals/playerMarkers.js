@@ -1,5 +1,6 @@
 // Player marker balls for CTF mode - shows where each player's ball landed
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
+import { formatDist } from '../utils/unitConversions.js';
 
 const MARKER_RADIUS = 0.5; // Larger than real ball (0.021m)
 const MARKER_HEIGHT_OFFSET = 0.2; // Slightly above ground
@@ -58,7 +59,7 @@ function createTextSprite(playerName, distance, color) {
 /**
  * Add or update a player marker
  */
-export function setPlayerMarker(playerId, playerName, position, distanceYards, color) {
+export function setPlayerMarker(playerId, playerName, position, distanceMeters, color) {
     if (!scene) {
         console.error('Marker system not initialized');
         return;
@@ -87,7 +88,7 @@ export function setPlayerMarker(playerId, playerName, position, distanceYards, c
     markerMesh.castShadow = true;
 
     // Create label sprite
-    const distanceText = `${distanceYards.toFixed(1)} yards`;
+    const distanceText = formatDist(distanceMeters, 1);
     const labelSprite = createTextSprite(playerName, distanceText, color);
     labelSprite.position.set(
         position.x,

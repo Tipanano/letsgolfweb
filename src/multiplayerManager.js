@@ -1,5 +1,6 @@
 // Multiplayer Manager - Handles lobby and game coordination
 import * as apiClient from './network/apiClient.js';
+import { formatDist } from './utils/unitConversions.js';
 import * as wsManager from './network/webSocketManager.js';
 import * as ui from './ui.js';
 import * as shotTimer from './shotTimer.js';
@@ -751,13 +752,12 @@ function handleGameFinished(data) {
 
     // Use the server's winner determination instead of client-side
     const isLocalWinner = winner.id === localPlayerId;
-    const winnerDistanceYards = (winner.distanceFromHole * 1.09361).toFixed(1); // Convert meters to yards for display
-    const winnerDistance = winnerDistanceYards; // Keep variable name for compatibility
+    const winnerDistance = formatDist(winner.distanceFromHole, 1); // player's unit
 
     // Show status message
     const message = isLocalWinner
-        ? `🏆 You won! ${winnerDistance} yards from the hole!`
-        : `${winner.name} won with ${winnerDistance} yards from the hole`;
+        ? `🏆 You won! ${winnerDistance} from the hole!`
+        : `${winner.name} won with ${winnerDistance} from the hole`;
 
     shotTimer.setStatusMessage(message);
 
@@ -766,7 +766,8 @@ function handleGameFinished(data) {
         const state = playerStates[p.id];
         return {
             ...p,
-            distanceYards: state?.distanceFromHole ? (state.distanceFromHole * 1.09361) : 999999, // Convert to yards for display
+            distanceFromHoleMeters: state?.distanceFromHole ?? 999999,
+            distanceYards: state?.distanceFromHole ? (state.distanceFromHole * 1.09361) : 999999, // sort key (kept)
             isWinner: p.id === winner.id
         };
     }).sort((a, b) => a.distanceYards - b.distanceYards); // Sort by yards for leaderboard
@@ -1131,14 +1132,13 @@ function updateScoreboard() {
 
         if (score && score.hasShot) {
             const penaltyIndicator = score.isPenalty ? ' <span style="color: #ff0000; font-weight: bold;">(PENALTY)</span>' : '';
-            scoreText = `<strong>${score.distanceYards.toFixed(1)} yd</strong>${penaltyIndicator}`;
+            scoreText = `<strong>${formatDist(score.distanceMeters, 1)}</strong>${penaltyIndicator}`;
         } else if (isCurrent) {
             scoreText = '<em>shooting...</em>';
         } else {
             // Check if player has distance data (already shot)
             if (player.distanceFromHole !== undefined && player.distanceFromHole !== null) {
-                const distanceYards = (player.distanceFromHole * 1.09361).toFixed(1);
-                scoreText = `<strong>${distanceYards} yd</strong>`;
+                scoreText = `<strong>${formatDist(player.distanceFromHole, 1)}</strong>`;
             } else {
                 scoreText = '<em>waiting...</em>';
             }
@@ -1659,7 +1659,7 @@ function showGameSummaryModal({ isLocalWinner, winner, winnerDistance, sortedPla
             <div class="game-summary-modal">
                 <div class="game-summary-header ${isLocalWinner ? 'winner' : ''}">
                     <h2>${isLocalWinner ? '🎉 Victory!' : '🏁 Game Over'}</h2>
-                    <p class="winner-text">${winner.name} won with ${winnerDistance} yards!</p>
+                    <p class="winner-text">${winner.name} won with ${winnerDistance}!</p>
                 </div>
 
                 <div class="game-summary-results">
@@ -1669,7 +1669,7 @@ function showGameSummaryModal({ isLocalWinner, winner, winnerDistance, sortedPla
                             <div class="player-result ${p.isWinner ? 'winner' : ''} ${p.id === localPlayerId ? 'local-player' : ''}">
                                 <span class="rank">${index + 1}</span>
                                 <span class="player-name">${p.isWinner ? '🏆 ' : ''}${p.name}${p.id === localPlayerId ? ' (You)' : ''}</span>
-                                <span class="distance">${p.distanceYards.toFixed(1)} yards</span>
+                                <span class="distance">${formatDist(p.distanceFromHoleMeters, 1)}</span>
                             </div>
                         `).join('')}
                     </div>

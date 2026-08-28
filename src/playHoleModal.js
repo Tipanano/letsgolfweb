@@ -4,6 +4,7 @@
  */
 
 import { courseManager } from './courseManager.js';
+import { formatDist, formatCourseLength } from './utils/unitConversions.js';
 import { BUNDLED_COURSES, loadCourse, courseStats } from './courseLibrary.js';
 
 // DOM elements
@@ -119,7 +120,7 @@ function createCourseCard(course) {
     const head = document.createElement('div');
     head.style.cssText = 'display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;';
     head.innerHTML = `<strong style="font-size:1.05em; color:#2e7d32;">${course.name}</strong>` +
-        `<span style="color:#666; font-size:0.85em;">Par ${course.par} · ${(totalLen / 1000).toFixed(1)}km · ` +
+        `<span style="color:#666; font-size:0.85em;">Par ${course.par} · ${formatCourseLength(totalLen)} · ` +
         `<span title="Difficulty (length + bunkering)" style="color:#e6a817;">${'★'.repeat(stars)}${'☆'.repeat(5 - stars)}</span></span>`;
     card.appendChild(head);
 
@@ -130,7 +131,7 @@ function createCourseCard(course) {
     course.holes.forEach((hole, i) => {
         const btn = document.createElement('button');
         btn.style.cssText = 'padding:8px 4px; border:1px solid #c8e6c9; border-radius:6px; background:white; cursor:pointer; font-size:0.82em; line-height:1.3;';
-        btn.innerHTML = `<b>${i + 1}</b><br><span style="color:#888;">Par ${hole.par} · ${hole.lengthMeters}m</span>`;
+        btn.innerHTML = `<b>${i + 1}</b><br><span style="color:#888;">Par ${hole.par} · ${formatDist(hole.lengthMeters, 0)}</span>`;
         btn.addEventListener('mouseenter', () => { btn.style.background = '#e8f5e9'; });
         btn.addEventListener('mouseleave', () => { btn.style.background = 'white'; });
         btn.addEventListener('click', () => {
@@ -244,7 +245,7 @@ function createOfficialHoleListItem(hole) {
 
     const details = document.createElement('div');
     details.style.cssText = 'font-size: 0.9em; color: #666; margin-bottom: 3px;';
-    const distance = hole.lengthMeters ? `${Math.round(hole.lengthMeters)}m` : 'N/A';
+    const distance = hole.lengthMeters ? formatDist(hole.lengthMeters, 0) : 'N/A';
     details.textContent = `Par ${hole.par || 'N/A'} • ${distance}`;
 
     const creator = document.createElement('div');
@@ -299,7 +300,7 @@ function createHoleListItem(hole) {
 
     const details = document.createElement('div');
     details.style.cssText = 'font-size: 0.9em; color: #666; margin-bottom: 3px;';
-    const distance = hole.lengthMeters ? `${Math.round(hole.lengthMeters)}m` : 'N/A';
+    const distance = hole.lengthMeters ? formatDist(hole.lengthMeters, 0) : 'N/A';
     details.textContent = `Par ${hole.par || 'N/A'} • ${distance}`;
 
     const updated = document.createElement('div');

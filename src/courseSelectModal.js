@@ -5,6 +5,7 @@
 // 18-hole round. (Single-hole play lives in the Play Hole modal.)
 
 import { BUNDLED_COURSES, loadCourse, courseStats } from './courseLibrary.js';
+import { formatCourseLength } from './utils/unitConversions.js';
 
 let modalEl = null;
 let onSelect = null;
@@ -136,7 +137,7 @@ export async function showCourseSelect(onCourseChosen) {
                     <span class="cc-name">${course.name}</span>
                     <span class="cc-stars">${'★'.repeat(stars)}${'☆'.repeat(5 - stars)}</span>
                 </div>
-                <div class="cc-stats">Par ${course.par} · ${(totalLen / 1000).toFixed(1)} km · ${course.holes.length} holes · ${bunkers} bunkers${water ? ` · ${water} water` : ''}</div>
+                <div class="cc-stats">Par ${course.par} · ${formatCourseLength(totalLen)} · ${course.holes.length} holes · ${bunkers} bunkers${water ? ` · ${water} water` : ''}</div>
                 ${course.attribution ? `<div class="cc-attr">${course.attribution}</div>` : ''}
             `;
             card.addEventListener('click', () => {

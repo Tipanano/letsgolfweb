@@ -9,6 +9,7 @@
 // It is a module of its own, holding one boolean, because both the UI (which
 // toggles it) and the shot calculation (which honours it) need to see it, and
 // ui.js and gameLogic/state.js already import each other.
+import { formatDist } from './utils/unitConversions.js';
 //
 // It stays armed until switched off, so a player can rehearse several swings
 // in a row to find a tempo. Everything that reads it also says so in the
@@ -134,7 +135,7 @@ function chipDetail(impact, backswingMs) {
     // Carry is what the tapped tempo was ASKING for — the useful number when
     // there is no ball to watch land.
     const carry = typeof r.targetDistance === 'number'
-        ? stat('Asking for', Math.round(r.targetDistance * 1.09361) + ' yd') : '';
+        ? stat('Asking for', formatDist(r.targetDistance, 0)) : '';
     return `
     <div class="ps-stats">
         ${stat('Tempo', Math.round(r.tempoMs) + ' ms')}

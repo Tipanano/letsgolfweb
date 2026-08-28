@@ -8,6 +8,9 @@ globalThis.localStorage = {
     setItem: (k, v) => store.set(k, String(v)),
     removeItem: (k) => store.delete(k),
 };
+// Drill messages format distances in the player's unit; pin meters so the
+// assertions don't depend on the runtime's locale (node reports en-US).
+store.set('distanceUnit', 'm');
 
 const {
     DRILLS, LAG_PUTT_TOLERANCE_M, DRIVING_MIN_DISTANCE_M,

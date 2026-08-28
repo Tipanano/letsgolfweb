@@ -1,7 +1,7 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
+import { formatDist } from '../utils/unitConversions.js';
 import { getCourseObjects as getCoreCourseObjects } from './core.js'; // Import getCourseObjects from core
 import * as UIVisuals from '../ui.js'; // Import UI functions for labels
-import { metersToYards } from '../utils/unitConversions.js'; // Import conversion utilities
 
 let scene; // Reference to the main scene
 let renderer; // Reference to the main renderer
@@ -265,9 +265,9 @@ function updateDistanceTexts(ballPos, clickPos, flagPos) {
     const distBallClick = new THREE.Vector2(ballPos.x, ballPos.z).distanceTo(new THREE.Vector2(clickPos.x, clickPos.z));
     const distClickFlag = new THREE.Vector2(clickPos.x, clickPos.z).distanceTo(new THREE.Vector2(flagPos.x, flagPos.z));
 
-    // Convert meters to yards for display
-    const distBallClickYards = metersToYards(distBallClick).toFixed(1);
-    const distClickFlagYards = metersToYards(distClickFlag).toFixed(1);
+    // Shown in the player's unit
+    const distBallClickYards = formatDist(distBallClick, 1);
+    const distClickFlagYards = formatDist(distClickFlag, 1);
 
 
     // Project the 3D endpoints of the lines to 2D screen coordinates
@@ -282,7 +282,7 @@ function updateDistanceTexts(ballPos, clickPos, flagPos) {
         const midScreenX_BallClick = (screenPosBall.x + screenPosClick.x) / 2;
         const midScreenY_BallClick = (screenPosBall.y + screenPosClick.y) / 2;
         console.log(`📏 Ball→Click label: ${distBallClickYards} yd at screen pos (${midScreenX_BallClick.toFixed(0)}, ${midScreenY_BallClick.toFixed(0)})`);
-        UIVisuals.createOrUpdateDistanceLabel('dist-label-ball-click', `${distBallClickYards} yd`, midScreenX_BallClick, midScreenY_BallClick, false);
+        UIVisuals.createOrUpdateDistanceLabel('dist-label-ball-click', distBallClickYards, midScreenX_BallClick, midScreenY_BallClick, false);
     } else {
         console.log('❌ Ball→Click label hidden (points not on screen)');
         // Hide label if endpoints aren't both on screen
@@ -293,7 +293,7 @@ function updateDistanceTexts(ballPos, clickPos, flagPos) {
         const midScreenX_ClickFlag = (screenPosClick.x + screenPosFlag.x) / 2;
         const midScreenY_ClickFlag = (screenPosClick.y + screenPosFlag.y) / 2;
         console.log(`📏 Click→Flag label: ${distClickFlagYards} yd at screen pos (${midScreenX_ClickFlag.toFixed(0)}, ${midScreenY_ClickFlag.toFixed(0)})`);
-        UIVisuals.createOrUpdateDistanceLabel('dist-label-click-flag', `${distClickFlagYards} yd`, midScreenX_ClickFlag, midScreenY_ClickFlag, false);
+        UIVisuals.createOrUpdateDistanceLabel('dist-label-click-flag', distClickFlagYards, midScreenX_ClickFlag, midScreenY_ClickFlag, false);
     } else {
         console.log('❌ Click→Flag label hidden (points not on screen)');
         // Hide label if endpoints aren't both on screen

@@ -101,6 +101,7 @@ const TOUCHES = [
     ['src/ui/practiceSwingCard.js',['browser-smoke-practiceswing']],
     ['src/ui/rhythmPuttHud.js',    ['browser-smoke-practiceswing', 'browser-smoke-putt', 'browser-smoke-chip', 'browser-smoke-touch']],
     ['src/touchControls.js',       ['browser-smoke-touch', 'browser-smoke-practiceswing']],
+    ['src/utils/unitConversions.js', ['unit-units', 'browser-smoke-greencard', 'browser-smoke-career']],
     ['src/ui.js',                  ['browser-smoke-touch', 'browser-smoke-practiceswing', 'browser-smoke-greencard', 'browser-smoke-career']],
     ['src/visuals/',               ['browser-smoke-backdrop', 'browser-smoke-flagshadow', 'browser-smoke-greens', 'browser-smoke-aim']],
     ['style.css',                  ['browser-smoke-touch', 'browser-smoke-practiceswing']],

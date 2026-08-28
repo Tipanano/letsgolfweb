@@ -10,6 +10,7 @@
 // recordShot). Progress persists in localStorage.
 
 import { GREEN_CENTER, GREEN_RADIUS, PRACTICE_FLAG, PRACTICE_BUNKERS } from '../modes/practiceGreen.js';
+import { formatDist } from '../utils/unitConversions.js';
 import { drivingDrillLayout, approachDrillLayout } from './drillHoles.js';
 
 export const DRILLS = [
@@ -112,7 +113,7 @@ export function nextSpot(drillId, attemptNo = 1) {
                 if (PRACTICE_BUNKERS.some(b => dist2(x, z, b.x, b.z) < b.r + 1.5)) continue;
                 if (dist2(x, z, GREEN_CENTER.x, GREEN_CENTER.z) < GREEN_RADIUS + 3) continue;
                 return {
-                    id: 'drill', label: label(`Pitching drill · ${dist2(x, z, PRACTICE_FLAG.x, PRACTICE_FLAG.z).toFixed(0)} m`),
+                    id: 'drill', label: label(`Pitching drill · ${formatDist(dist2(x, z, PRACTICE_FLAG.x, PRACTICE_FLAG.z), 0)}`),
                     x: +x.toFixed(2), z: +z.toFixed(2),
                     lie: 'FAIRWAY', shotType: 'pitch', club: 'AW50',
                 };
@@ -130,7 +131,7 @@ export function nextSpot(drillId, attemptNo = 1) {
                 if (PRACTICE_BUNKERS.some(b => dist2(x, z, b.x, b.z) < b.r + 1.5)) continue;
                 const onApron = Math.abs(x) <= 9 && z >= 18 && z <= 41.5;
                 return {
-                    id: 'drill', label: label(`Chipping drill · ${dist2(x, z, PRACTICE_FLAG.x, PRACTICE_FLAG.z).toFixed(0)} m`),
+                    id: 'drill', label: label(`Chipping drill · ${formatDist(dist2(x, z, PRACTICE_FLAG.x, PRACTICE_FLAG.z), 0)}`),
                     x: +x.toFixed(2), z: +z.toFixed(2),
                     lie: onApron ? 'FAIRWAY' : 'LIGHT_ROUGH', shotType: 'chip', club: 'SW58',
                 };
@@ -157,7 +158,7 @@ export function nextSpot(drillId, attemptNo = 1) {
                 const z = PRACTICE_FLAG.z + Math.sin(angle) * r;
                 if (dist2(x, z, GREEN_CENTER.x, GREEN_CENTER.z) > GREEN_RADIUS - 1.5) continue;
                 return {
-                    id: 'drill', label: label(`Lag drill · ${r.toFixed(1)} m`),
+                    id: 'drill', label: label(`Lag drill · ${formatDist(r, 1)}`),
                     x: +x.toFixed(2), z: +z.toFixed(2), lie: 'GREEN', shotType: 'putt',
                 };
             }
@@ -167,7 +168,7 @@ export function nextSpot(drillId, attemptNo = 1) {
             const angle = Math.random() * Math.PI * 2;
             const r = 1 + Math.random() * 2;
             return {
-                id: 'drill', label: label(`Holing drill · ${r.toFixed(1)} m`),
+                id: 'drill', label: label(`Holing drill · ${formatDist(r, 1)}`),
                 x: +(PRACTICE_FLAG.x + Math.cos(angle) * r).toFixed(2),
                 z: +(PRACTICE_FLAG.z + Math.sin(angle) * r).toFixed(2),
                 lie: 'GREEN', shotType: 'putt',
@@ -265,7 +266,7 @@ export function recordShot(result) {
     // but came up short of the distance requirement.
     const shortDrive = !success && activeDrillId === 'driving' && result.lie === 'FAIRWAY';
     const missText = shortDrive
-        ? `❌ Fairway, but ${Math.round(result.shotDistance || 0)} m — needs ${DRIVING_MIN_DISTANCE_M} m+`
+        ? `❌ Fairway, but ${formatDist(result.shotDistance || 0, 0)} — needs ${formatDist(DRIVING_MIN_DISTANCE_M, 0)}+`
         : `❌ Not this time`;
     return {
         statusText: success

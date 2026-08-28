@@ -5,6 +5,7 @@
 // grass, native areas) — plus target greens with pins and distance labels.
 
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
+import { formatDist } from '../utils/unitConversions.js';
 import { TextureLoader } from 'https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.js';
 import { SURFACES } from '../surfaces.js';
 import { renderRoughAreas, renderFairways, renderGreen, renderBunkers, setMowPattern, setBunkerRims, setFringeLayout } from './holeRenderer.js';
@@ -111,9 +112,9 @@ function createTargetPin(scene, x, z, distanceMeters) {
     ctx.textBaseline = 'middle';
     ctx.lineWidth = 8;
     ctx.strokeStyle = 'rgba(20, 35, 26, 0.9)';
-    ctx.strokeText(`${distanceMeters}m`, 64, 32);
+    ctx.strokeText(formatDist(distanceMeters, 0), 64, 32);
     ctx.fillStyle = '#ffffff';
-    ctx.fillText(`${distanceMeters}m`, 64, 32);
+    ctx.fillText(formatDist(distanceMeters, 0), 64, 32);
     const labelTex = new THREE.CanvasTexture(canvas);
     const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTex, transparent: true }));
     label.scale.set(4.5, 2.25, 1);

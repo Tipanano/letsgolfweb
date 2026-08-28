@@ -20,6 +20,7 @@
                 <button id="register-btn-placeholder" class="menu-chip-btn">Sign in with Nano</button>
                 <button id="profile-btn" class="menu-chip-btn" style="display: none;">Profile & History</button>
                 <button id="logout-btn" class="menu-chip-btn" style="display: none;">Logout</button>
+                <button id="units-toggle-btn" class="menu-chip-btn" title="Switch between meters and yards">Units: m</button>
             </div>
         </div>
 
@@ -217,10 +218,10 @@
         <!-- Closest to Flag Info Panel (Hidden by default) -->
         <div id="closest-to-flag-info" class="mode-info-panel">
         <h2>Closest to the Flag</h2>
-        <p>Target Distance: <strong id="ctf-target-distance">N/A</strong> yards</p>
+        <p>Target Distance: <strong id="ctf-target-distance">N/A</strong> <span class="dist-unit-long">meters</span></p>
         <p>Shots Taken: <strong id="ctf-shots-taken">0</strong></p>
-        <p>Distance from Hole: <strong id="ctf-last-distance">N/A</strong> yards</p>
-        <p>Best Distance: <strong id="ctf-best-distance">N/A</strong> yards</p>
+        <p>Distance from Hole: <strong id="ctf-last-distance">N/A</strong> <span class="dist-unit-long">meters</span></p>
+        <p>Best Distance: <strong id="ctf-best-distance">N/A</strong> <span class="dist-unit-long">meters</span></p>
     </div>
 
     <!-- 2. Instructions -->
@@ -275,7 +276,7 @@
                         </div>
                         <!-- Range Top Left -->
                         <div class="overlay-panel overlay-top-left mode-range">
-                             <div class="overlay-row"><span class="overlay-k">Last shot</span><span class="overlay-v"><span id="overlay-last-shot-dist">N/A</span> yd</span></div>
+                             <div class="overlay-row"><span class="overlay-k">Last shot</span><span class="overlay-v"><span id="overlay-last-shot-dist">N/A</span> <span class="dist-unit">m</span></span></div>
                              <div class="overlay-row"><span class="overlay-k">Spin</span><span class="overlay-v"><span id="overlay-back-spin">N/A</span> / <span id="overlay-side-spin">N/A</span> rpm</span></div>
                         </div>
                         <!-- Common Top Right -->
@@ -321,17 +322,17 @@
                             </div>
                             <!-- Landing data (shown when ball lands) -->
                             <div class="overlay-text-item" id="summary-peak-height-item" style="display: none;">
-                                Peak: <span id="summary-peak-height">N/A</span> yd
+                                Peak: <span id="summary-peak-height">N/A</span> <span class="dist-unit">m</span>
                             </div>
                             <div class="overlay-text-item" id="summary-carry-item" style="display: none;">
-                                Carry: <span id="summary-carry">N/A</span> yd
+                                Carry: <span id="summary-carry">N/A</span> <span class="dist-unit">m</span>
                             </div>
                             <!-- Final data (shown when ball stops) -->
                             <div class="overlay-text-item" id="summary-roll-item" style="display: none;">
-                                Roll: <span id="summary-roll">N/A</span> yd
+                                Roll: <span id="summary-roll">N/A</span> <span class="dist-unit">m</span>
                             </div>
                             <div class="overlay-text-item" id="summary-total-item" style="display: none;">
-                                Total: <span id="summary-total">N/A</span> yd
+                                Total: <span id="summary-total">N/A</span> <span class="dist-unit">m</span>
                             </div>
                             <div class="overlay-text-item" id="summary-message-item" style="display: none;">
                                 <span id="summary-message">N/A</span>
@@ -400,10 +401,10 @@
         <p>Back Spin: <span id="back-spin-text">N/A</span> rpm</p>
         <p>Side Spin: <span id="side-spin-text">N/A</span> rpm</p>
         <p>Launch Angle: <span id="launch-angle-text">N/A</span> deg</p> <!-- Added -->
-        <p>Peak Height: <span id="peak-height-text">N/A</span> yd</p>
-        <p>Carry Distance: <span id="carry-distance-text">N/A</span> yd</p>
-        <p>Rollout Distance: <span id="result-rollout">N/A</span> yd</p> <!-- Added -->
-        <p><strong>Total Distance:</strong> <span id="result-total-distance">N/A</span> yd</p> <!-- Added -->
+        <p>Peak Height: <span id="peak-height-text">N/A</span> <span class="dist-unit">m</span></p>
+        <p>Carry Distance: <span id="carry-distance-text">N/A</span> <span class="dist-unit">m</span></p>
+        <p>Rollout Distance: <span id="result-rollout">N/A</span> <span class="dist-unit">m</span></p> <!-- Added -->
+        <p><strong>Total Distance:</strong> <span id="result-total-distance">N/A</span> <span class="dist-unit">m</span></p> <!-- Added -->
         <button id="next-shot-button" style="display: none;">Next Shot (n)</button>
     </div>
 

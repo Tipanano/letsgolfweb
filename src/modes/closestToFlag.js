@@ -27,7 +27,7 @@ export function initializeMode(providedTargetDistanceMeters = null) {
 
     // Update UI (convert meters to yards for display)
     ui.resetClosestToFlagDisplay(); // Reset display first
-    ui.updateTargetDistanceDisplay(metersToYards(targetDistanceMeters)); // Convert to yards for display
+    ui.updateTargetDistanceDisplay(targetDistanceMeters); // shown in the player's unit
 
     // Update visual overlay info with distance to flag and lie
     ui.updateVisualOverlayInfo('closest-to-flag', {
@@ -95,9 +95,8 @@ export function handleShotResult(shotData) {
         bestDistanceToHoleMeters = distanceFromHoleMeters;
     }
 
-    // Update UI with result (convert meters to yards for display)
-    const bestDistanceYards = metersToYards(bestDistanceToHoleMeters);
-    ui.updateClosestToFlagResult(distanceFromHoleYards, bestDistanceYards, shotsTaken);
+    // Update UI with result (meters in; the UI shows the player's unit)
+    ui.updateClosestToFlagResult(distanceFromHoleMeters, bestDistanceToHoleMeters, shotsTaken);
 
     // Return the distance for multiplayer to send to server
     return {
